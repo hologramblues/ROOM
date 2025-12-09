@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { io } from 'socket.io-client';
 
-const SERVER_URL = 'http://localhost:3001';
+const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
 const ELEMENT_TYPES = [
   { id: 'scene', label: 'Séquence', shortcut: '1' },
