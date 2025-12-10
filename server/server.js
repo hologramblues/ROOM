@@ -11,7 +11,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { 
   cors: { origin: '*', methods: ['GET', 'POST'] },
-  maxHttpBufferSize: 1e8,  // 100 MB
+  maxHttpBufferSize: 1e8,
   pingTimeout: 60000
 });
 
@@ -35,8 +35,8 @@ function checkDocumentAccess(doc, user, requiredRole) {
     if (h[doc.publicAccess.role] >= h[requiredRole]) return true;
   }
   if (!user) return false;
-  const oderId = doc.ownerId._id ? doc.ownerId._id : doc.ownerId;
-  if (oderId.toString() === user._id.toString()) return true;
+  const ownerId = doc.ownerId._id ? doc.ownerId._id : doc.ownerId;
+  if (ownerId.toString() === user._id.toString()) return true;
   const collab = doc.collaborators && doc.collaborators.find(c => c.userId && c.userId.toString() === user._id.toString());
   if (collab) { const h = { viewer: 0, commenter: 1, editor: 2 }; return h[collab.role] >= h[requiredRole]; }
   return false;
@@ -47,16 +47,84 @@ function getRandomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
+// Create new document
 app.post('/api/documents', authMiddleware, async (req, res) => {
   try {
     const shortId = uuidv4().slice(0, 8);
-    const doc = new Document({ shortId, ownerId: req.user._id, elements: [{ id: uuidv4(), type: 'scene', content: '' }], publicAccess: { enabled: true, role: 'editor' } });
+    const doc = new Document({ 
+      shortId, 
+      ownerId: req.user._id, 
+      title: req.body.title || 'SANS TITRE',
+      elements: req.body.elements || [{ id: uuidv4(), type: 'scene', content: '' }], 
+      publicAccess: { enabled: true, role: 'editor' } 
+    });
     await doc.save();
     await HistoryEntry.create({ documentId: doc._id, userId: req.user._id, userName: req.user.name, userColor: req.user.color, action: 'snapshot', data: { title: doc.title, elements: doc.elements } });
-    res.json({ id: doc.shortId, url: '/doc/' + doc.shortId });
+    console.log('Created document', shortId, 'with', doc.elements.length, 'elements');
+    res.json({ id: doc.shortId, title: doc.title, elementsCount: doc.elements.length });
   } catch (error) { console.error('Create doc error:', error); res.status(500).json({ error: 'Erreur' }); }
 });
 
+// Import document (create with title and elements)
+app.post('/api/documents/import', authMiddleware, async (req, res) => {
+  try {
+    const { title, elements } = req.body;
+    if (!elements || !Array.isArray(elements) || elements.length === 0) {
+      return res.status(400).json({ error: 'Elements requis' });
+    }
+    
+    const shortId = uuidv4().slice(0, 8);
+    const doc = new Document({ 
+      shortId, 
+      ownerId: req.user._id, 
+      title: title || 'SANS TITRE',
+      elements: elements,
+      publicAccess: { enabled: true, role: 'editor' } 
+    });
+    await doc.save();
+    await HistoryEntry.create({ 
+      documentId: doc._id, 
+      userId: req.user._id, 
+      userName: req.user.name, 
+      userColor: req.user.color, 
+      action: 'snapshot', 
+      data: { title: doc.title, elements: doc.elements } 
+    });
+    
+    console.log('Imported document', shortId, 'with', doc.elements.length, 'elements');
+    res.json({ id: doc.shortId, title: doc.title, elementsCount: doc.elements.length });
+  } catch (error) { 
+    console.error('Import doc error:', error); 
+    res.status(500).json({ error: 'Erreur import' }); 
+  }
+});
+
+// Bulk save (update existing document)
+app.put('/api/documents/:shortId/bulk', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId });
+    if (!doc) return res.status(404).json({ error: 'Document non trouve' });
+    if (!checkDocumentAccess(doc, req.user, 'editor')) return res.status(403).json({ error: 'Acces refuse' });
+    
+    if (req.body.title) doc.title = req.body.title;
+    if (req.body.elements && Array.isArray(req.body.elements)) {
+      doc.elements = req.body.elements;
+      doc.markModified('elements');
+    }
+    await doc.save();
+    
+    // Notify all connected clients
+    io.to(req.params.shortId).emit('document-restored', { title: doc.title, elements: doc.elements });
+    
+    console.log('Bulk saved document', req.params.shortId, 'with', doc.elements.length, 'elements');
+    res.json({ success: true, elementsCount: doc.elements.length });
+  } catch (error) { 
+    console.error('Bulk save error:', error);
+    res.status(500).json({ error: 'Erreur' }); 
+  }
+});
+
+// Get user's documents
 app.get('/api/documents', authMiddleware, async (req, res) => {
   try {
     const docs = await Document.find({ $or: [{ ownerId: req.user._id }, { 'collaborators.userId': req.user._id }] }).select('shortId title updatedAt').sort({ updatedAt: -1 }).limit(50).lean();
@@ -64,15 +132,27 @@ app.get('/api/documents', authMiddleware, async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
+// Get single document
 app.get('/api/documents/:shortId', optionalAuthMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId }).lean();
     if (!doc) return res.status(404).json({ error: 'Document non trouve' });
     if (!checkDocumentAccess(doc, req.user, 'viewer')) return res.status(403).json({ error: 'Acces refuse' });
-    res.json({ id: doc.shortId, title: doc.title, elements: doc.elements, characters: doc.characters, locations: doc.locations, comments: doc.comments, isOwner: req.user && doc.ownerId.toString() === req.user._id.toString(), publicAccess: doc.publicAccess });
+    console.log('Fetched document', req.params.shortId, 'with', doc.elements?.length, 'elements');
+    res.json({ 
+      id: doc.shortId, 
+      title: doc.title, 
+      elements: doc.elements, 
+      characters: doc.characters, 
+      locations: doc.locations, 
+      comments: doc.comments, 
+      isOwner: req.user && doc.ownerId.toString() === req.user._id.toString(), 
+      publicAccess: doc.publicAccess 
+    });
   } catch (error) { console.error('Get doc error:', error); res.status(500).json({ error: 'Erreur' }); }
 });
 
+// Get document history
 app.get('/api/documents/:shortId/history', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId }).lean();
@@ -82,6 +162,7 @@ app.get('/api/documents/:shortId/history', authMiddleware, async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
+// Restore from history
 app.post('/api/documents/:shortId/restore/:historyId', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
@@ -95,6 +176,7 @@ app.post('/api/documents/:shortId/restore/:historyId', authMiddleware, async (re
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
+// Add comment
 app.post('/api/documents/:shortId/comments', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
@@ -106,6 +188,7 @@ app.post('/api/documents/:shortId/comments', authMiddleware, async (req, res) =>
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
+// Add reply to comment
 app.post('/api/documents/:shortId/comments/:commentId/replies', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
@@ -119,6 +202,7 @@ app.post('/api/documents/:shortId/comments/:commentId/replies', authMiddleware, 
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
+// Toggle comment resolved
 app.put('/api/documents/:shortId/comments/:commentId/resolve', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
@@ -129,6 +213,7 @@ app.put('/api/documents/:shortId/comments/:commentId/resolve', authMiddleware, a
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
+// Socket.io
 const activeRooms = new Map();
 io.use(socketAuthMiddleware);
 
@@ -138,7 +223,6 @@ io.on('connection', (socket) => {
 
   socket.on('join-document', async ({ docId }) => {
     try {
-      // Leave previous room
       if (currentDocId) { 
         const room = activeRooms.get(currentDocId); 
         if (room) { 
@@ -151,6 +235,21 @@ io.on('connection', (socket) => {
       const doc = await Document.findOne({ shortId: docId }).lean();
       if (!doc) return socket.emit('error', { message: 'Document non trouve' });
       if (!checkDocumentAccess(doc, socket.user, 'viewer')) return socket.emit('error', { message: 'Acces refuse' });
+      
+      // Add user as collaborator if not already (so doc appears in their list)
+      if (socket.user) {
+        const ownerId = doc.ownerId._id ? doc.ownerId._id.toString() : doc.ownerId.toString();
+        const isOwner = ownerId === socket.user._id.toString();
+        const isCollab = doc.collaborators?.find(c => c.userId?.toString() === socket.user._id.toString());
+        if (!isOwner && !isCollab) {
+          const collabRole = doc.publicAccess?.role || 'viewer';
+          await Document.updateOne(
+            { shortId: docId },
+            { $push: { collaborators: { userId: socket.user._id, role: collabRole } } }
+          );
+          console.log('Added', socket.user.name, 'as collaborator with role', collabRole);
+        }
+      }
       
       let role = 'viewer';
       if (socket.user) { 
@@ -170,20 +269,15 @@ io.on('connection', (socket) => {
       const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: socket.user?.color || getRandomColor(), role, cursor: null };
       activeRooms.get(docId).set(socket.id, userInfo);
       
-      // Send full document state
+      // Send only users and role, document is loaded via REST API
       socket.emit('document-state', { 
         id: doc.shortId, 
-        title: doc.title, 
-        elements: doc.elements || [], 
-        characters: doc.characters || [], 
-        locations: doc.locations || [],
-        comments: doc.comments || [], 
         users: Array.from(activeRooms.get(docId).values()), 
         role 
       });
       
       socket.to(docId).emit('user-joined', { user: userInfo, users: Array.from(activeRooms.get(docId).values()) });
-      console.log(`${userInfo.name} joined document ${docId} with ${doc.elements?.length || 0} elements`);
+      console.log(userInfo.name, 'joined document', docId);
     } catch (error) { console.error('Join error:', error); }
   });
 
@@ -246,24 +340,24 @@ io.on('connection', (socket) => {
   socket.on('cursor-move', ({ index, position }) => {
     if (!currentDocId) return;
     const room = activeRooms.get(currentDocId);
-    if (room) { const user = room.get(socket.id); if (user) { user.cursor = { index, position }; socket.to(currentDocId).emit('cursor-updated', { userId: socket.id, cursor: { index, position } }); } }
-  });
-
-  socket.on('request-full-sync', async () => {
-    if (!currentDocId) return;
-    try {
-      const doc = await Document.findOne({ shortId: currentDocId }).lean();
-      if (doc) {
-        socket.emit('full-sync', { elements: doc.elements, title: doc.title });
-      }
-    } catch (error) { console.error('Sync error:', error); }
+    if (room) { 
+      const user = room.get(socket.id); 
+      if (user) { 
+        user.cursor = { index, position }; 
+        socket.to(currentDocId).emit('cursor-updated', { userId: socket.id, cursor: { index, position } }); 
+      } 
+    }
   });
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
     if (currentDocId) {
       const room = activeRooms.get(currentDocId);
-      if (room) { room.delete(socket.id); if (room.size === 0) activeRooms.delete(currentDocId); else socket.to(currentDocId).emit('user-left', { id: socket.id, users: Array.from(room.values()) }); }
+      if (room) { 
+        room.delete(socket.id); 
+        if (room.size === 0) activeRooms.delete(currentDocId); 
+        else socket.to(currentDocId).emit('user-left', { id: socket.id, users: Array.from(room.values()) }); 
+      }
     }
   });
 });

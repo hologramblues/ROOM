@@ -5,15 +5,14 @@ const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
 // UUID fallback for browsers that don't support crypto.randomUUID
 const generateId = () => {
-  try {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
-  } catch (e) {
-    // Fallback for older browsers
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random() * 16 | 0;
-      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    });
   }
+  // Fallback for older browsers (Safari, etc.)
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
 };
 
 const ELEMENT_TYPES = [
@@ -521,19 +520,33 @@ export default function ScreenplayEditor() {
       if (!file) return;
       
       setImporting(true);
+      console.log('[IMPORT] Starting import of:', file.name);
+      
       try {
         const text = await file.text();
+        console.log('[IMPORT] File size:', text.length, 'chars');
+        
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, 'application/xml');
+        
+        // Check for parse errors
+        const parseError = xml.querySelector('parsererror');
+        if (parseError) {
+          throw new Error('Fichier FDX invalide');
+        }
+        
         const paragraphs = xml.querySelectorAll('Paragraph');
+        console.log('[IMPORT] Found', paragraphs.length, 'paragraphs');
         
         const newElements = [];
-        paragraphs.forEach(p => {
-          const type = FDX_TO_TYPE[p.getAttribute('Type')] || 'action';
+        paragraphs.forEach((p, i) => {
+          const fdxType = p.getAttribute('Type');
+          const type = FDX_TO_TYPE[fdxType] || 'action';
           const textNode = p.querySelector('Text');
           const content = textNode ? textNode.textContent : '';
           if (content.trim() || newElements.length === 0) {
-            newElements.push({ id: generateId(), type, content: content.trim() });
+            const id = generateId();
+            newElements.push({ id, type, content: content.trim() });
           }
         });
         
@@ -542,9 +555,9 @@ export default function ScreenplayEditor() {
         }
         
         // Get title from filename
-        const fileName = file.name.replace('.fdx', '').toUpperCase();
+        const fileName = file.name.replace(/\.fdx$/i, '').toUpperCase();
         
-        console.log('[IMPORT] Creating document with', newElements.length, 'elements');
+        console.log('[IMPORT] Creating document with', newElements.length, 'elements, title:', fileName);
         
         // Create document via API
         const res = await fetch(SERVER_URL + '/api/documents/import', {
@@ -553,6 +566,8 @@ export default function ScreenplayEditor() {
           body: JSON.stringify({ title: fileName, elements: newElements })
         });
         
+        console.log('[IMPORT] Server response status:', res.status);
+        
         if (res.ok) {
           const data = await res.json();
           console.log('[IMPORT] Document created:', data.id, 'with', data.elementsCount, 'elements');
@@ -560,7 +575,8 @@ export default function ScreenplayEditor() {
           window.location.hash = data.id;
         } else {
           const err = await res.json();
-          alert('Erreur import: ' + (err.error || 'Erreur inconnue'));
+          console.error('[IMPORT] Server error:', err);
+          alert('Erreur import: ' + (err.error || 'Erreur serveur'));
         }
       } catch (err) { 
         console.error('[IMPORT] Error:', err);
