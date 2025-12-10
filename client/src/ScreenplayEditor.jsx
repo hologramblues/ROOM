@@ -489,6 +489,109 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
   );
 };
 
+// ============ STATS PANEL ============
+const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
+  // Calculate additional stats
+  const characters = useMemo(() => {
+    const counts = {};
+    elements.forEach(el => {
+      if (el.type === 'character' && el.content.trim()) {
+        const name = el.content.trim().replace(/\s*\(.*?\)\s*/g, '').toUpperCase();
+        counts[name] = (counts[name] || 0) + 1;
+      }
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [elements]);
+
+  const locations = useMemo(() => {
+    const counts = { INT: 0, EXT: 0 };
+    elements.forEach(el => {
+      if (el.type === 'scene' && el.content) {
+        if (el.content.match(/^INT[.\s]/i)) counts.INT++;
+        else if (el.content.match(/^EXT[.\s]/i)) counts.EXT++;
+      }
+    });
+    return counts;
+  }, [elements]);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 450, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 20, color: darkMode ? 'white' : 'black' }}>📊 Statistiques</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
+        </div>
+        
+        {/* Main stats grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+          <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+            <div style={{ fontSize: 28, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>{stats.words}</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>Mots</div>
+          </div>
+          <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+            <div style={{ fontSize: 28, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>{stats.scenes}</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>Scènes</div>
+          </div>
+          <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+            <div style={{ fontSize: 28, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>{characters.length}</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>Personnages</div>
+          </div>
+        </div>
+        
+        {/* Time estimates */}
+        <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, marginBottom: 20 }}>
+          <h4 style={{ margin: '0 0 12px 0', fontSize: 14, color: darkMode ? 'white' : 'black' }}>⏱️ Estimations</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>~{stats.screenTimeMin} min</div>
+              <div style={{ fontSize: 11, color: '#6b7280' }}>Durée à l'écran</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>{stats.dialogueRatio}%</div>
+              <div style={{ fontSize: 11, color: '#6b7280' }}>Dialogues</div>
+            </div>
+          </div>
+        </div>
+        
+        {/* INT/EXT breakdown */}
+        <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, marginBottom: 20 }}>
+          <h4 style={{ margin: '0 0 12px 0', fontSize: 14, color: darkMode ? 'white' : 'black' }}>📍 Lieux</h4>
+          <div style={{ display: 'flex', gap: 20 }}>
+            <div>
+              <span style={{ fontSize: 18, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>{locations.INT}</span>
+              <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 6 }}>INT.</span>
+            </div>
+            <div>
+              <span style={{ fontSize: 18, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>{locations.EXT}</span>
+              <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 6 }}>EXT.</span>
+            </div>
+          </div>
+          {(locations.INT + locations.EXT > 0) && (
+            <div style={{ marginTop: 10, height: 6, background: darkMode ? '#4b5563' : '#d1d5db', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${(locations.INT / (locations.INT + locations.EXT)) * 100}%`, background: '#3b82f6', borderRadius: 3 }} />
+            </div>
+          )}
+        </div>
+        
+        {/* Top characters */}
+        {characters.length > 0 && (
+          <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8 }}>
+            <h4 style={{ margin: '0 0 12px 0', fontSize: 14, color: darkMode ? 'white' : 'black' }}>👥 Top personnages</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {characters.slice(0, 5).map(([name, count]) => (
+                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span style={{ color: darkMode ? 'white' : 'black' }}>{name}</span>
+                  <span style={{ color: '#6b7280' }}>{count} répliques</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ============ SHORTCUTS PANEL ============
 const ShortcutsPanel = ({ onClose, darkMode }) => {
   const shortcuts = [
@@ -515,6 +618,7 @@ const ShortcutsPanel = ({ onClose, darkMode }) => {
     { category: 'Général', items: [
       { keys: 'Escape', desc: 'Fermer panel actif' },
       { keys: '⌘?', desc: 'Raccourcis clavier' },
+      { keys: '⌘.', desc: 'Mode focus' },
     ]},
   ];
 
@@ -834,6 +938,14 @@ export default function ScreenplayEditor() {
   const [showRenameChar, setShowRenameChar] = useState(false);
   const [renameFrom, setRenameFrom] = useState('');
   const [renameTo, setRenameTo] = useState('');
+  const [focusMode, setFocusMode] = useState(false);
+  const [sceneTags, setSceneTags] = useState({}); // { sceneId: 'color' }
+  const [showTimer, setShowTimer] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [sessionWordCount, setSessionWordCount] = useState(0);
+  const [sessionStartWords, setSessionStartWords] = useState(0);
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
 
@@ -993,7 +1105,22 @@ export default function ScreenplayEditor() {
     const words = allText.trim() ? allText.trim().split(/\s+/).length : 0;
     const chars = allText.length;
     const scenes = elements.filter(el => el.type === 'scene').length;
-    return { words, chars, scenes };
+    
+    // Advanced stats
+    const dialogueWords = elements
+      .filter(el => el.type === 'dialogue')
+      .map(el => el.content.trim().split(/\s+/).length)
+      .reduce((a, b) => a + b, 0);
+    const actionWords = elements
+      .filter(el => el.type === 'action')
+      .map(el => el.content.trim().split(/\s+/).length)
+      .reduce((a, b) => a + b, 0);
+    
+    const dialogueRatio = words > 0 ? Math.round((dialogueWords / words) * 100) : 0;
+    const readingTimeMin = Math.ceil(words / 200); // ~200 words/min for screenplay
+    const screenTimeMin = Math.round(words / 150); // ~1 page/min, ~150 words/page
+    
+    return { words, chars, scenes, dialogueWords, actionWords, dialogueRatio, readingTimeMin, screenTimeMin };
   }, [elements]);
 
   // Outline - list of scenes with their index
@@ -1200,6 +1327,42 @@ export default function ScreenplayEditor() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // Writing timer
+  useEffect(() => {
+    let interval;
+    if (timerRunning) {
+      interval = setInterval(() => {
+        setTimerSeconds(s => s + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [timerRunning]);
+
+  // Track session word count
+  useEffect(() => {
+    if (timerRunning && sessionStartWords === 0) {
+      setSessionStartWords(stats.words);
+    }
+    if (timerRunning) {
+      setSessionWordCount(Math.max(0, stats.words - sessionStartWords));
+    }
+  }, [stats.words, timerRunning, sessionStartWords]);
+
+  const resetTimer = () => {
+    setTimerSeconds(0);
+    setTimerRunning(false);
+    setSessionWordCount(0);
+    setSessionStartWords(0);
+  };
+
+  const formatTime = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
@@ -1227,6 +1390,11 @@ export default function ScreenplayEditor() {
       if ((e.metaKey || e.ctrlKey) && (e.key === '?' || e.key === '/')) {
         e.preventDefault();
         setShowShortcuts(prev => !prev);
+      }
+      // Cmd+. = Focus mode
+      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
+        e.preventDefault();
+        setFocusMode(prev => !prev);
       }
       // Escape = Close panels (one at a time)
       if (e.key === 'Escape') {
@@ -1480,7 +1648,7 @@ export default function ScreenplayEditor() {
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
 
   return (
-    <div style={{ minHeight: '100vh', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s' }}>
+    <div className={focusMode ? 'focus-mode-active' : ''} style={{ minHeight: '100vh', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={createNewDocument} onClose={() => setShowDocsList(false)} />}
       {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} />}
@@ -1620,6 +1788,26 @@ export default function ScreenplayEditor() {
                   >
                     {lockedScenes.has(scene.id) ? '🔒' : '🔓'}
                   </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const colors = ['', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
+                      const currentIdx = colors.indexOf(sceneTags[scene.id] || '');
+                      const nextIdx = (currentIdx + 1) % colors.length;
+                      setSceneTags(prev => ({ ...prev, [scene.id]: colors[nextIdx] }));
+                    }}
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: '50%',
+                      border: sceneTags[scene.id] ? 'none' : `2px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                      background: sceneTags[scene.id] || 'transparent',
+                      cursor: 'pointer',
+                      padding: 0,
+                      flexShrink: 0
+                    }}
+                    title="Couleur de la scène"
+                  />
                 </div>
               ))
             )}
@@ -1699,8 +1887,17 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       # Numéros de scènes
                     </button>
-                    <button onClick={() => { setDarkMode(!darkMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={() => { setDarkMode(!darkMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
+                    </button>
+                    <button onClick={() => { setFocusMode(!focusMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: focusMode ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      🎯 Mode focus {focusMode && '✓'}
+                    </button>
+                    <button onClick={() => { setShowTimer(!showTimer); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showTimer ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      ⏱️ Timer d'écriture {showTimer && '✓'}
+                    </button>
+                    <button onClick={() => { setShowStats(true); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      📊 Statistiques
                     </button>
                   </div>
                 )}
@@ -1886,6 +2083,16 @@ export default function ScreenplayEditor() {
         />
       )}
       
+      {/* Stats Panel */}
+      {showStats && (
+        <StatsPanel
+          stats={stats}
+          elements={elements}
+          onClose={() => setShowStats(false)}
+          darkMode={darkMode}
+        />
+      )}
+      
       {/* Rename Character Modal */}
       {showRenameChar && (
         <RenameCharacterModal
@@ -1894,6 +2101,84 @@ export default function ScreenplayEditor() {
           onClose={() => setShowRenameChar(false)}
           darkMode={darkMode}
         />
+      )}
+      
+      {/* Writing Timer Widget */}
+      {showTimer && (
+        <div style={{
+          position: 'fixed',
+          bottom: 20,
+          right: 20,
+          background: darkMode ? '#1f2937' : 'white',
+          border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+          borderRadius: 12,
+          padding: 16,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+          zIndex: 200,
+          minWidth: 180
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: '#6b7280' }}>⏱️ Timer</span>
+            <button onClick={() => setShowTimer(false)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 14 }}>✕</button>
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center', color: darkMode ? 'white' : 'black', marginBottom: 8 }}>
+            {formatTime(timerSeconds)}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
+            <button 
+              onClick={() => setTimerRunning(!timerRunning)}
+              style={{ 
+                padding: '8px 16px', 
+                background: timerRunning ? '#ef4444' : '#22c55e', 
+                border: 'none', 
+                borderRadius: 6, 
+                color: 'white', 
+                cursor: 'pointer', 
+                fontSize: 13,
+                fontWeight: 500
+              }}
+            >
+              {timerRunning ? '⏸ Pause' : '▶ Start'}
+            </button>
+            <button 
+              onClick={resetTimer}
+              style={{ 
+                padding: '8px 12px', 
+                background: darkMode ? '#374151' : '#e5e7eb', 
+                border: 'none', 
+                borderRadius: 6, 
+                color: darkMode ? 'white' : 'black', 
+                cursor: 'pointer', 
+                fontSize: 13 
+              }}
+            >
+              ↺
+            </button>
+          </div>
+          <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: 12, fontSize: 12, color: '#6b7280' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span>Mots cette session</span>
+              <span style={{ color: sessionWordCount > 0 ? '#22c55e' : (darkMode ? 'white' : 'black'), fontWeight: 500 }}>+{sessionWordCount}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Mots/heure</span>
+              <span style={{ color: darkMode ? 'white' : 'black' }}>{timerSeconds > 60 ? Math.round(sessionWordCount / (timerSeconds / 3600)) : '—'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Focus Mode Overlay - dims everything except current element */}
+      {focusMode && (
+        <style>{`
+          .focus-mode-active [data-element-index]:not([data-element-index="${activeIndex}"]) {
+            opacity: 0.3 !important;
+            transition: opacity 0.3s ease;
+          }
+          .focus-mode-active [data-element-index="${activeIndex}"] {
+            opacity: 1 !important;
+          }
+        `}</style>
       )}
     </div>
   );
