@@ -192,35 +192,36 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
   );
 };
 
-// ============ COMMENT ITEM ============
-const CommentItem = React.memo(({ comment, onReply, onResolve, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, onNavigate }) => {
+// ============ INLINE COMMENT (post-it style next to element) ============
+const InlineComment = React.memo(({ comment, onReply, onResolve, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply }) => {
   const replyInputRef = useRef(null);
   useEffect(() => { if (isReplying && replyInputRef.current) replyInputRef.current.focus(); }, [isReplying]);
 
   return (
-    <div style={{ padding: 12, background: '#374151', borderRadius: 8, marginBottom: 8, cursor: 'pointer' }} onClick={() => onNavigate(comment.elementId)}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <div style={{ width: 24, height: 24, borderRadius: '50%', background: comment.userColor || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: 10 }}>{comment.userName?.charAt(0).toUpperCase()}</div>
-        <span style={{ color: 'white', fontWeight: 'bold', fontSize: 13 }}>{comment.userName}</span>
-        <span style={{ color: '#6b7280', fontSize: 11 }}>{new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+    <div style={{ background: '#fef3c7', borderRadius: 4, padding: 10, marginBottom: 8, boxShadow: '2px 2px 4px rgba(0,0,0,0.1)', borderLeft: '3px solid #f59e0b' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <div style={{ width: 20, height: 20, borderRadius: '50%', background: comment.userColor || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: 9 }}>{comment.userName?.charAt(0).toUpperCase()}</div>
+        <span style={{ color: '#78350f', fontWeight: 'bold', fontSize: 11 }}>{comment.userName}</span>
+        <span style={{ color: '#92400e', fontSize: 10 }}>{new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+        {comment.resolved && <span style={{ fontSize: 9, background: '#10b981', color: 'white', padding: '1px 4px', borderRadius: 3 }}>Résolu</span>}
       </div>
-      <p style={{ color: '#e5e7eb', margin: '0 0 8px 0', fontSize: 13 }}>{comment.content}</p>
+      <p style={{ color: '#78350f', margin: '0 0 6px 0', fontSize: 12, lineHeight: 1.3 }}>{comment.content}</p>
       {comment.replies?.map(reply => (
-        <div key={reply.id} style={{ marginLeft: 16, paddingLeft: 12, borderLeft: '2px solid #4b5563', marginTop: 8 }}>
-          <span style={{ color: '#9ca3af', fontWeight: 'bold', fontSize: 12 }}>{reply.userName}</span>
-          <p style={{ color: '#d1d5db', margin: '4px 0 0 0', fontSize: 12 }}>{reply.content}</p>
+        <div key={reply.id} style={{ marginLeft: 12, paddingLeft: 8, borderLeft: '2px solid #fbbf24', marginTop: 6 }}>
+          <span style={{ color: '#92400e', fontWeight: 'bold', fontSize: 10 }}>{reply.userName}</span>
+          <p style={{ color: '#78350f', margin: '2px 0 0 0', fontSize: 11 }}>{reply.content}</p>
         </div>
       ))}
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }} onClick={e => e.stopPropagation()}>
-        {canComment && <button onClick={() => onReply(comment.id)} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', fontSize: 12 }}>Répondre</button>}
-        {canComment && <button onClick={() => onResolve(comment.id)} style={{ background: 'none', border: 'none', color: comment.resolved ? '#10b981' : '#9ca3af', cursor: 'pointer', fontSize: 12 }}>{comment.resolved ? '↩️ Rouvrir' : '✓ Résoudre'}</button>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        {canComment && <button onClick={() => onReply(comment.id)} style={{ background: 'none', border: 'none', color: '#b45309', cursor: 'pointer', fontSize: 10, padding: 0 }}>Répondre</button>}
+        {canComment && <button onClick={() => onResolve(comment.id)} style={{ background: 'none', border: 'none', color: comment.resolved ? '#10b981' : '#92400e', cursor: 'pointer', fontSize: 10, padding: 0 }}>{comment.resolved ? 'Rouvrir' : 'Résoudre'}</button>}
       </div>
       {isReplying && (
-        <div style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}>
-          <textarea ref={replyInputRef} value={replyContent} onChange={e => onReplyChange(e.target.value)} placeholder="Votre réponse..." style={{ width: '100%', padding: 8, background: '#1f2937', border: '1px solid #4b5563', borderRadius: 6, color: 'white', fontSize: 12, resize: 'none', boxSizing: 'border-box' }} rows={2} />
-          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-            <button onClick={() => onSubmitReply(comment.id)} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 12 }}>Envoyer</button>
-            <button onClick={onCancelReply} style={{ padding: '6px 12px', background: 'transparent', border: '1px solid #4b5563', borderRadius: 4, color: '#9ca3af', cursor: 'pointer', fontSize: 12 }}>Annuler</button>
+        <div style={{ marginTop: 6 }}>
+          <textarea ref={replyInputRef} value={replyContent} onChange={e => onReplyChange(e.target.value)} placeholder="Réponse..." style={{ width: '100%', padding: 6, background: 'white', border: '1px solid #fbbf24', borderRadius: 4, color: '#78350f', fontSize: 11, resize: 'none', boxSizing: 'border-box' }} rows={2} />
+          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+            <button onClick={() => onSubmitReply(comment.id)} style={{ padding: '4px 8px', background: '#f59e0b', border: 'none', borderRadius: 3, color: 'white', cursor: 'pointer', fontSize: 10 }}>Envoyer</button>
+            <button onClick={onCancelReply} style={{ padding: '4px 8px', background: 'transparent', border: '1px solid #fbbf24', borderRadius: 3, color: '#92400e', cursor: 'pointer', fontSize: 10 }}>Annuler</button>
           </div>
         </div>
       )}
@@ -228,24 +229,12 @@ const CommentItem = React.memo(({ comment, onReply, onResolve, canComment, isRep
   );
 });
 
-// ============ COMMENTS PANEL ============
-const CommentsPanel = ({ comments, elements, activeIndex, token, docId, onClose, canComment, onNavigateToElement }) => {
-  const [newComment, setNewComment] = useState('');
+// ============ COMMENTS SIDEBAR (scrolls with content) ============
+const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canComment, onAddComment }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
-
-  const activeElementId = elements[activeIndex]?.id;
-  const elementComments = comments.filter(c => c.elementId === activeElementId);
-  const otherComments = comments.filter(c => c.elementId !== activeElementId && !c.resolved);
-  const resolvedComments = comments.filter(c => c.resolved);
-
-  const addComment = async () => {
-    if (!newComment.trim() || !activeElementId) return;
-    try {
-      await fetch(SERVER_URL + '/api/documents/' + docId + '/comments', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ elementId: activeElementId, content: newComment }) });
-      setNewComment('');
-    } catch (err) { console.error(err); }
-  };
+  const [newCommentFor, setNewCommentFor] = useState(null);
+  const [newCommentText, setNewCommentText] = useState('');
 
   const addReply = async (commentId) => {
     if (!replyContent.trim()) return;
@@ -259,45 +248,74 @@ const CommentsPanel = ({ comments, elements, activeIndex, token, docId, onClose,
     try { await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId + '/resolve', { method: 'PUT', headers: { Authorization: 'Bearer ' + token } }); } catch (err) { console.error(err); }
   };
 
-  const handleNavigate = (elementId) => {
-    const index = elements.findIndex(el => el.id === elementId);
-    if (index !== -1) onNavigateToElement(index);
+  const submitNewComment = async (elementId) => {
+    if (!newCommentText.trim()) return;
+    try {
+      await fetch(SERVER_URL + '/api/documents/' + docId + '/comments', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ elementId, content: newCommentText }) });
+      setNewCommentFor(null); setNewCommentText('');
+    } catch (err) { console.error(err); }
   };
 
+  // Group comments by element
+  const commentsByElement = useMemo(() => {
+    const map = {};
+    comments.forEach(c => {
+      if (!map[c.elementId]) map[c.elementId] = [];
+      map[c.elementId].push(c);
+    });
+    return map;
+  }, [comments]);
+
   return (
-    <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 340, background: '#1f2937', borderLeft: '1px solid #374151', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: 16, borderBottom: '1px solid #374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ color: 'white', margin: 0, fontSize: 16 }}>💬 Commentaires</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
-      </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-        {activeElementId && canComment && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ color: '#9ca3af', fontSize: 12, marginBottom: 8 }}>Commenter l'élément sélectionné :</div>
-            <textarea value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Ajouter un commentaire..." style={{ width: '100%', padding: 10, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 13, resize: 'none', boxSizing: 'border-box' }} rows={3} />
-            <button onClick={addComment} disabled={!newComment.trim()} style={{ marginTop: 8, padding: '8px 16px', background: newComment.trim() ? '#2563eb' : '#4b5563', border: 'none', borderRadius: 6, color: 'white', cursor: newComment.trim() ? 'pointer' : 'default', fontSize: 13 }}>Commenter</button>
+    <div style={{ width: 280, flexShrink: 0, paddingLeft: 20 }}>
+      {elements.map((el, idx) => {
+        const elComments = commentsByElement[el.id] || [];
+        const isActive = activeIndex === idx;
+        const showAddButton = isActive && canComment && !newCommentFor;
+        
+        return (
+          <div key={el.id} style={{ minHeight: 30, marginBottom: 8, paddingTop: idx === 0 ? 0 : 4 }}>
+            {elComments.filter(c => !c.resolved).map(c => (
+              <InlineComment 
+                key={c.id} 
+                comment={c} 
+                onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
+                onResolve={toggleResolve}
+                canComment={canComment}
+                isReplying={replyTo === c.id}
+                replyContent={replyTo === c.id ? replyContent : ''}
+                onReplyChange={setReplyContent}
+                onSubmitReply={addReply}
+                onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
+              />
+            ))}
+            {showAddButton && (
+              <button 
+                onClick={() => setNewCommentFor(el.id)} 
+                style={{ background: '#fef3c7', border: '1px dashed #fbbf24', borderRadius: 4, padding: '6px 10px', color: '#92400e', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                + Commenter
+              </button>
+            )}
+            {newCommentFor === el.id && (
+              <div style={{ background: '#fef3c7', borderRadius: 4, padding: 10, boxShadow: '2px 2px 4px rgba(0,0,0,0.1)' }}>
+                <textarea 
+                  autoFocus
+                  value={newCommentText} 
+                  onChange={e => setNewCommentText(e.target.value)} 
+                  placeholder="Votre commentaire..." 
+                  style={{ width: '100%', padding: 6, background: 'white', border: '1px solid #fbbf24', borderRadius: 4, color: '#78350f', fontSize: 11, resize: 'none', boxSizing: 'border-box' }} 
+                  rows={3} 
+                />
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <button onClick={() => submitNewComment(el.id)} style={{ padding: '6px 12px', background: '#f59e0b', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 11 }}>Ajouter</button>
+                  <button onClick={() => { setNewCommentFor(null); setNewCommentText(''); }} style={{ padding: '6px 12px', background: 'transparent', border: '1px solid #fbbf24', borderRadius: 4, color: '#92400e', cursor: 'pointer', fontSize: 11 }}>Annuler</button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-        {elementComments.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ color: '#fbbf24', fontSize: 12, marginBottom: 8, fontWeight: 'bold' }}>Sur cet élément ({elementComments.length})</div>
-            {elementComments.map(c => <CommentItem key={c.id} comment={c} onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }} onResolve={toggleResolve} canComment={canComment} isReplying={replyTo === c.id} replyContent={replyTo === c.id ? replyContent : ''} onReplyChange={setReplyContent} onSubmitReply={addReply} onCancelReply={() => { setReplyTo(null); setReplyContent(''); }} onNavigate={handleNavigate} />)}
-          </div>
-        )}
-        {otherComments.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ color: '#9ca3af', fontSize: 12, marginBottom: 8 }}>Autres commentaires ({otherComments.length})</div>
-            {otherComments.map(c => <CommentItem key={c.id} comment={c} onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }} onResolve={toggleResolve} canComment={canComment} isReplying={replyTo === c.id} replyContent={replyTo === c.id ? replyContent : ''} onReplyChange={setReplyContent} onSubmitReply={addReply} onCancelReply={() => { setReplyTo(null); setReplyContent(''); }} onNavigate={handleNavigate} />)}
-          </div>
-        )}
-        {resolvedComments.length > 0 && (
-          <div>
-            <div style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>Résolus ({resolvedComments.length})</div>
-            {resolvedComments.map(c => <CommentItem key={c.id} comment={c} onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }} onResolve={toggleResolve} canComment={canComment} isReplying={replyTo === c.id} replyContent={replyTo === c.id ? replyContent : ''} onReplyChange={setReplyContent} onSubmitReply={addReply} onCancelReply={() => { setReplyTo(null); setReplyContent(''); }} onNavigate={handleNavigate} />)}
-          </div>
-        )}
-        {comments.length === 0 && <p style={{ color: '#6b7280', textAlign: 'center', marginTop: 40 }}>Aucun commentaire.</p>}
-      </div>
+        );
+      })}
     </div>
   );
 };
@@ -358,7 +376,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   return (
     <div style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
       {usersOnLine.map(u => <RemoteCursor key={u.id} user={u} />)}
-      {commentCount > 0 && <div style={{ position: 'absolute', right: -35, top: 0, background: '#f59e0b', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 10, fontFamily: 'system-ui, sans-serif', fontWeight: 'bold' }}>{commentCount}</div>}
+      {commentCount > 0 && <div style={{ position: 'absolute', right: -30, top: 2, width: 18, height: 18, background: '#fbbf24', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 'bold', color: '#78350f', boxShadow: '1px 1px 2px rgba(0,0,0,0.2)' }}>{commentCount}</div>}
       {isActive && <span style={{ position: 'absolute', left: -110, top: 2, fontSize: 10, color: '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       <textarea ref={textareaRef} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.9 }} rows={1} readOnly={!canEdit} />
       {element.type === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
@@ -668,7 +686,6 @@ export default function ScreenplayEditor() {
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={createNewDocument} onClose={() => setShowDocsList(false)} />}
       {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} />}
-      {showComments && <CommentsPanel comments={comments} elements={elements} activeIndex={activeIndex} token={token} docId={docId} onClose={() => setShowComments(false)} canComment={canComment} onNavigateToElement={navigateToElement} />}
       
       {/* HEADER */}
       <div style={{ position: 'sticky', top: 0, background: '#1f2937', borderBottom: '1px solid #374151', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
@@ -726,8 +743,8 @@ export default function ScreenplayEditor() {
       
       {showHelp && <div style={{ background: '#1f2937', borderBottom: '1px solid #374151', padding: '12px 24px', fontSize: 12, color: '#9ca3af' }}>Entrée → Nouvelle ligne | Tab → Changer type | ⌘1-6 → Types directs | ⌘↑/↓ → Navigation | Backspace sur ligne vide → Supprimer</div>}
       
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 32, paddingRight: showComments ? 372 : 32 }}>
-        <div style={{ background: 'white', color: '#111', width: '210mm', minHeight: '297mm', padding: '25mm 25mm 25mm 38mm', boxSizing: 'border-box', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 32, gap: 20 }}>
+        <div style={{ background: 'white', color: '#111', width: '210mm', minHeight: '297mm', padding: '25mm 25mm 25mm 38mm', boxSizing: 'border-box', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', flexShrink: 0 }}>
           <div style={{ position: 'relative' }}><span style={{ position: 'absolute', right: -50, top: 0, background: '#f5f5f5', padding: '2px 8px', fontSize: 10, color: '#666' }}>1</span></div>
           {elementsWithBreaks.map((item, idx) => item.type === 'pageBreak' ? <PageBreak key={'b' + idx} pageNumber={item.pageNumber} /> : (
             <div key={item.element.id} data-element-index={item.index}>
@@ -735,6 +752,16 @@ export default function ScreenplayEditor() {
             </div>
           ))}
         </div>
+        {showComments && (
+          <CommentsSidebar 
+            comments={comments} 
+            elements={elements} 
+            activeIndex={activeIndex} 
+            token={token} 
+            docId={docId} 
+            canComment={canComment} 
+          />
+        )}
       </div>
     </div>
   );
