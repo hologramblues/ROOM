@@ -123,6 +123,20 @@ app.put('/api/documents/:shortId/bulk', optionalAuthMiddleware, async (req, res)
     }
     await doc.save();
     
+    // Create snapshot with name
+    if (req.user) {
+      const snapshotName = generateSnapshotName(doc.title);
+      await HistoryEntry.create({ 
+        documentId: doc._id, 
+        userId: req.user._id, 
+        userName: req.user.name, 
+        userColor: req.user.color, 
+        action: 'snapshot', 
+        snapshotName,
+        data: { title: doc.title, elements: doc.elements } 
+      });
+    }
+    
     // Notify all connected clients
     io.to(req.params.shortId).emit('document-restored', { title: doc.title, elements: doc.elements });
     

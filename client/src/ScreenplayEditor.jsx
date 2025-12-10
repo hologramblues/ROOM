@@ -416,6 +416,12 @@ export default function ScreenplayEditor() {
   const [showImportExport, setShowImportExport] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [replaceQuery, setReplaceQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
 
@@ -555,6 +561,110 @@ export default function ScreenplayEditor() {
   const canComment = myRole === 'editor' || myRole === 'commenter';
   const commentCounts = useMemo(() => { const counts = {}; comments.filter(c => !c.resolved).forEach(c => { counts[c.elementId] = (counts[c.elementId] || 0) + 1; }); return counts; }, [comments]);
   const totalComments = comments.filter(c => !c.resolved).length;
+
+  // Stats calculation
+  const stats = useMemo(() => {
+    const allText = elements.map(el => el.content).join(' ');
+    const words = allText.trim() ? allText.trim().split(/\s+/).length : 0;
+    const chars = allText.length;
+    const scenes = elements.filter(el => el.type === 'scene').length;
+    return { words, chars, scenes };
+  }, [elements]);
+
+  // Search functionality
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const results = [];
+    const query = searchQuery.toLowerCase();
+    elements.forEach((el, idx) => {
+      if (el.content.toLowerCase().includes(query)) {
+        results.push({ index: idx, element: el });
+      }
+    });
+    setSearchResults(results);
+    setCurrentSearchIndex(0);
+  }, [searchQuery, elements]);
+
+  const goToSearchResult = (direction) => {
+    if (searchResults.length === 0) return;
+    let newIndex = currentSearchIndex + direction;
+    if (newIndex < 0) newIndex = searchResults.length - 1;
+    if (newIndex >= searchResults.length) newIndex = 0;
+    setCurrentSearchIndex(newIndex);
+    const result = searchResults[newIndex];
+    setActiveIndex(result.index);
+    setTimeout(() => {
+      const el = document.querySelector(`[data-element-index="${result.index}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  };
+
+  const replaceOne = () => {
+    if (searchResults.length === 0 || !replaceQuery) return;
+    const result = searchResults[currentSearchIndex];
+    const el = elements[result.index];
+    const newContent = el.content.replace(new RegExp(searchQuery, 'i'), replaceQuery);
+    updateElement(result.index, { ...el, content: newContent });
+  };
+
+  const replaceAll = () => {
+    if (searchResults.length === 0 || !replaceQuery) return;
+    const regex = new RegExp(searchQuery, 'gi');
+    elements.forEach((el, idx) => {
+      if (el.content.toLowerCase().includes(searchQuery.toLowerCase())) {
+        const newContent = el.content.replace(regex, replaceQuery);
+        updateElement(idx, { ...el, content: newContent });
+      }
+    });
+    setSearchQuery('');
+    setShowSearch(false);
+  };
+
+  // Create snapshot manually
+  const createSnapshot = async () => {
+    if (!token || !docId) return;
+    try {
+      const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ title, elements })
+      });
+      if (res.ok) {
+        console.log('[SNAPSHOT] Created');
+        // Brief visual feedback
+        const btn = document.querySelector('[title="Snapshot (⌘S)"]');
+        if (btn) {
+          btn.style.background = '#059669';
+          setTimeout(() => { btn.style.background = 'transparent'; }, 500);
+        }
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      // Cmd+S = Snapshot
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        createSnapshot();
+      }
+      // Cmd+F = Search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+      // Escape = Close search
+      if (e.key === 'Escape' && showSearch) {
+        setShowSearch(false);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [showSearch, token, docId, title, elements]);
 
   const emitTitle = useCallback(t => { setTitle(t); if (socketRef.current && connected && canEdit) socketRef.current.emit('title-change', { title: t }); }, [connected, canEdit]);
   const updateElement = useCallback((i, el) => { setElements(p => { const u = [...p]; u[i] = el; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el }); }, [connected, canEdit]);
@@ -702,19 +812,85 @@ export default function ScreenplayEditor() {
     setTimeout(() => { printWindow.print(); }, 500);
   };
 
+  const exportFountain = () => {
+    let fountain = `Title: ${title}\nCredit: written by\nAuthor: \nDraft date: ${new Date().toLocaleDateString('fr-FR')}\n\n`;
+    
+    elements.forEach(el => {
+      switch (el.type) {
+        case 'scene':
+          fountain += `\n${el.content.toUpperCase()}\n\n`;
+          break;
+        case 'action':
+          fountain += `${el.content}\n\n`;
+          break;
+        case 'character':
+          fountain += `${el.content.toUpperCase()}\n`;
+          break;
+        case 'dialogue':
+          fountain += `${el.content}\n\n`;
+          break;
+        case 'parenthetical':
+          fountain += `${el.content.startsWith('(') ? el.content : '(' + el.content + ')'}\n`;
+          break;
+        case 'transition':
+          fountain += `\n> ${el.content.toUpperCase()}\n\n`;
+          break;
+        default:
+          fountain += `${el.content}\n\n`;
+      }
+    });
+    
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([fountain], { type: 'text/plain' }));
+    a.download = title.toLowerCase().replace(/\s+/g, '-') + '.fountain';
+    a.click();
+  };
+
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#111827', color: '#e5e7eb' }}>
+    <div style={{ minHeight: '100vh', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={createNewDocument} onClose={() => setShowDocsList(false)} />}
       {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} />}
       
+      {/* Search Panel */}
+      {showSearch && (
+        <div style={{ position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)', background: darkMode ? '#1f2937' : 'white', borderRadius: 8, padding: 16, boxShadow: '0 10px 40px rgba(0,0,0,0.3)', zIndex: 200, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input 
+            autoFocus
+            value={searchQuery} 
+            onChange={e => setSearchQuery(e.target.value)} 
+            placeholder="Rechercher..." 
+            style={{ padding: '8px 12px', background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 6, color: darkMode ? 'white' : 'black', fontSize: 14, width: 200 }}
+            onKeyDown={e => { if (e.key === 'Enter') goToSearchResult(1); }}
+          />
+          <input 
+            value={replaceQuery} 
+            onChange={e => setReplaceQuery(e.target.value)} 
+            placeholder="Remplacer..." 
+            style={{ padding: '8px 12px', background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 6, color: darkMode ? 'white' : 'black', fontSize: 14, width: 150 }}
+          />
+          <span style={{ color: darkMode ? '#9ca3af' : '#6b7280', fontSize: 12, minWidth: 50 }}>
+            {searchResults.length > 0 ? `${currentSearchIndex + 1}/${searchResults.length}` : '0/0'}
+          </span>
+          <button onClick={() => goToSearchResult(-1)} style={{ padding: '6px 10px', background: darkMode ? '#374151' : '#e5e7eb', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>▲</button>
+          <button onClick={() => goToSearchResult(1)} style={{ padding: '6px 10px', background: darkMode ? '#374151' : '#e5e7eb', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>▼</button>
+          <button onClick={replaceOne} disabled={searchResults.length === 0} style={{ padding: '6px 10px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 12 }}>Remplacer</button>
+          <button onClick={replaceAll} disabled={searchResults.length === 0} style={{ padding: '6px 10px', background: '#7c3aed', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 12 }}>Tout</button>
+          <button onClick={() => setShowSearch(false)} style={{ padding: '6px 10px', background: 'transparent', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: 16 }}>✕</button>
+        </div>
+      )}
+      
       {/* HEADER */}
-      <div style={{ position: 'sticky', top: 0, background: '#1f2937', borderBottom: '1px solid #374151', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
+      <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <input value={title} onChange={e => emitTitle(e.target.value)} disabled={!canEdit} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: 18, fontWeight: 'bold', outline: 'none', maxWidth: 300 }} />
-          <span style={{ color: '#6b7280', fontSize: 14 }}>{totalPages} page{totalPages > 1 ? 's' : ''}</span>
+          <input value={title} onChange={e => emitTitle(e.target.value)} disabled={!canEdit} style={{ background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', fontSize: 18, fontWeight: 'bold', outline: 'none', maxWidth: 300 }} />
+          <span style={{ color: '#6b7280', fontSize: 13 }}>{totalPages} page{totalPages > 1 ? 's' : ''}</span>
+          <span style={{ color: '#6b7280', fontSize: 13 }}>•</span>
+          <span style={{ color: '#6b7280', fontSize: 13 }}>{stats.scenes} scènes</span>
+          <span style={{ color: '#6b7280', fontSize: 13 }}>•</span>
+          <span style={{ color: '#6b7280', fontSize: 13 }}>{stats.words} mots</span>
           <span style={{ fontSize: 12, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '● En ligne' : '● Hors ligne'}</span>
           {!canEdit && <span style={{ fontSize: 12, background: '#f59e0b', color: 'black', padding: '2px 8px', borderRadius: 4 }}>Lecture seule</span>}
           {(loading || importing) && <span style={{ fontSize: 12, color: '#60a5fa' }}>{importing ? 'Import...' : 'Chargement...'}</span>}
@@ -727,34 +903,41 @@ export default function ScreenplayEditor() {
               <button onClick={handleLogout} style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}>Déconnexion</button>
             </div>
           ) : (
-            <button onClick={() => setShowAuthModal(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>Connexion</button>
+            <button onClick={() => setShowAuthModal(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>Connexion</button>
           )}
-          {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Mes documents">📁</button>}
+          {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Mes documents">📁</button>}
           {!docId ? (
             <button onClick={createNewDocument} style={{ padding: '6px 16px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>+ Nouveau</button>
           ) : (
             <>
-              <button onClick={copyLink} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Copier le lien">🔗</button>
-              {token && <button onClick={bulkSave} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Forcer la sauvegarde">💾</button>}
+              <button onClick={copyLink} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Copier le lien">🔗</button>
+              {token && <button onClick={createSnapshot} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Snapshot (⌘S)">💾</button>}
             </>
           )}
-          {token && docId && <button onClick={() => setShowHistory(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Historique">📜</button>}
-          <button onClick={() => setShowComments(!showComments)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: showComments ? '#374151' : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13, position: 'relative' }} title="Commentaires">
+          <button onClick={() => setShowSearch(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Rechercher (⌘F)">🔍</button>
+          {token && docId && <button onClick={() => setShowHistory(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Historique">📜</button>}
+          <button onClick={() => setShowComments(!showComments)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showComments ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13, position: 'relative' }} title="Commentaires">
             💬 {totalComments > 0 && <span style={{ position: 'absolute', top: -6, right: -6, background: '#f59e0b', color: 'black', fontSize: 10, padding: '2px 6px', borderRadius: 10 }}>{totalComments}</span>}
+          </button>
+          <button onClick={() => setDarkMode(!darkMode)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Thème">
+            {darkMode ? '☀️' : '🌙'}
           </button>
           <div style={{ position: 'relative' }}>
             <button onClick={(e) => { e.stopPropagation(); setShowImportExport(!showImportExport); }} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>
               Import/Export ▾
             </button>
             {showImportExport && (
-              <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#1f2937', border: '1px solid #374151', borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                <button onClick={() => { importFDX(); setShowImportExport(false); }} disabled={importing || !token} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: '1px solid #374151', color: !token ? '#6b7280' : 'white', cursor: !token ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                <button onClick={() => { importFDX(); setShowImportExport(false); }} disabled={importing || !token} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !token ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !token ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   📥 Importer FDX
                 </button>
-                <button onClick={() => { exportFDX(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: '1px solid #374151', color: !docId ? '#6b7280' : 'white', cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => { exportFDX(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !docId ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   📤 Exporter FDX
                 </button>
-                <button onClick={() => { exportPDF(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', color: !docId ? '#6b7280' : 'white', cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => { exportFountain(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !docId ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  📝 Exporter Fountain
+                </button>
+                <button onClick={() => { exportPDF(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', color: !docId ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   📄 Exporter PDF
                 </button>
               </div>
