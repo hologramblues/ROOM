@@ -592,6 +592,113 @@ const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
   );
 };
 
+// ============ GO TO SCENE MODAL ============
+const GoToSceneModal = ({ onClose, onGoTo, maxScene, darkMode }) => {
+  const [sceneNum, setSceneNum] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleGo = () => {
+    const num = parseInt(sceneNum);
+    if (num >= 1 && num <= maxScene) {
+      onGoTo(num);
+      onClose();
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 300, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: darkMode ? 'white' : 'black' }}>🎬 Aller à la scène</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            ref={inputRef}
+            type="number"
+            min="1"
+            max={maxScene}
+            value={sceneNum}
+            onChange={e => setSceneNum(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleGo()}
+            placeholder={`1 - ${maxScene}`}
+            style={{ flex: 1, padding: '10px 12px', borderRadius: 6, border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, background: darkMode ? '#374151' : 'white', color: darkMode ? 'white' : 'black', fontSize: 16 }}
+          />
+          <button onClick={handleGo} style={{ padding: '10px 16px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>Go</button>
+        </div>
+        <p style={{ margin: '12px 0 0 0', fontSize: 12, color: '#6b7280' }}>{maxScene} scène{maxScene > 1 ? 's' : ''} au total</p>
+      </div>
+    </div>
+  );
+};
+
+// ============ WRITING GOALS MODAL ============
+const WritingGoalsModal = ({ goal, onUpdate, onClose, currentWords, darkMode }) => {
+  const [dailyGoal, setDailyGoal] = useState(goal.daily);
+  const progress = Math.min(100, Math.round((goal.todayWords / goal.daily) * 100));
+
+  const handleSave = () => {
+    onUpdate({ ...goal, daily: parseInt(dailyGoal) || 1000 });
+    onClose();
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black' }}>🎯 Objectif d'écriture</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20 }}>✕</button>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 14, color: darkMode ? 'white' : 'black' }}>Aujourd'hui</span>
+            <span style={{ fontSize: 14, color: progress >= 100 ? '#22c55e' : '#6b7280' }}>{goal.todayWords} / {goal.daily} mots</span>
+          </div>
+          <div style={{ height: 8, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progress}%`, background: progress >= 100 ? '#22c55e' : '#3b82f6', borderRadius: 4, transition: 'width 0.3s' }} />
+          </div>
+          <p style={{ margin: '8px 0 0 0', fontSize: 12, color: progress >= 100 ? '#22c55e' : '#6b7280', textAlign: 'center' }}>
+            {progress >= 100 ? '🎉 Objectif atteint !' : `${progress}% - ${goal.daily - goal.todayWords} mots restants`}
+          </p>
+        </div>
+
+        {/* Goal setting */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#6b7280' }}>Objectif quotidien (mots)</label>
+          <input
+            type="number"
+            min="100"
+            step="100"
+            value={dailyGoal}
+            onChange={e => setDailyGoal(e.target.value)}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, background: darkMode ? '#374151' : 'white', color: darkMode ? 'white' : 'black', fontSize: 14 }}
+          />
+        </div>
+
+        {/* Quick presets */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+          {[500, 1000, 1500, 2000].map(preset => (
+            <button
+              key={preset}
+              onClick={() => setDailyGoal(preset)}
+              style={{ flex: 1, padding: '8px', background: dailyGoal == preset ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), border: 'none', borderRadius: 6, color: dailyGoal == preset ? 'white' : (darkMode ? 'white' : 'black'), cursor: 'pointer', fontSize: 12 }}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+
+        <button onClick={handleSave} style={{ width: '100%', padding: '12px', background: '#22c55e', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 14 }}>
+          Enregistrer
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ============ SHORTCUTS PANEL ============
 const ShortcutsPanel = ({ onClose, darkMode }) => {
   const shortcuts = [
@@ -599,8 +706,11 @@ const ShortcutsPanel = ({ onClose, darkMode }) => {
       { keys: '⌘↑', desc: 'Élément précédent' },
       { keys: '⌘↓', desc: 'Élément suivant' },
       { keys: '⌘O', desc: 'Ouvrir/Fermer Outline' },
+      { keys: '⌘G', desc: 'Aller à la scène' },
     ]},
     { category: 'Édition', items: [
+      { keys: '⌘Z', desc: 'Annuler' },
+      { keys: '⌘⇧Z', desc: 'Rétablir' },
       { keys: '⌘S', desc: 'Créer un snapshot' },
       { keys: '⌘F', desc: 'Rechercher/Remplacer' },
       { keys: '⌘N', desc: 'Ajouter une note' },
@@ -927,8 +1037,26 @@ export default function ScreenplayEditor() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [sessionWordCount, setSessionWordCount] = useState(0);
   const [sessionStartWords, setSessionStartWords] = useState(0);
+  const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
+  const [lastSaved, setLastSaved] = useState(null);
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const [draggedScene, setDraggedScene] = useState(null);
+  const [sceneSynopsis, setSceneSynopsis] = useState({}); // { sceneId: 'synopsis text' }
+  const [writingGoal, setWritingGoal] = useState(() => {
+    const saved = localStorage.getItem('rooms-writing-goal');
+    return saved ? JSON.parse(saved) : { daily: 1000, todayWords: 0, lastDate: null };
+  });
+  const [showGoToScene, setShowGoToScene] = useState(false);
+  const [showWritingGoals, setShowWritingGoals] = useState(false);
+  const [editingSynopsis, setEditingSynopsis] = useState(null);
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
+  const chatEndRef = useRef(null);
 
   useEffect(() => {
     const handleHash = () => { 
@@ -950,6 +1078,49 @@ export default function ScreenplayEditor() {
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [showImportExport]);
+
+  // Auto-backup to localStorage every 30 seconds
+  useEffect(() => {
+    if (!docId || elements.length === 0) return;
+    const backupInterval = setInterval(() => {
+      const backup = {
+        docId,
+        title,
+        elements,
+        timestamp: new Date().toISOString(),
+        sceneSynopsis,
+        sceneStatus,
+        notes
+      };
+      localStorage.setItem(`rooms-backup-${docId}`, JSON.stringify(backup));
+    }, 30000);
+    return () => clearInterval(backupInterval);
+  }, [docId, title, elements, sceneSynopsis, sceneStatus, notes]);
+
+  // Track writing goals daily reset
+  useEffect(() => {
+    const today = new Date().toDateString();
+    if (writingGoal.lastDate !== today) {
+      setWritingGoal(prev => ({ ...prev, todayWords: 0, lastDate: today }));
+    }
+  }, [writingGoal.lastDate]);
+
+  // Save writing goal to localStorage
+  useEffect(() => {
+    localStorage.setItem('rooms-writing-goal', JSON.stringify(writingGoal));
+  }, [writingGoal]);
+
+  // Track word count changes for writing goals
+  const prevWordCountRef = useRef(0);
+  useEffect(() => {
+    if (stats.words > prevWordCountRef.current && prevWordCountRef.current > 0) {
+      const wordsAdded = stats.words - prevWordCountRef.current;
+      if (wordsAdded > 0 && wordsAdded < 100) { // Sanity check - ignore large jumps (like loading a doc)
+        setWritingGoal(prev => ({ ...prev, todayWords: prev.todayWords + wordsAdded }));
+      }
+    }
+    prevWordCountRef.current = stats.words;
+  }, [stats.words]);
 
   // Load document via REST API
   useEffect(() => {
@@ -1006,11 +1177,53 @@ export default function ScreenplayEditor() {
     socket.on('comment-reply-added', ({ commentId, reply }) => setComments(p => p.map(c => c.id === commentId ? { ...c, replies: [...(c.replies || []), reply] } : c)));
     socket.on('comment-resolved', ({ commentId, resolved }) => setComments(p => p.map(c => c.id === commentId ? { ...c, resolved } : c)));
     
+    // Chat messages
+    socket.on('chat-message', (message) => {
+      setChatMessages(prev => [...prev, message]);
+      // Increment unread if chat is closed and message is from someone else
+      if (message.senderId !== socket.id) {
+        setUnreadMessages(prev => prev + 1);
+      }
+    });
+    socket.on('chat-history', (messages) => setChatMessages(messages));
+    
     return () => socket.disconnect();
   }, [docId, token]);
 
   const handleLogin = (user, newToken) => { setCurrentUser(user); setToken(newToken); setShowAuthModal(false); };
   const handleLogout = () => { localStorage.removeItem('screenplay-token'); localStorage.removeItem('screenplay-user'); setCurrentUser(null); setToken(null); };
+
+  // Send chat message
+  const sendChatMessage = useCallback(() => {
+    if (!chatInput.trim() || !socketRef.current || !connected || !docId) return;
+    
+    const message = {
+      id: generateId(),
+      senderId: myId,
+      senderName: currentUser?.name || 'Anonyme',
+      senderColor: users.find(u => u.id === myId)?.color || '#3b82f6',
+      content: chatInput.trim(),
+      timestamp: new Date().toISOString()
+    };
+    
+    socketRef.current.emit('chat-message', { docId, message });
+    setChatMessages(prev => [...prev, message]);
+    setChatInput('');
+  }, [chatInput, connected, docId, myId, currentUser, users]);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (showChat && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, showChat]);
+
+  // Clear unread when opening chat
+  useEffect(() => {
+    if (showChat) {
+      setUnreadMessages(0);
+    }
+  }, [showChat]);
 
   const createNewDocument = async () => {
     if (!token) { setShowAuthModal(true); return; }
@@ -1275,6 +1488,14 @@ export default function ScreenplayEditor() {
     }, 50);
   };
 
+  // Navigate to scene by number
+  const navigateToSceneByNumber = (sceneNumber) => {
+    const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
+    if (sceneNumber >= 1 && sceneNumber <= sceneIndices.length) {
+      navigateToScene(sceneIndices[sceneNumber - 1]);
+    }
+  };
+
   // Create snapshot manually
   const createSnapshot = async () => {
     if (!token || !docId) return;
@@ -1377,8 +1598,25 @@ export default function ScreenplayEditor() {
         e.preventDefault();
         setFocusMode(prev => !prev);
       }
+      // Cmd+Z = Undo
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      // Cmd+Shift+Z = Redo
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        redo();
+      }
+      // Cmd+G = Go to scene
+      if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
+        e.preventDefault();
+        setShowGoToScene(true);
+      }
       // Escape = Close panels (one at a time)
       if (e.key === 'Escape') {
+        if (showGoToScene) { setShowGoToScene(false); return; }
+        if (showWritingGoals) { setShowWritingGoals(false); return; }
         if (showShortcuts) { setShowShortcuts(false); return; }
         if (showRenameChar) { setShowRenameChar(false); return; }
         if (showNoteFor) { setShowNoteFor(null); return; }
@@ -1389,12 +1627,59 @@ export default function ScreenplayEditor() {
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, token, docId, title, elements, activeIndex]);
+  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, showWritingGoals, token, docId, title, elements, activeIndex, undo, redo]);
 
   const emitTitle = useCallback(t => { setTitle(t); if (socketRef.current && connected && canEdit) socketRef.current.emit('title-change', { title: t }); }, [connected, canEdit]);
-  const updateElement = useCallback((i, el) => { setElements(p => { const u = [...p]; u[i] = el; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el }); }, [connected, canEdit]);
-  const insertElement = useCallback((after, type) => { const el = { id: generateId(), type, content: '' }; setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; }); setActiveIndex(after + 1); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-insert', { afterIndex: after, element: el }); }, [connected, canEdit]);
-  const deleteElement = useCallback(i => { if (elements.length === 1) return; setElements(p => p.filter((_, idx) => idx !== i)); setActiveIndex(Math.max(0, i - 1)); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-delete', { index: i }); }, [elements.length, connected, canEdit]);
+  // Save to undo stack before changes
+  const pushToUndo = useCallback((elementsSnapshot) => {
+    setUndoStack(prev => [...prev.slice(-50), elementsSnapshot]); // Keep last 50
+    setRedoStack([]); // Clear redo on new action
+  }, []);
+
+  const undo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const previous = undoStack[undoStack.length - 1];
+    setRedoStack(prev => [...prev, elements]);
+    setUndoStack(prev => prev.slice(0, -1));
+    setElements(previous);
+    if (socketRef.current && connected && canEdit) {
+      socketRef.current.emit('full-sync', { elements: previous });
+    }
+  }, [undoStack, elements, connected, canEdit]);
+
+  const redo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setUndoStack(prev => [...prev, elements]);
+    setRedoStack(prev => prev.slice(0, -1));
+    setElements(next);
+    if (socketRef.current && connected && canEdit) {
+      socketRef.current.emit('full-sync', { elements: next });
+    }
+  }, [redoStack, elements, connected, canEdit]);
+
+  const updateElement = useCallback((i, el, skipUndo = false) => { 
+    if (!skipUndo) pushToUndo(elements);
+    setElements(p => { const u = [...p]; u[i] = el; return u; }); 
+    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el }); 
+    setLastSaved(new Date());
+  }, [connected, canEdit, elements, pushToUndo]);
+  const insertElement = useCallback((after, type) => { 
+    pushToUndo(elements);
+    const el = { id: generateId(), type, content: '' }; 
+    setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; }); 
+    setActiveIndex(after + 1); 
+    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-insert', { afterIndex: after, element: el }); 
+    setLastSaved(new Date());
+  }, [connected, canEdit, elements, pushToUndo]);
+  const deleteElement = useCallback(i => { 
+    if (elements.length === 1) return; 
+    pushToUndo(elements);
+    setElements(p => p.filter((_, idx) => idx !== i)); 
+    setActiveIndex(Math.max(0, i - 1)); 
+    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-delete', { index: i }); 
+    setLastSaved(new Date());
+  }, [elements, connected, canEdit, pushToUndo]);
   const changeType = useCallback((i, t) => { setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-type-change', { index: i, type: t }); }, [connected, canEdit]);
   const handleCursor = useCallback((i, pos) => { if (socketRef.current && connected) socketRef.current.emit('cursor-move', { index: i, position: pos }); }, [connected]);
   const handleSelectChar = useCallback((i, name) => { updateElement(i, { ...elements[i], content: name }); setTimeout(() => insertElement(i, 'dialogue'), 50); }, [elements, updateElement, insertElement]);
@@ -1429,6 +1714,72 @@ export default function ScreenplayEditor() {
       });
     }
   }, [elements, connected, canEdit]);
+
+  // Duplicate a scene (scene + all elements until next scene)
+  const duplicateScene = useCallback((sceneIndex) => {
+    pushToUndo(elements);
+    const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
+    const currentScenePos = sceneIndices.indexOf(sceneIndex);
+    const nextSceneIndex = currentScenePos < sceneIndices.length - 1 ? sceneIndices[currentScenePos + 1] : elements.length;
+    
+    // Get all elements in this scene
+    const sceneElements = elements.slice(sceneIndex, nextSceneIndex).map(el => ({
+      ...el,
+      id: generateId()
+    }));
+    
+    // Insert after the scene
+    const newElements = [
+      ...elements.slice(0, nextSceneIndex),
+      ...sceneElements,
+      ...elements.slice(nextSceneIndex)
+    ];
+    
+    setElements(newElements);
+    setLastSaved(new Date());
+    
+    if (socketRef.current && connected && canEdit) {
+      socketRef.current.emit('full-sync', { elements: newElements });
+    }
+  }, [elements, connected, canEdit, pushToUndo]);
+
+  // Move scene (drag & drop)
+  const moveScene = useCallback((fromSceneIndex, toSceneIndex) => {
+    if (fromSceneIndex === toSceneIndex) return;
+    
+    pushToUndo(elements);
+    
+    // Find all scene start indices
+    const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
+    
+    const fromPos = sceneIndices.indexOf(fromSceneIndex);
+    const toPos = sceneIndices.indexOf(toSceneIndex);
+    
+    if (fromPos === -1 || toPos === -1) return;
+    
+    // Get range of elements for the scene being moved
+    const fromStart = fromSceneIndex;
+    const fromEnd = fromPos < sceneIndices.length - 1 ? sceneIndices[fromPos + 1] : elements.length;
+    const sceneElements = elements.slice(fromStart, fromEnd);
+    
+    // Remove the scene elements
+    let newElements = [...elements.slice(0, fromStart), ...elements.slice(fromEnd)];
+    
+    // Recalculate insertion point
+    const newSceneIndices = newElements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
+    const adjustedToPos = toPos > fromPos ? toPos - 1 : toPos;
+    const insertAt = adjustedToPos < newSceneIndices.length ? newSceneIndices[adjustedToPos] : newElements.length;
+    
+    // Insert at new position
+    newElements = [...newElements.slice(0, insertAt), ...sceneElements, ...newElements.slice(insertAt)];
+    
+    setElements(newElements);
+    setLastSaved(new Date());
+    
+    if (socketRef.current && connected && canEdit) {
+      socketRef.current.emit('full-sync', { elements: newElements });
+    }
+  }, [elements, connected, canEdit, pushToUndo]);
 
   // Notes management
   const updateNote = useCallback((elementId, content, color = '#fef3c7') => {
@@ -1688,17 +2039,47 @@ export default function ScreenplayEditor() {
               outline.map(scene => (
                 <div
                   key={scene.id}
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggedScene(scene.index);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedScene !== null && draggedScene !== scene.index) {
+                      moveScene(draggedScene, scene.index);
+                    }
+                    setDraggedScene(null);
+                  }}
+                  onDragEnd={() => setDraggedScene(null)}
                   style={{
                     width: '100%',
                     padding: '8px 10px',
-                    background: currentSceneNumber === scene.number ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent',
+                    background: draggedScene === scene.index 
+                      ? (darkMode ? '#4b5563' : '#d1d5db')
+                      : currentSceneNumber === scene.number 
+                        ? (darkMode ? '#374151' : '#e5e7eb') 
+                        : 'transparent',
                     borderRadius: 6,
                     marginBottom: 4,
                     display: 'flex',
                     alignItems: 'flex-start',
-                    gap: 8
+                    gap: 8,
+                    cursor: 'grab',
+                    opacity: draggedScene !== null && draggedScene !== scene.index ? 0.7 : 1,
+                    borderLeft: sceneStatus[scene.id] ? `3px solid ${
+                      sceneStatus[scene.id] === 'final' ? '#22c55e' : 
+                      sceneStatus[scene.id] === 'review' ? '#f59e0b' : '#6b7280'
+                    }` : '3px solid transparent'
                   }}
                 >
+                  {/* Drag handle */}
+                  <span style={{ color: '#6b7280', fontSize: 10, cursor: 'grab', padding: '2px 0' }}>⋮⋮</span>
+                  
                   <button
                     onClick={() => navigateToScene(scene.index)}
                     style={{
@@ -1739,8 +2120,35 @@ export default function ScreenplayEditor() {
                         {scene.content}
                       </span>
                       <span style={{ fontSize: 10, color: '#6b7280', display: 'block', marginTop: 2 }}>
-                        {scene.wordCount} mots
+                        {scene.wordCount} mots • ~{Math.max(1, Math.round(scene.wordCount / 150))} min
                       </span>
+                      {/* Synopsis */}
+                      {editingSynopsis === scene.id ? (
+                        <input
+                          autoFocus
+                          value={sceneSynopsis[scene.id] || ''}
+                          onChange={e => setSceneSynopsis(prev => ({ ...prev, [scene.id]: e.target.value }))}
+                          onBlur={() => setEditingSynopsis(null)}
+                          onKeyDown={e => e.key === 'Enter' && setEditingSynopsis(null)}
+                          onClick={e => e.stopPropagation()}
+                          placeholder="Synopsis..."
+                          style={{ width: '100%', marginTop: 4, padding: '4px 6px', fontSize: 10, border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 4, background: darkMode ? '#374151' : 'white', color: darkMode ? 'white' : 'black' }}
+                        />
+                      ) : sceneSynopsis[scene.id] ? (
+                        <span 
+                          onClick={e => { e.stopPropagation(); setEditingSynopsis(scene.id); }}
+                          style={{ fontSize: 10, color: '#9ca3af', display: 'block', marginTop: 4, fontStyle: 'italic', cursor: 'text' }}
+                        >
+                          {sceneSynopsis[scene.id]}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={e => { e.stopPropagation(); setEditingSynopsis(scene.id); }}
+                          style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 10, padding: '4px 0 0 0', opacity: 0.5 }}
+                        >
+                          + Synopsis
+                        </button>
+                      )}
                     </div>
                   </button>
                   <button
@@ -1768,6 +2176,49 @@ export default function ScreenplayEditor() {
                     title={lockedScenes.has(scene.id) ? 'Déverrouiller la scène' : 'Verrouiller la scène'}
                   >
                     {lockedScenes.has(scene.id) ? '🔒' : '🔓'}
+                  </button>
+                  {/* Status button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const statuses = ['', 'draft', 'review', 'final'];
+                      const currentIdx = statuses.indexOf(sceneStatus[scene.id] || '');
+                      const nextIdx = (currentIdx + 1) % statuses.length;
+                      setSceneStatus(prev => ({ ...prev, [scene.id]: statuses[nextIdx] }));
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 9,
+                      padding: '2px 4px',
+                      color: sceneStatus[scene.id] === 'final' ? '#22c55e' : 
+                             sceneStatus[scene.id] === 'review' ? '#f59e0b' : '#6b7280',
+                      fontWeight: 'bold'
+                    }}
+                    title="Statut: Draft → Review → Final"
+                  >
+                    {sceneStatus[scene.id] === 'final' ? '✓' : 
+                     sceneStatus[scene.id] === 'review' ? '◐' : '○'}
+                  </button>
+                  {/* Duplicate button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      duplicateScene(scene.index);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#6b7280',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      padding: '2px 4px',
+                      opacity: 0.6
+                    }}
+                    title="Dupliquer la scène"
+                  >
+                    ⧉
                   </button>
                   <button
                     onClick={(e) => {
@@ -1807,6 +2258,7 @@ export default function ScreenplayEditor() {
           <input value={title} onChange={e => emitTitle(e.target.value)} disabled={!canEdit} style={{ background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', fontSize: 16, fontWeight: 'bold', outline: 'none', maxWidth: 250 }} />
           <span style={{ color: '#6b7280', fontSize: 12 }}>{totalPages}p • {stats.scenes}sc • {stats.words}m</span>
           <span style={{ fontSize: 10, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '●' : '○'}</span>
+          {lastSaved && <span style={{ fontSize: 10, color: '#6b7280' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
           {!canEdit && <span style={{ fontSize: 11, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
           {(loading || importing) && <span style={{ fontSize: 11, color: '#60a5fa' }}>...</span>}
         </div>
@@ -1834,6 +2286,47 @@ export default function ScreenplayEditor() {
                 }} 
                 title="Inviter un collaborateur (copier le lien)"
               >+</button>
+            )}
+            {/* Chat button */}
+            {docId && (
+              <button
+                onClick={() => setShowChat(!showChat)}
+                style={{
+                  marginLeft: 4,
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  border: 'none',
+                  background: showChat ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'),
+                  color: showChat ? 'white' : '#9ca3af',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative'
+                }}
+                title="Chat d'équipe"
+              >
+                💬
+                {unreadMessages > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    background: '#ef4444',
+                    color: 'white',
+                    fontSize: 9,
+                    fontWeight: 'bold',
+                    padding: '2px 5px',
+                    borderRadius: 10,
+                    minWidth: 16,
+                    textAlign: 'center'
+                  }}>
+                    {unreadMessages > 9 ? '9+' : unreadMessages}
+                  </span>
+                )}
+              </button>
             )}
           </div>
           
@@ -1877,8 +2370,15 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { setShowTimer(!showTimer); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showTimer ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       ⏱️ Timer d'écriture {showTimer && '✓'}
                     </button>
-                    <button onClick={() => { setShowStats(true); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={() => { setShowStats(true); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📊 Statistiques
+                    </button>
+                    <button onClick={() => { setShowWritingGoals(true); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>🎯 Objectif d'écriture</span>
+                      <span style={{ fontSize: 10, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : '#6b7280' }}>{Math.round((writingGoal.todayWords / writingGoal.daily) * 100)}%</span>
+                    </button>
+                    <button onClick={() => { setShowGoToScene(true); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>🎬 Aller à la scène</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘G</span>
                     </button>
                   </div>
                 )}
@@ -2084,12 +2584,207 @@ export default function ScreenplayEditor() {
         />
       )}
       
+      {/* Go To Scene Modal */}
+      {showGoToScene && (
+        <GoToSceneModal
+          onClose={() => setShowGoToScene(false)}
+          onGoTo={navigateToSceneByNumber}
+          maxScene={outline.length}
+          darkMode={darkMode}
+        />
+      )}
+      
+      {/* Writing Goals Modal */}
+      {showWritingGoals && (
+        <WritingGoalsModal
+          goal={writingGoal}
+          onUpdate={setWritingGoal}
+          onClose={() => setShowWritingGoals(false)}
+          currentWords={stats.words}
+          darkMode={darkMode}
+        />
+      )}
+      
+      {/* Chat Panel */}
+      {showChat && (
+        <div style={{
+          position: 'fixed',
+          right: 0,
+          top: 60,
+          bottom: 0,
+          width: 320,
+          background: darkMode ? '#1f2937' : 'white',
+          borderLeft: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: 100,
+          boxShadow: '-4px 0 20px rgba(0,0,0,0.2)'
+        }}>
+          {/* Chat Header */}
+          <div style={{ 
+            padding: '16px', 
+            borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>💬 Chat</h3>
+              <span style={{ fontSize: 11, color: '#6b7280' }}>{users.length} connecté{users.length > 1 ? 's' : ''}</span>
+            </div>
+            <button 
+              onClick={() => setShowChat(false)} 
+              style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18 }}
+            >✕</button>
+          </div>
+          
+          {/* Online Users */}
+          <div style={{ 
+            padding: '8px 16px', 
+            borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+            display: 'flex',
+            gap: 8,
+            overflowX: 'auto'
+          }}>
+            {users.map(user => (
+              <div 
+                key={user.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 8px',
+                  background: darkMode ? '#374151' : '#f3f4f6',
+                  borderRadius: 12,
+                  fontSize: 11,
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <span style={{ 
+                  width: 8, 
+                  height: 8, 
+                  borderRadius: '50%', 
+                  background: user.color || '#22c55e' 
+                }} />
+                <span style={{ color: darkMode ? 'white' : 'black' }}>
+                  {user.name}{user.id === myId ? ' (vous)' : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+          
+          {/* Messages */}
+          <div style={{ 
+            flex: 1, 
+            overflow: 'auto', 
+            padding: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12
+          }}>
+            {chatMessages.length === 0 ? (
+              <p style={{ color: '#6b7280', textAlign: 'center', marginTop: 40, fontSize: 13 }}>
+                Aucun message.<br/>Commencez la conversation !
+              </p>
+            ) : (
+              chatMessages.map(msg => (
+                <div 
+                  key={msg.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: msg.senderId === myId ? 'flex-end' : 'flex-start'
+                  }}
+                >
+                  {msg.senderId !== myId && (
+                    <span style={{ 
+                      fontSize: 10, 
+                      color: msg.senderColor || '#6b7280',
+                      marginBottom: 2,
+                      fontWeight: 'bold'
+                    }}>
+                      {msg.senderName}
+                    </span>
+                  )}
+                  <div style={{
+                    background: msg.senderId === myId 
+                      ? '#3b82f6' 
+                      : (darkMode ? '#374151' : '#f3f4f6'),
+                    color: msg.senderId === myId ? 'white' : (darkMode ? 'white' : 'black'),
+                    padding: '8px 12px',
+                    borderRadius: 12,
+                    maxWidth: '85%',
+                    fontSize: 13,
+                    lineHeight: 1.4,
+                    wordBreak: 'break-word'
+                  }}>
+                    {msg.content}
+                  </div>
+                  <span style={{ 
+                    fontSize: 9, 
+                    color: '#6b7280', 
+                    marginTop: 2 
+                  }}>
+                    {new Date(msg.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))
+            )}
+            <div ref={chatEndRef} />
+          </div>
+          
+          {/* Input */}
+          <div style={{ 
+            padding: 12, 
+            borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+            display: 'flex',
+            gap: 8
+          }}>
+            <input
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendChatMessage()}
+              placeholder="Message..."
+              style={{
+                flex: 1,
+                padding: '10px 14px',
+                borderRadius: 20,
+                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                background: darkMode ? '#374151' : 'white',
+                color: darkMode ? 'white' : 'black',
+                fontSize: 13,
+                outline: 'none'
+              }}
+            />
+            <button
+              onClick={sendChatMessage}
+              disabled={!chatInput.trim()}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                border: 'none',
+                background: chatInput.trim() ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'),
+                color: chatInput.trim() ? 'white' : '#9ca3af',
+                cursor: chatInput.trim() ? 'pointer' : 'default',
+                fontSize: 16,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              ➤
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Writing Timer Widget */}
       {showTimer && (
         <div style={{
           position: 'fixed',
           bottom: 20,
-          right: 20,
+          right: showChat ? 340 : 20,
           background: darkMode ? '#1f2937' : 'white',
           border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
           borderRadius: 12,
