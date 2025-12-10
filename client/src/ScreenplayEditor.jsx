@@ -3,6 +3,19 @@ import { io } from 'socket.io-client';
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
+// UUID fallback for browsers that don't support crypto.randomUUID
+const generateId = () => {
+  try {
+    return crypto.randomUUID();
+  } catch (e) {
+    // Fallback for older browsers
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+};
+
 const ELEMENT_TYPES = [
   { id: 'scene', label: 'Séquence', shortcut: '1' },
   { id: 'action', label: 'Action', shortcut: '2' },
@@ -340,7 +353,7 @@ export default function ScreenplayEditor() {
   const getDocId = () => { const hash = window.location.hash; return hash.startsWith('#') ? hash.slice(1) : null; };
   const [docId, setDocId] = useState(getDocId);
   const [title, setTitle] = useState('SANS TITRE');
-  const [elements, setElements] = useState([{ id: crypto.randomUUID(), type: 'scene', content: '' }]);
+  const [elements, setElements] = useState([{ id: generateId(), type: 'scene', content: '' }]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
   const [characters, setCharacters] = useState([]);
@@ -376,7 +389,7 @@ export default function ScreenplayEditor() {
   useEffect(() => {
     const loadDocument = async () => {
       if (!docId) {
-        setElements([{ id: crypto.randomUUID(), type: 'scene', content: '' }]);
+        setElements([{ id: generateId(), type: 'scene', content: '' }]);
         setTitle('SANS TITRE');
         return;
       }
@@ -468,7 +481,7 @@ export default function ScreenplayEditor() {
 
   const emitTitle = useCallback(t => { setTitle(t); if (socketRef.current && connected && canEdit) socketRef.current.emit('title-change', { title: t }); }, [connected, canEdit]);
   const updateElement = useCallback((i, el) => { setElements(p => { const u = [...p]; u[i] = el; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el }); }, [connected, canEdit]);
-  const insertElement = useCallback((after, type) => { const el = { id: crypto.randomUUID(), type, content: '' }; setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; }); setActiveIndex(after + 1); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-insert', { afterIndex: after, element: el }); }, [connected, canEdit]);
+  const insertElement = useCallback((after, type) => { const el = { id: generateId(), type, content: '' }; setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; }); setActiveIndex(after + 1); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-insert', { afterIndex: after, element: el }); }, [connected, canEdit]);
   const deleteElement = useCallback(i => { if (elements.length === 1) return; setElements(p => p.filter((_, idx) => idx !== i)); setActiveIndex(Math.max(0, i - 1)); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-delete', { index: i }); }, [elements.length, connected, canEdit]);
   const changeType = useCallback((i, t) => { setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-type-change', { index: i, type: t }); }, [connected, canEdit]);
   const handleCursor = useCallback((i, pos) => { if (socketRef.current && connected) socketRef.current.emit('cursor-move', { index: i, position: pos }); }, [connected]);
@@ -520,12 +533,12 @@ export default function ScreenplayEditor() {
           const textNode = p.querySelector('Text');
           const content = textNode ? textNode.textContent : '';
           if (content.trim() || newElements.length === 0) {
-            newElements.push({ id: crypto.randomUUID(), type, content: content.trim() });
+            newElements.push({ id: generateId(), type, content: content.trim() });
           }
         });
         
         if (newElements.length === 0) {
-          newElements.push({ id: crypto.randomUUID(), type: 'scene', content: '' });
+          newElements.push({ id: generateId(), type: 'scene', content: '' });
         }
         
         // Get title from filename
