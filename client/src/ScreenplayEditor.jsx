@@ -609,6 +609,48 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
 });
 
 // ============ USER AVATAR ============
+// ============ LOGO ============
+const Logo = ({ darkMode, large = false }) => {
+  const color = darkMode ? '#ffffff' : '#1a1a1a';
+  const bg = darkMode ? '#1f2937' : '#ffffff';
+  const h = large ? 50 : 26;
+  const scale = large ? 1 : 0.52;
+  
+  return (
+    <svg width={180 * scale} height={h} viewBox="0 0 180 50" style={{ display: 'block' }}>
+      <defs>
+        <clipPath id="clipFirst">
+          <rect x="0" y="0" width="68" height="50"/>
+        </clipPath>
+        <clipPath id="clipSecond">
+          <rect x="68" y="0" width="50" height="50"/>
+        </clipPath>
+      </defs>
+      
+      {/* R - serif style */}
+      <text x="0" y="40" fontFamily="'Playfair Display', Georgia, 'Times New Roman', serif" fontSize="44" fontWeight="400" fill={color}>R</text>
+      
+      {/* Interlocking OO */}
+      <g>
+        {/* Background O (second one, behind) */}
+        <ellipse cx="82" cy="25" rx="16" ry="20" fill="none" stroke={color} strokeWidth="4"/>
+        {/* Masking rectangle to hide part of second O */}
+        <rect x="62" y="5" width="10" height="40" fill={bg}/>
+        {/* Front O (first one) */}
+        <ellipse cx="62" cy="25" rx="16" ry="20" fill="none" stroke={color} strokeWidth="4"/>
+        {/* Redraw visible part of second O in front */}
+        <path d="M 72 6 A 16 20 0 0 1 72 44" fill="none" stroke={color} strokeWidth="4"/>
+      </g>
+      
+      {/* M - serif style */}
+      <text x="100" y="40" fontFamily="'Playfair Display', Georgia, 'Times New Roman', serif" fontSize="44" fontWeight="400" fill={color}>M</text>
+      
+      {/* S - serif style */}
+      <text x="147" y="40" fontFamily="'Playfair Display', Georgia, 'Times New Roman', serif" fontSize="44" fontWeight="400" fill={color}>S</text>
+    </svg>
+  );
+};
+
 const UserAvatar = ({ user, isYou }) => <div style={{ width: 32, height: 32, borderRadius: '50%', background: user.color || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 'bold', color: 'white', border: isYou ? '3px solid white' : 'none', boxSizing: 'border-box' }} title={user.name}>{user.name?.charAt(0).toUpperCase() || '?'}</div>;
 
 // ============ MAIN EDITOR ============
@@ -1338,7 +1380,9 @@ export default function ScreenplayEditor() {
       
       {/* HEADER */}
       <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '8px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Logo darkMode={darkMode} />
+          <div style={{ width: 1, height: 24, background: darkMode ? '#374151' : '#d1d5db' }} />
           <input value={title} onChange={e => emitTitle(e.target.value)} disabled={!canEdit} style={{ background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', fontSize: 16, fontWeight: 'bold', outline: 'none', maxWidth: 250 }} />
           <span style={{ color: '#6b7280', fontSize: 12 }}>{totalPages}p • {stats.scenes}sc • {stats.words}m</span>
           <span style={{ fontSize: 10, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '●' : '○'}</span>
