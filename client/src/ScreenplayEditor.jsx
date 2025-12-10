@@ -758,43 +758,35 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
 
 // ============ USER AVATAR ============
 // ============ LOGO ============
-const Logo = ({ darkMode, large = false }) => {
-  const color = darkMode ? '#ffffff' : '#1a1a1a';
+const Logo = ({ darkMode }) => {
+  const stroke = darkMode ? '#ffffff' : '#1a1a1a';
   const bg = darkMode ? '#1f2937' : '#ffffff';
-  const h = large ? 50 : 26;
-  const scale = large ? 1 : 0.52;
   
   return (
-    <svg width={180 * scale} height={h} viewBox="0 0 180 50" style={{ display: 'block' }}>
-      <defs>
-        <clipPath id="clipFirst">
-          <rect x="0" y="0" width="68" height="50"/>
-        </clipPath>
-        <clipPath id="clipSecond">
-          <rect x="68" y="0" width="50" height="50"/>
-        </clipPath>
-      </defs>
-      
-      {/* R - serif style */}
-      <text x="0" y="40" fontFamily="'Playfair Display', Georgia, 'Times New Roman', serif" fontSize="44" fontWeight="400" fill={color}>R</text>
+    <svg width="95" height="28" viewBox="0 0 95 28" style={{ display: 'block' }}>
+      {/* R */}
+      <text x="0" y="22" fontFamily="Georgia, 'Times New Roman', serif" fontSize="24" fontWeight="400" fill={stroke}>R</text>
       
       {/* Interlocking OO */}
-      <g>
-        {/* Background O (second one, behind) */}
-        <ellipse cx="82" cy="25" rx="16" ry="20" fill="none" stroke={color} strokeWidth="4"/>
-        {/* Masking rectangle to hide part of second O */}
-        <rect x="62" y="5" width="10" height="40" fill={bg}/>
-        {/* Front O (first one) */}
-        <ellipse cx="62" cy="25" rx="16" ry="20" fill="none" stroke={color} strokeWidth="4"/>
-        {/* Redraw visible part of second O in front */}
-        <path d="M 72 6 A 16 20 0 0 1 72 44" fill="none" stroke={color} strokeWidth="4"/>
+      <g transform="translate(18, 2)">
+        {/* Second O (background) */}
+        <ellipse cx="30" cy="12" rx="10" ry="12" fill="none" stroke={stroke} strokeWidth="2.5"/>
+        
+        {/* Cover to hide part of second O */}
+        <ellipse cx="18" cy="12" rx="7" ry="9" fill={bg} stroke="none"/>
+        
+        {/* First O (foreground) */}
+        <ellipse cx="18" cy="12" rx="10" ry="12" fill="none" stroke={stroke} strokeWidth="2.5"/>
+        
+        {/* Redraw right arc of second O that should be visible in front */}
+        <path d="M 26 1.5 A 10 12 0 0 1 26 22.5" fill="none" stroke={stroke} strokeWidth="2.5"/>
       </g>
       
-      {/* M - serif style */}
-      <text x="100" y="40" fontFamily="'Playfair Display', Georgia, 'Times New Roman', serif" fontSize="44" fontWeight="400" fill={color}>M</text>
+      {/* M */}
+      <text x="52" y="22" fontFamily="Georgia, 'Times New Roman', serif" fontSize="24" fontWeight="400" fill={stroke}>M</text>
       
-      {/* S - serif style */}
-      <text x="147" y="40" fontFamily="'Playfair Display', Georgia, 'Times New Roman', serif" fontSize="44" fontWeight="400" fill={color}>S</text>
+      {/* S */}
+      <text x="76" y="22" fontFamily="Georgia, 'Times New Roman', serif" fontSize="24" fontWeight="400" fill={stroke}>S</text>
     </svg>
   );
 };
