@@ -384,9 +384,6 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   );
 });
 
-// ============ PAGE BREAK ============
-const PageBreak = ({ pageNumber }) => <div style={{ position: 'relative', borderTop: '1px dashed #ccc', marginTop: 20, marginBottom: 20 }}><span style={{ position: 'absolute', right: -60, top: -10, background: '#f5f5f5', padding: '2px 8px', fontSize: 10, color: '#666' }}>{pageNumber}</span></div>;
-
 // ============ USER AVATAR ============
 const UserAvatar = ({ user, isYou }) => <div style={{ width: 32, height: 32, borderRadius: '50%', background: user.color || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 'bold', color: 'white', border: isYou ? '3px solid white' : 'none', boxSizing: 'border-box' }} title={user.name}>{user.name?.charAt(0).toUpperCase() || '?'}</div>;
 
@@ -397,7 +394,6 @@ export default function ScreenplayEditor() {
   const [title, setTitle] = useState('SANS TITRE');
   const [elements, setElements] = useState([{ id: generateId(), type: 'scene', content: '' }]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [showHelp, setShowHelp] = useState(false);
   const [characters, setCharacters] = useState([]);
   const [comments, setComments] = useState([]);
   const [connected, setConnected] = useState(false);
@@ -516,14 +512,36 @@ export default function ScreenplayEditor() {
     setTimeout(() => { const el = document.querySelector(`[data-element-index="${index}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
   }, []);
 
-  const pageBreaks = useMemo(() => {
-    const breaks = []; let h = 0; let p = 1;
-    const getLines = el => { const l = el.content ? Math.ceil(el.content.length / 60) : 1; const e = { scene: 2, action: 1, character: 2, dialogue: 0.5, parenthetical: 1, transition: 2 }; return l + (e[el.type] || 0); };
-    elements.forEach((el, idx) => { h += getLines(el); if (h >= LINES_PER_PAGE) { p++; breaks.push({ afterIndex: idx, pageNumber: p }); h = getLines(el); } });
-    return breaks;
+  // Group elements into pages
+  const pages = useMemo(() => {
+    const result = [];
+    let currentPage = { number: 1, elements: [] };
+    let h = 0;
+    const getLines = el => { 
+      const l = el.content ? Math.ceil(el.content.length / 60) : 1; 
+      const e = { scene: 2, action: 1, character: 2, dialogue: 0.5, parenthetical: 1, transition: 2 }; 
+      return l + (e[el.type] || 0); 
+    };
+    
+    elements.forEach((el, idx) => {
+      const lines = getLines(el);
+      if (h + lines > LINES_PER_PAGE && currentPage.elements.length > 0) {
+        result.push(currentPage);
+        currentPage = { number: currentPage.number + 1, elements: [] };
+        h = 0;
+      }
+      currentPage.elements.push({ element: el, index: idx });
+      h += lines;
+    });
+    
+    if (currentPage.elements.length > 0) {
+      result.push(currentPage);
+    }
+    
+    return result;
   }, [elements]);
 
-  const totalPages = pageBreaks.length + 1;
+  const totalPages = pages.length;
   const extractedCharacters = useMemo(() => { const c = new Set(characters); elements.forEach(el => { if (el.type === 'character' && el.content.trim()) c.add(el.content.trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); }, [elements, characters]);
   const remoteCursors = useMemo(() => users.filter(u => u.id !== myId), [users, myId]);
   const canEdit = myRole === 'editor';
@@ -558,8 +576,6 @@ export default function ScreenplayEditor() {
     if (e.key === 'ArrowDown' && e.metaKey) { e.preventDefault(); setActiveIndex(Math.min(elements.length - 1, index + 1)); }
     if ((e.metaKey || e.ctrlKey) && ['1','2','3','4','5','6'].includes(e.key)) { e.preventDefault(); changeType(index, ELEMENT_TYPES[parseInt(e.key) - 1].id); }
   }, [elements, insertElement, changeType, deleteElement, updateElement, canEdit]);
-
-  const elementsWithBreaks = useMemo(() => { const r = []; const m = new Map(pageBreaks.map(b => [b.afterIndex, b.pageNumber])); elements.forEach((el, i) => { r.push({ type: 'element', element: el, index: i }); if (m.has(i)) r.push({ type: 'pageBreak', pageNumber: m.get(i) }); }); return r; }, [elements, pageBreaks]);
 
   // ============ IMPORT FDX - Creates new document ============
   const importFDX = async () => {
@@ -719,7 +735,6 @@ export default function ScreenplayEditor() {
           <button onClick={() => setShowComments(!showComments)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: showComments ? '#374151' : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13, position: 'relative' }} title="Commentaires">
             💬 {totalComments > 0 && <span style={{ position: 'absolute', top: -6, right: -6, background: '#f59e0b', color: 'black', fontSize: 10, padding: '2px 6px', borderRadius: 10 }}>{totalComments}</span>}
           </button>
-          <button onClick={() => setShowHelp(!showHelp)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: showHelp ? '#374151' : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Aide">?</button>
           <div style={{ position: 'relative' }}>
             <button onClick={(e) => { e.stopPropagation(); setShowImportExport(!showImportExport); }} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>
               Import/Export ▾
@@ -741,14 +756,45 @@ export default function ScreenplayEditor() {
         </div>
       </div>
       
-      {showHelp && <div style={{ background: '#1f2937', borderBottom: '1px solid #374151', padding: '12px 24px', fontSize: 12, color: '#9ca3af' }}>Entrée → Nouvelle ligne | Tab → Changer type | ⌘1-6 → Types directs | ⌘↑/↓ → Navigation | Backspace sur ligne vide → Supprimer</div>}
-      
       <div style={{ display: 'flex', justifyContent: 'center', padding: 32, gap: 20 }}>
-        <div style={{ background: 'white', color: '#111', width: '210mm', minHeight: '297mm', padding: '25mm 25mm 25mm 38mm', boxSizing: 'border-box', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', flexShrink: 0 }}>
-          <div style={{ position: 'relative' }}><span style={{ position: 'absolute', right: -50, top: 0, background: '#f5f5f5', padding: '2px 8px', fontSize: 10, color: '#666' }}>1</span></div>
-          {elementsWithBreaks.map((item, idx) => item.type === 'pageBreak' ? <PageBreak key={'b' + idx} pageNumber={item.pageNumber} /> : (
-            <div key={item.element.id} data-element-index={item.index}>
-              <SceneLine element={item.element} index={item.index} isActive={activeIndex === item.index} onUpdate={updateElement} onFocus={setActiveIndex} onKeyDown={handleKeyDown} characters={extractedCharacters} onSelectCharacter={handleSelectChar} remoteCursors={remoteCursors} onCursorMove={handleCursor} commentCount={commentCounts[item.element.id] || 0} canEdit={canEdit} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {pages.map((page) => (
+            <div key={page.number} style={{ position: 'relative' }}>
+              {/* Page number left */}
+              <span style={{ position: 'absolute', left: -40, top: 20, fontSize: 12, color: '#666', fontFamily: 'Courier Prime, monospace' }}>{page.number}</span>
+              {/* Page number right */}
+              <span style={{ position: 'absolute', right: -40, top: 20, fontSize: 12, color: '#666', fontFamily: 'Courier Prime, monospace' }}>{page.number}</span>
+              
+              {/* Page content */}
+              <div style={{ 
+                background: 'white', 
+                color: '#111', 
+                width: '210mm', 
+                minHeight: '297mm',
+                padding: '25mm 25mm 25mm 38mm', 
+                boxSizing: 'border-box', 
+                boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                flexShrink: 0 
+              }}>
+                {page.elements.map(({ element, index }) => (
+                  <div key={element.id} data-element-index={index}>
+                    <SceneLine 
+                      element={element} 
+                      index={index} 
+                      isActive={activeIndex === index} 
+                      onUpdate={updateElement} 
+                      onFocus={setActiveIndex} 
+                      onKeyDown={handleKeyDown} 
+                      characters={extractedCharacters} 
+                      onSelectCharacter={handleSelectChar} 
+                      remoteCursors={remoteCursors} 
+                      onCursorMove={handleCursor} 
+                      commentCount={commentCounts[element.id] || 0} 
+                      canEdit={canEdit} 
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
