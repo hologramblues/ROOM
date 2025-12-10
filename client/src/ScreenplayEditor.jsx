@@ -489,6 +489,149 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
   );
 };
 
+// ============ SHORTCUTS PANEL ============
+const ShortcutsPanel = ({ onClose, darkMode }) => {
+  const shortcuts = [
+    { category: 'Navigation', items: [
+      { keys: '⌘↑', desc: 'Élément précédent' },
+      { keys: '⌘↓', desc: 'Élément suivant' },
+      { keys: '⌘O', desc: 'Ouvrir/Fermer Outline' },
+    ]},
+    { category: 'Édition', items: [
+      { keys: '⌘S', desc: 'Créer un snapshot' },
+      { keys: '⌘F', desc: 'Rechercher/Remplacer' },
+      { keys: '⌘N', desc: 'Ajouter une note' },
+      { keys: 'Tab', desc: 'Changer type élément' },
+      { keys: 'Backspace', desc: 'Supprimer ligne vide' },
+    ]},
+    { category: 'Types (⌘+chiffre)', items: [
+      { keys: '⌘1', desc: 'Scène' },
+      { keys: '⌘2', desc: 'Action' },
+      { keys: '⌘3', desc: 'Personnage' },
+      { keys: '⌘4', desc: 'Dialogue' },
+      { keys: '⌘5', desc: 'Parenthèse' },
+      { keys: '⌘6', desc: 'Transition' },
+    ]},
+    { category: 'Général', items: [
+      { keys: 'Escape', desc: 'Fermer panel actif' },
+      { keys: '⌘?', desc: 'Raccourcis clavier' },
+    ]},
+  ];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 500, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 20, color: darkMode ? 'white' : 'black' }}>⌨️ Raccourcis clavier</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
+        </div>
+        
+        {shortcuts.map(cat => (
+          <div key={cat.category} style={{ marginBottom: 20 }}>
+            <h4 style={{ margin: '0 0 10px 0', fontSize: 13, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1 }}>{cat.category}</h4>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {cat.items.map(item => (
+                <div key={item.keys} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: darkMode ? '#374151' : '#f3f4f6', borderRadius: 6 }}>
+                  <span style={{ fontSize: 13, color: darkMode ? 'white' : 'black' }}>{item.desc}</span>
+                  <kbd style={{ 
+                    padding: '4px 8px', 
+                    background: darkMode ? '#4b5563' : 'white', 
+                    border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`, 
+                    borderRadius: 4, 
+                    fontSize: 12, 
+                    fontFamily: 'monospace',
+                    color: darkMode ? '#e5e7eb' : '#374151'
+                  }}>{item.keys}</kbd>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ============ RENAME CHARACTER MODAL ============
+const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
+  const handleRename = () => {
+    if (from && to && from !== to) {
+      onRename(from, to);
+    }
+  };
+
+  const charList = [...new Set(characters)].sort();
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black' }}>✏️ Renommer un personnage</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
+        </div>
+        
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#6b7280' }}>Personnage actuel</label>
+          <select 
+            value={from} 
+            onChange={e => setFrom(e.target.value)}
+            style={{ 
+              width: '100%', 
+              padding: '10px 12px', 
+              background: darkMode ? '#374151' : 'white', 
+              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+              borderRadius: 6, 
+              color: darkMode ? 'white' : 'black', 
+              fontSize: 14 
+            }}
+          >
+            <option value="">Sélectionner...</option>
+            {charList.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+        
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#6b7280' }}>Nouveau nom</label>
+          <input 
+            type="text"
+            value={to} 
+            onChange={e => setTo(e.target.value.toUpperCase())}
+            placeholder="NOUVEAU NOM"
+            style={{ 
+              width: '100%', 
+              padding: '10px 12px', 
+              background: darkMode ? '#374151' : 'white', 
+              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+              borderRadius: 6, 
+              color: darkMode ? 'white' : 'black', 
+              fontSize: 14,
+              boxSizing: 'border-box'
+            }}
+          />
+        </div>
+        
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '10px 20px', background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14 }}>
+            Annuler
+          </button>
+          <button 
+            onClick={handleRename} 
+            disabled={!from || !to || from === to}
+            style={{ padding: '10px 20px', background: (!from || !to || from === to) ? '#6b7280' : '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: (!from || !to || from === to) ? 'default' : 'pointer', fontSize: 14, fontWeight: 500 }}
+          >
+            Renommer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ============ ELEMENT STYLES ============
 const getElementStyle = (type) => {
   const base = { fontFamily: 'Courier Prime, Courier New, monospace', fontSize: '12pt', lineHeight: '1', outline: 'none', border: 'none', width: '100%', background: 'transparent', resize: 'none', padding: 0, margin: 0, display: 'block', minHeight: '1em' };
@@ -515,7 +658,7 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, sceneNumber, showSceneNumbers, note, onNoteClick, onOpenComments }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, onOpenComments }) => {
   const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
@@ -566,6 +709,11 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     <div style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
       {usersOnLine.map(u => <RemoteCursor key={u.id} user={u} />)}
       
+      {/* Lock indicator for scene heading */}
+      {element.type === 'scene' && isLocked && (
+        <span style={{ position: 'absolute', left: showSceneNumbers ? -65 : -30, top: 4, fontSize: 14, color: '#f59e0b' }} title="Scène verrouillée">🔒</span>
+      )}
+      
       {/* Scene number (left side) */}
       {element.type === 'scene' && showSceneNumbers && sceneNumber && (
         <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
@@ -595,9 +743,9 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       )}
       
       {/* Type label */}
-      {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
+      {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       
-      <textarea ref={textareaRef} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.9 }} rows={1} readOnly={!canEdit} />
+      <textarea ref={textareaRef} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.7, background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }} rows={1} readOnly={!canEdit} />
       
       {/* Character autocomplete */}
       {autoType === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
@@ -689,6 +837,11 @@ export default function ScreenplayEditor() {
   const [showViewMenu, setShowViewMenu] = useState(false);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showDocMenu, setShowDocMenu] = useState(false);
+  const [lockedScenes, setLockedScenes] = useState(new Set()); // Set of scene element IDs
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showRenameChar, setShowRenameChar] = useState(false);
+  const [renameFrom, setRenameFrom] = useState('');
+  const [renameTo, setRenameTo] = useState('');
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
 
@@ -826,6 +979,19 @@ export default function ScreenplayEditor() {
   const remoteCursors = useMemo(() => users.filter(u => u.id !== myId), [users, myId]);
   const canEdit = myRole === 'editor';
   const canComment = myRole === 'editor' || myRole === 'commenter';
+
+  // Check if an element is in a locked scene
+  const isElementLocked = useCallback((elementIndex) => {
+    // Find which scene this element belongs to
+    let currentSceneId = null;
+    for (let i = elementIndex; i >= 0; i--) {
+      if (elements[i]?.type === 'scene') {
+        currentSceneId = elements[i].id;
+        break;
+      }
+    }
+    return currentSceneId && lockedScenes.has(currentSceneId);
+  }, [elements, lockedScenes]);
   const commentCounts = useMemo(() => { const counts = {}; comments.filter(c => !c.resolved).forEach(c => { counts[c.elementId] = (counts[c.elementId] || 0) + 1; }); return counts; }, [comments]);
   const totalComments = comments.filter(c => !c.resolved).length;
 
@@ -842,14 +1008,35 @@ export default function ScreenplayEditor() {
   const outline = useMemo(() => {
     const scenes = [];
     let sceneNumber = 0;
+    
+    // First pass: collect scene indices
+    const sceneIndices = [];
+    elements.forEach((el, idx) => {
+      if (el.type === 'scene') {
+        sceneIndices.push(idx);
+      }
+    });
+    
+    // Second pass: calculate word count for each scene
     elements.forEach((el, idx) => {
       if (el.type === 'scene') {
         sceneNumber++;
+        const sceneIdx = sceneIndices.indexOf(idx);
+        const nextSceneIdx = sceneIndices[sceneIdx + 1] || elements.length;
+        
+        // Count words in this scene's content
+        let wordCount = 0;
+        for (let i = idx; i < nextSceneIdx; i++) {
+          const content = elements[i]?.content || '';
+          wordCount += content.trim().split(/\s+/).filter(w => w).length;
+        }
+        
         scenes.push({
           index: idx,
           number: sceneNumber,
           content: el.content || '(sans titre)',
-          id: el.id
+          id: el.id,
+          wordCount
         });
       }
     });
@@ -1044,8 +1231,15 @@ export default function ScreenplayEditor() {
         e.preventDefault();
         setShowNoteFor(elements[activeIndex]?.id);
       }
+      // Cmd+? or Cmd+/ = Show shortcuts
+      if ((e.metaKey || e.ctrlKey) && (e.key === '?' || e.key === '/')) {
+        e.preventDefault();
+        setShowShortcuts(prev => !prev);
+      }
       // Escape = Close panels (one at a time)
       if (e.key === 'Escape') {
+        if (showShortcuts) { setShowShortcuts(false); return; }
+        if (showRenameChar) { setShowRenameChar(false); return; }
         if (showNoteFor) { setShowNoteFor(null); return; }
         if (showSearch) { setShowSearch(false); return; }
         if (showCharactersPanel) { setShowCharactersPanel(false); return; }
@@ -1054,7 +1248,7 @@ export default function ScreenplayEditor() {
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, token, docId, title, elements, activeIndex]);
+  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, token, docId, title, elements, activeIndex]);
 
   const emitTitle = useCallback(t => { setTitle(t); if (socketRef.current && connected && canEdit) socketRef.current.emit('title-change', { title: t }); }, [connected, canEdit]);
   const updateElement = useCallback((i, el) => { setElements(p => { const u = [...p]; u[i] = el; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el }); }, [connected, canEdit]);
@@ -1070,6 +1264,30 @@ export default function ScreenplayEditor() {
     const prefix = match ? match[1] + ' ' : '';
     updateElement(i, { ...el, content: prefix + location + ' - ' });
   }, [elements, updateElement]);
+
+  // Rename character globally
+  const renameCharacter = useCallback((fromName, toName) => {
+    if (!fromName || !toName || fromName === toName) return;
+    
+    const newElements = elements.map(el => {
+      if (el.type === 'character' && el.content.trim().toUpperCase() === fromName.toUpperCase()) {
+        return { ...el, content: toName };
+      }
+      return el;
+    });
+    
+    setElements(newElements);
+    setShowRenameChar(false);
+    
+    // Emit changes for each modified element
+    if (socketRef.current && connected && canEdit) {
+      newElements.forEach((el, i) => {
+        if (el !== elements[i]) {
+          socketRef.current.emit('element-change', { index: i, element: el });
+        }
+      });
+    }
+  }, [elements, connected, canEdit]);
 
   // Notes management
   const updateNote = useCallback((elementId, content, color = '#fef3c7') => {
@@ -1327,48 +1545,90 @@ export default function ScreenplayEditor() {
               <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>Aucune scène</p>
             ) : (
               outline.map(scene => (
-                <button
+                <div
                   key={scene.id}
-                  onClick={() => navigateToScene(scene.index)}
                   style={{
                     width: '100%',
-                    padding: '10px 12px',
+                    padding: '8px 10px',
                     background: currentSceneNumber === scene.number ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent',
-                    border: 'none',
                     borderRadius: 6,
-                    color: darkMode ? 'white' : 'black',
-                    cursor: 'pointer',
-                    textAlign: 'left',
                     marginBottom: 4,
                     display: 'flex',
                     alignItems: 'flex-start',
-                    gap: 10
+                    gap: 8
                   }}
                 >
-                  <span style={{ 
-                    color: '#6b7280', 
-                    fontSize: 11, 
-                    fontWeight: 'bold',
-                    minWidth: 24,
-                    padding: '2px 6px',
-                    background: darkMode ? '#4b5563' : '#d1d5db',
-                    borderRadius: 4,
-                    textAlign: 'center'
-                  }}>
-                    {scene.number}
-                  </span>
-                  <span style={{ 
-                    fontSize: 12, 
-                    lineHeight: 1.4,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical'
-                  }}>
-                    {scene.content}
-                  </span>
-                </button>
+                  <button
+                    onClick={() => navigateToScene(scene.index)}
+                    style={{
+                      flex: 1,
+                      background: 'none',
+                      border: 'none',
+                      color: darkMode ? 'white' : 'black',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8
+                    }}
+                  >
+                    <span style={{ 
+                      color: '#6b7280', 
+                      fontSize: 10, 
+                      fontWeight: 'bold',
+                      minWidth: 22,
+                      padding: '2px 4px',
+                      background: darkMode ? '#4b5563' : '#d1d5db',
+                      borderRadius: 4,
+                      textAlign: 'center'
+                    }}>
+                      {scene.number}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ 
+                        fontSize: 11, 
+                        lineHeight: 1.3,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical'
+                      }}>
+                        {scene.content}
+                      </span>
+                      <span style={{ fontSize: 10, color: '#6b7280', display: 'block', marginTop: 2 }}>
+                        {scene.wordCount} mots
+                      </span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLockedScenes(prev => {
+                        const newSet = new Set(prev);
+                        if (newSet.has(scene.id)) {
+                          newSet.delete(scene.id);
+                        } else {
+                          newSet.add(scene.id);
+                        }
+                        return newSet;
+                      });
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: lockedScenes.has(scene.id) ? '#f59e0b' : '#6b7280',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      padding: '2px 4px',
+                      opacity: lockedScenes.has(scene.id) ? 1 : 0.5
+                    }}
+                    title={lockedScenes.has(scene.id) ? 'Déverrouiller la scène' : 'Verrouiller la scène'}
+                  >
+                    {lockedScenes.has(scene.id) ? '🔒' : '🔓'}
+                  </button>
+                </div>
               ))
             )}
           </div>
@@ -1460,15 +1720,21 @@ export default function ScreenplayEditor() {
                   Outils ▾ {totalComments > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#f59e0b', color: 'black', fontSize: 9, padding: '1px 4px', borderRadius: 8 }}>{totalComments}</span>}
                 </button>
                 {showToolsMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                     <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>🔍 Rechercher</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
                     </button>
                     <button onClick={() => { setShowNoteFor(elements[activeIndex]?.id); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>📝 Ajouter note</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘N</span>
                     </button>
-                    <button onClick={() => { setShowComments(!showComments); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showComments ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <button onClick={() => { setShowRenameChar(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      ✏️ Renommer personnage
+                    </button>
+                    <button onClick={() => { setShowComments(!showComments); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showComments ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>💬 Commentaires</span>{totalComments > 0 && <span style={{ background: '#f59e0b', color: 'black', fontSize: 10, padding: '1px 6px', borderRadius: 8 }}>{totalComments}</span>}
+                    </button>
+                    <button onClick={() => { setShowShortcuts(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>⌨️ Raccourcis</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
                     </button>
                   </div>
                 )}
@@ -1564,7 +1830,8 @@ export default function ScreenplayEditor() {
                       remoteCursors={remoteCursors} 
                       onCursorMove={handleCursor} 
                       commentCount={commentCounts[element.id] || 0} 
-                      canEdit={canEdit}
+                      canEdit={canEdit && !isElementLocked(index)}
+                      isLocked={isElementLocked(index)}
                       sceneNumber={sceneNumbersMap[element.id]}
                       showSceneNumbers={showSceneNumbers}
                       note={notes[element.id]}
@@ -1616,6 +1883,24 @@ export default function ScreenplayEditor() {
           onClose={() => setShowNoteFor(null)}
           darkMode={darkMode}
           canPush={!!token && !!docId && canComment}
+        />
+      )}
+      
+      {/* Shortcuts Panel */}
+      {showShortcuts && (
+        <ShortcutsPanel
+          onClose={() => setShowShortcuts(false)}
+          darkMode={darkMode}
+        />
+      )}
+      
+      {/* Rename Character Modal */}
+      {showRenameChar && (
+        <RenameCharacterModal
+          characters={extractedCharacters}
+          onRename={renameCharacter}
+          onClose={() => setShowRenameChar(false)}
+          darkMode={darkMode}
         />
       )}
     </div>
