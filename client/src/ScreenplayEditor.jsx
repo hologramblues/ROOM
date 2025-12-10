@@ -180,18 +180,31 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
         {restoring && <p style={{ color: '#60a5fa', textAlign: 'center', marginBottom: 16 }}>Restauration en cours...</p>}
         {loading ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Chargement...</p> : history.length === 0 ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Aucun historique</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {history.map(entry => (
-              <div key={entry._id} style={{ padding: 16, background: '#374151', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: entry.userColor || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: 14, flexShrink: 0 }}>{entry.userName?.charAt(0).toUpperCase() || '?'}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: 'white', fontWeight: 'bold', marginBottom: 4 }}>
-                    {entry.action === 'snapshot' && entry.snapshotName ? entry.snapshotName : (actionLabels[entry.action] || entry.action)}
+            {history.map(entry => {
+              // Generate snapshot name from date if not provided
+              const getSnapshotDisplayName = () => {
+                if (entry.snapshotName) return entry.snapshotName;
+                if (entry.action === 'snapshot') {
+                  const d = new Date(entry.createdAt);
+                  const pad = n => n.toString().padStart(2, '0');
+                  return `SNAPSHOT_${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()}_${pad(d.getHours())}h${pad(d.getMinutes())}`;
+                }
+                return actionLabels[entry.action] || entry.action;
+              };
+              
+              return (
+                <div key={entry._id} style={{ padding: 16, background: '#374151', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: entry.userColor || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: 14, flexShrink: 0 }}>{entry.userName?.charAt(0).toUpperCase() || '?'}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: 'white', fontWeight: 'bold', marginBottom: 4, fontSize: 13 }}>
+                      {getSnapshotDisplayName()}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#9ca3af' }}>{entry.userName} • {new Date(entry.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
                   </div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>{entry.userName} • {new Date(entry.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                  {entry.action === 'snapshot' && <button onClick={() => handleRestore(entry)} disabled={restoring} style={{ padding: '8px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12, opacity: restoring ? 0.5 : 1 }}>Restaurer</button>}
                 </div>
-                {entry.action === 'snapshot' && <button onClick={() => handleRestore(entry)} disabled={restoring} style={{ padding: '8px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12, opacity: restoring ? 0.5 : 1 }}>Restaurer</button>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -237,7 +250,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, canComment, isR
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canComment, onAddComment }) => {
+const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canComment, onClose }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
@@ -274,7 +287,12 @@ const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canCom
   }, [comments]);
 
   return (
-    <div style={{ width: 280, flexShrink: 0, paddingLeft: 20 }}>
+    <div style={{ width: 300, flexShrink: 0, background: '#1f2937', borderRadius: 8, marginLeft: 20, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 150px)', position: 'sticky', top: 80 }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: 14, color: 'white' }}>💬 Commentaires</h3>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
       {elements.map((el, idx) => {
         const elComments = commentsByElement[el.id] || [];
         const isActive = activeIndex === idx;
@@ -323,6 +341,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canCom
           </div>
         );
       })}
+      </div>
     </div>
   );
 };
@@ -496,7 +515,7 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, sceneNumber, showSceneNumbers, note, onNoteClick }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, sceneNumber, showSceneNumbers, note, onNoteClick, onOpenComments }) => {
   const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
@@ -566,8 +585,14 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         >📝</div>
       )}
       
-      {/* Comment badge */}
-      {commentCount > 0 && <div style={{ position: 'absolute', right: note ? -80 : -30, top: 2, width: 18, height: 18, background: '#fbbf24', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 'bold', color: '#78350f', boxShadow: '1px 1px 2px rgba(0,0,0,0.2)' }}>{commentCount}</div>}
+      {/* Comment badge - clickable to open comments */}
+      {commentCount > 0 && (
+        <div 
+          onClick={onOpenComments}
+          style={{ position: 'absolute', right: note ? -80 : -30, top: 2, width: 18, height: 18, background: '#fbbf24', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 'bold', color: '#78350f', boxShadow: '1px 1px 2px rgba(0,0,0,0.2)', cursor: 'pointer' }}
+          title="Voir les commentaires"
+        >{commentCount}</div>
+      )}
       
       {/* Type label */}
       {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
@@ -1321,7 +1346,31 @@ export default function ScreenplayEditor() {
           {(loading || importing) && <span style={{ fontSize: 11, color: '#60a5fa' }}>...</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ display: 'flex', gap: -8, marginRight: 8 }}>{users.slice(0, 5).map((u, i) => <div key={u.id} style={{ marginLeft: i > 0 ? -8 : 0 }}><UserAvatar user={u} isYou={u.id === myId} /></div>)}{users.length > 5 && <span style={{ color: '#9ca3af', fontSize: 11, marginLeft: 4 }}>+{users.length - 5}</span>}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: -8, marginRight: 4 }}>
+            {users.slice(0, 5).map((u, i) => <div key={u.id} style={{ marginLeft: i > 0 ? -8 : 0 }}><UserAvatar user={u} isYou={u.id === myId} /></div>)}
+            {users.length > 5 && <span style={{ color: '#9ca3af', fontSize: 11, marginLeft: 4 }}>+{users.length - 5}</span>}
+            {docId && (
+              <button 
+                onClick={copyLink} 
+                style={{ 
+                  marginLeft: 4, 
+                  width: 28, 
+                  height: 28, 
+                  borderRadius: '50%', 
+                  border: `2px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+                  background: 'transparent', 
+                  color: '#9ca3af', 
+                  cursor: 'pointer', 
+                  fontSize: 16, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  transition: 'all 0.2s'
+                }} 
+                title="Inviter un collaborateur (copier le lien)"
+              >+</button>
+            )}
+          </div>
           
           {currentUser ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1381,25 +1430,24 @@ export default function ScreenplayEditor() {
                 )}
               </div>
               
-              {/* DOCUMENT MENU */}
+              {/* DOCUMENT MENU - only for logged in users */}
+              {token && (
               <div style={{ position: 'relative' }}>
                 <button onClick={(e) => { e.stopPropagation(); setShowDocMenu(!showDocMenu); setShowViewMenu(false); setShowToolsMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }}>
                   Document ▾
                 </button>
                 {showDocMenu && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                    {token && <button onClick={() => { createSnapshot(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <button onClick={() => { createSnapshot(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>💾 Snapshot</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘S</span>
-                    </button>}
-                    {token && <button onClick={() => { setShowHistory(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    </button>
+                    <button onClick={() => { setShowHistory(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📜 Historique
-                    </button>}
-                    <button onClick={() => { copyLink(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      🔗 Copier le lien
                     </button>
                   </div>
                 )}
               </div>
+              )}
               
               {/* IMPORT/EXPORT MENU */}
               <div style={{ position: 'relative' }}>
@@ -1477,6 +1525,7 @@ export default function ScreenplayEditor() {
                       showSceneNumbers={showSceneNumbers}
                       note={notes[element.id]}
                       onNoteClick={(id) => setShowNoteFor(id)}
+                      onOpenComments={() => setShowComments(true)}
                     />
                   </div>
                 ))}
@@ -1491,7 +1540,8 @@ export default function ScreenplayEditor() {
             activeIndex={activeIndex} 
             token={token} 
             docId={docId} 
-            canComment={canComment} 
+            canComment={canComment}
+            onClose={() => setShowComments(false)}
           />
         )}
       </div>
