@@ -619,6 +619,9 @@ export default function ScreenplayEditor() {
   const [notes, setNotes] = useState({}); // { elementId: { content, color } }
   const [showNoteFor, setShowNoteFor] = useState(null);
   const [showCharactersPanel, setShowCharactersPanel] = useState(false);
+  const [showViewMenu, setShowViewMenu] = useState(false);
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const [showDocMenu, setShowDocMenu] = useState(false);
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
 
@@ -938,6 +941,18 @@ export default function ScreenplayEditor() {
       }
     } catch (err) { console.error(err); }
   };
+
+  // Close dropdown menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setShowViewMenu(false);
+      setShowToolsMenu(false);
+      setShowDocMenu(false);
+      setShowImportExport(false);
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -1297,70 +1312,119 @@ export default function ScreenplayEditor() {
       )}
       
       {/* HEADER */}
-      <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <input value={title} onChange={e => emitTitle(e.target.value)} disabled={!canEdit} style={{ background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', fontSize: 18, fontWeight: 'bold', outline: 'none', maxWidth: 300 }} />
-          <span style={{ color: '#6b7280', fontSize: 13 }}>{totalPages} page{totalPages > 1 ? 's' : ''}</span>
-          <span style={{ color: '#6b7280', fontSize: 13 }}>•</span>
-          <span style={{ color: '#6b7280', fontSize: 13 }}>{stats.scenes} scènes</span>
-          <span style={{ color: '#6b7280', fontSize: 13 }}>•</span>
-          <span style={{ color: '#6b7280', fontSize: 13 }}>{stats.words} mots</span>
-          <span style={{ fontSize: 12, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '● En ligne' : '● Hors ligne'}</span>
-          {!canEdit && <span style={{ fontSize: 12, background: '#f59e0b', color: 'black', padding: '2px 8px', borderRadius: 4 }}>Lecture seule</span>}
-          {(loading || importing) && <span style={{ fontSize: 12, color: '#60a5fa' }}>{importing ? 'Import...' : 'Chargement...'}</span>}
-        </div>
+      <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '8px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', gap: -8 }}>{users.slice(0, 5).map((u, i) => <div key={u.id} style={{ marginLeft: i > 0 ? -8 : 0 }}><UserAvatar user={u} isYou={u.id === myId} /></div>)}{users.length > 5 && <span style={{ color: '#9ca3af', fontSize: 12, marginLeft: 8 }}>+{users.length - 5}</span>}</div>
+          <input value={title} onChange={e => emitTitle(e.target.value)} disabled={!canEdit} style={{ background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', fontSize: 16, fontWeight: 'bold', outline: 'none', maxWidth: 250 }} />
+          <span style={{ color: '#6b7280', fontSize: 12 }}>{totalPages}p • {stats.scenes}sc • {stats.words}m</span>
+          <span style={{ fontSize: 10, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '●' : '○'}</span>
+          {!canEdit && <span style={{ fontSize: 11, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
+          {(loading || importing) && <span style={{ fontSize: 11, color: '#60a5fa' }}>...</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', gap: -8, marginRight: 8 }}>{users.slice(0, 5).map((u, i) => <div key={u.id} style={{ marginLeft: i > 0 ? -8 : 0 }}><UserAvatar user={u} isYou={u.id === myId} /></div>)}{users.length > 5 && <span style={{ color: '#9ca3af', fontSize: 11, marginLeft: 4 }}>+{users.length - 5}</span>}</div>
+          
           {currentUser ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14, color: '#9ca3af' }}>{currentUser.name}</span>
-              <button onClick={handleLogout} style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}>Déconnexion</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 13, color: '#9ca3af' }}>{currentUser.name}</span>
+              <button onClick={handleLogout} style={{ fontSize: 11, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
             </div>
           ) : (
-            <button onClick={() => setShowAuthModal(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>Connexion</button>
+            <button onClick={() => setShowAuthModal(true)} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }}>Connexion</button>
           )}
-          {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Mes documents">📁</button>}
-          <button onClick={() => setShowOutline(!showOutline)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showOutline ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Outline (⌘O)">📋</button>
-          <button onClick={() => setShowCharactersPanel(!showCharactersPanel)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showCharactersPanel ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Personnages">👥</button>
-          <button onClick={() => setShowSceneNumbers(!showSceneNumbers)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showSceneNumbers ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Numéros de scènes">#</button>
-          {docId && <button onClick={() => setShowNoteFor(elements[activeIndex]?.id)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Ajouter une note (⌘N)">📝</button>}
+          
+          {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }} title="Mes documents">📁</button>}
+          
           {!docId ? (
-            <button onClick={createNewDocument} style={{ padding: '6px 16px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>+ Nouveau</button>
+            <button onClick={createNewDocument} style={{ padding: '5px 12px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 12 }}>+ Nouveau</button>
           ) : (
             <>
-              <button onClick={copyLink} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Copier le lien">🔗</button>
-              {token && <button onClick={createSnapshot} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Snapshot (⌘S)">💾</button>}
+              {/* VIEW MENU */}
+              <div style={{ position: 'relative' }}>
+                <button onClick={(e) => { e.stopPropagation(); setShowViewMenu(!showViewMenu); setShowToolsMenu(false); setShowDocMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: (showOutline || showCharactersPanel || showSceneNumbers) ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }}>
+                  Affichage ▾
+                </button>
+                {showViewMenu && (
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                    <button onClick={() => { setShowOutline(!showOutline); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showOutline ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>📋 Outline</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘O</span>
+                    </button>
+                    <button onClick={() => { setShowCharactersPanel(!showCharactersPanel); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showCharactersPanel ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      👥 Personnages
+                    </button>
+                    <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      # Numéros de scènes
+                    </button>
+                    <button onClick={() => { setDarkMode(!darkMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {/* TOOLS MENU */}
+              <div style={{ position: 'relative' }}>
+                <button onClick={(e) => { e.stopPropagation(); setShowToolsMenu(!showToolsMenu); setShowViewMenu(false); setShowDocMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showComments ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12, position: 'relative' }}>
+                  Outils ▾ {totalComments > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#f59e0b', color: 'black', fontSize: 9, padding: '1px 4px', borderRadius: 8 }}>{totalComments}</span>}
+                </button>
+                {showToolsMenu && (
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                    <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>🔍 Rechercher</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
+                    </button>
+                    <button onClick={() => { setShowNoteFor(elements[activeIndex]?.id); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>📝 Ajouter note</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘N</span>
+                    </button>
+                    <button onClick={() => { setShowComments(!showComments); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showComments ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>💬 Commentaires</span>{totalComments > 0 && <span style={{ background: '#f59e0b', color: 'black', fontSize: 10, padding: '1px 6px', borderRadius: 8 }}>{totalComments}</span>}
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {/* DOCUMENT MENU */}
+              <div style={{ position: 'relative' }}>
+                <button onClick={(e) => { e.stopPropagation(); setShowDocMenu(!showDocMenu); setShowViewMenu(false); setShowToolsMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }}>
+                  Document ▾
+                </button>
+                {showDocMenu && (
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                    {token && <button onClick={() => { createSnapshot(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>💾 Snapshot</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘S</span>
+                    </button>}
+                    {token && <button onClick={() => { setShowHistory(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      📜 Historique
+                    </button>}
+                    <button onClick={() => { copyLink(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      🔗 Copier le lien
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {/* IMPORT/EXPORT MENU */}
+              <div style={{ position: 'relative' }}>
+                <button onClick={(e) => { e.stopPropagation(); setShowImportExport(!showImportExport); setShowViewMenu(false); setShowToolsMenu(false); setShowDocMenu(false); }} style={{ padding: '5px 10px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12 }}>
+                  Import/Export ▾
+                </button>
+                {showImportExport && (
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                    <button onClick={() => { importFDX(); setShowImportExport(false); }} disabled={importing || !token} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !token ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !token ? 'default' : 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      📥 Importer FDX
+                    </button>
+                    <button onClick={() => { exportFDX(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      📤 Exporter FDX
+                    </button>
+                    <button onClick={() => { exportFountain(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      📝 Exporter Fountain
+                    </button>
+                    <button onClick={() => { exportPDF(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      📄 Exporter PDF
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
-          <button onClick={() => setShowSearch(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Rechercher (⌘F)">🔍</button>
-          {token && docId && <button onClick={() => setShowHistory(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Historique">📜</button>}
-          <button onClick={() => setShowComments(!showComments)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showComments ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13, position: 'relative' }} title="Commentaires">
-            💬 {totalComments > 0 && <span style={{ position: 'absolute', top: -6, right: -6, background: '#f59e0b', color: 'black', fontSize: 10, padding: '2px 6px', borderRadius: 10 }}>{totalComments}</span>}
-          </button>
-          <button onClick={() => setDarkMode(!darkMode)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Thème">
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-          <div style={{ position: 'relative' }}>
-            <button onClick={(e) => { e.stopPropagation(); setShowImportExport(!showImportExport); }} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>
-              Import/Export ▾
-            </button>
-            {showImportExport && (
-              <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                <button onClick={() => { importFDX(); setShowImportExport(false); }} disabled={importing || !token} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !token ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !token ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  📥 Importer FDX
-                </button>
-                <button onClick={() => { exportFDX(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !docId ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  📤 Exporter FDX
-                </button>
-                <button onClick={() => { exportFountain(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !docId ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  📝 Exporter Fountain
-                </button>
-                <button onClick={() => { exportPDF(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', color: !docId ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  📄 Exporter PDF
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       </div>
       
