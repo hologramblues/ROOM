@@ -136,10 +136,15 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
     if (!window.confirm('Créer un nouveau document à partir de ce snapshot ?')) return;
     setRestoring(true);
     try {
-      // Format date from snapshot
-      const snapshotDate = new Date(entry.createdAt);
-      const dateStr = snapshotDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(/[/:]/g, '-').replace(', ', '_');
-      const newTitle = (entry.data.title || currentTitle || 'SANS TITRE') + '_' + dateStr;
+      // Use snapshotName if available, otherwise generate from date
+      let newTitle;
+      if (entry.snapshotName) {
+        newTitle = entry.snapshotName;
+      } else {
+        const snapshotDate = new Date(entry.createdAt);
+        const dateStr = snapshotDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(/[/:]/g, '-').replace(', ', '_');
+        newTitle = (entry.data.title || currentTitle || 'SANS TITRE') + '_' + dateStr;
+      }
       
       // Create new document with snapshot data
       const res = await fetch(SERVER_URL + '/api/documents/import', {
@@ -179,7 +184,9 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
               <div key={entry._id} style={{ padding: 16, background: '#374151', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ width: 32, height: 32, borderRadius: '50%', background: entry.userColor || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: 14, flexShrink: 0 }}>{entry.userName?.charAt(0).toUpperCase() || '?'}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ color: 'white', fontWeight: 'bold', marginBottom: 4 }}>{actionLabels[entry.action] || entry.action}</div>
+                  <div style={{ color: 'white', fontWeight: 'bold', marginBottom: 4 }}>
+                    {entry.action === 'snapshot' && entry.snapshotName ? entry.snapshotName : (actionLabels[entry.action] || entry.action)}
+                  </div>
                   <div style={{ fontSize: 12, color: '#9ca3af' }}>{entry.userName} • {new Date(entry.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
                 </div>
                 {entry.action === 'snapshot' && <button onClick={() => handleRestore(entry)} disabled={restoring} style={{ padding: '8px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12, opacity: restoring ? 0.5 : 1 }}>Restaurer</button>}
@@ -760,22 +767,30 @@ export default function ScreenplayEditor() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {pages.map((page) => (
             <div key={page.number} style={{ position: 'relative' }}>
-              {/* Page number left */}
-              <span style={{ position: 'absolute', left: -40, top: 20, fontSize: 12, color: '#666', fontFamily: 'Courier Prime, monospace' }}>{page.number}</span>
-              {/* Page number right */}
-              <span style={{ position: 'absolute', right: -40, top: 20, fontSize: 12, color: '#666', fontFamily: 'Courier Prime, monospace' }}>{page.number}</span>
-              
               {/* Page content */}
               <div style={{ 
                 background: 'white', 
                 color: '#111', 
                 width: '210mm', 
                 minHeight: '297mm',
-                padding: '25mm 25mm 25mm 38mm', 
+                padding: '20mm 25mm 25mm 38mm', 
                 boxSizing: 'border-box', 
                 boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                flexShrink: 0 
+                flexShrink: 0,
+                position: 'relative'
               }}>
+                {/* Page number inside, top right */}
+                <div style={{ 
+                  position: 'absolute', 
+                  top: '12mm', 
+                  right: '25mm', 
+                  fontSize: '12pt', 
+                  fontFamily: 'Courier Prime, Courier New, monospace',
+                  color: '#111'
+                }}>
+                  {page.number}.
+                </div>
+                
                 {page.elements.map(({ element, index }) => (
                   <div key={element.id} data-element-index={index}>
                     <SceneLine 

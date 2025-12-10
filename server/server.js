@@ -47,6 +47,13 @@ function getRandomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
+function generateSnapshotName(title) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+  const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(/:/g, 'h');
+  return `${title || 'SANS TITRE'}_${dateStr}_${timeStr}`;
+}
+
 // Create new document
 app.post('/api/documents', authMiddleware, async (req, res) => {
   try {
@@ -59,7 +66,8 @@ app.post('/api/documents', authMiddleware, async (req, res) => {
       publicAccess: { enabled: true, role: 'editor' } 
     });
     await doc.save();
-    await HistoryEntry.create({ documentId: doc._id, userId: req.user._id, userName: req.user.name, userColor: req.user.color, action: 'snapshot', data: { title: doc.title, elements: doc.elements } });
+    const snapshotName = generateSnapshotName(doc.title);
+    await HistoryEntry.create({ documentId: doc._id, userId: req.user._id, userName: req.user.name, userColor: req.user.color, action: 'snapshot', snapshotName, data: { title: doc.title, elements: doc.elements } });
     console.log('Created document', shortId, 'with', doc.elements.length, 'elements');
     res.json({ id: doc.shortId, title: doc.title, elementsCount: doc.elements.length });
   } catch (error) { console.error('Create doc error:', error); res.status(500).json({ error: 'Erreur' }); }
@@ -82,12 +90,14 @@ app.post('/api/documents/import', authMiddleware, async (req, res) => {
       publicAccess: { enabled: true, role: 'editor' } 
     });
     await doc.save();
+    const snapshotName = generateSnapshotName(doc.title);
     await HistoryEntry.create({ 
       documentId: doc._id, 
       userId: req.user._id, 
       userName: req.user.name, 
       userColor: req.user.color, 
-      action: 'snapshot', 
+      action: 'snapshot',
+      snapshotName,
       data: { title: doc.title, elements: doc.elements } 
     });
     
@@ -169,7 +179,8 @@ app.post('/api/documents/:shortId/restore/:historyId', authMiddleware, async (re
     if (!doc || !checkDocumentAccess(doc, req.user, 'editor')) return res.status(403).json({ error: 'Acces refuse' });
     const entry = await HistoryEntry.findById(req.params.historyId).lean();
     if (!entry || entry.action !== 'snapshot') return res.status(404).json({ error: 'Snapshot non trouve' });
-    await HistoryEntry.create({ documentId: doc._id, userId: req.user._id, userName: req.user.name, userColor: req.user.color, action: 'snapshot', data: { title: doc.title, elements: doc.elements } });
+    const snapshotName = generateSnapshotName(doc.title);
+    await HistoryEntry.create({ documentId: doc._id, userId: req.user._id, userName: req.user.name, userColor: req.user.color, action: 'snapshot', snapshotName, data: { title: doc.title, elements: doc.elements } });
     doc.title = entry.data.title; doc.elements = entry.data.elements; await doc.save();
     io.to(req.params.shortId).emit('document-restored', { title: doc.title, elements: doc.elements });
     res.json({ success: true });
