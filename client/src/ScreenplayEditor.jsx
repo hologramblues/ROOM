@@ -157,7 +157,7 @@ const HistoryPanel = ({ docId, token, onRestore, onClose }) => {
   );
 };
 
-// ============ COMMENT ITEM (separate component to fix re-render issue) ============
+// ============ COMMENT ITEM ============
 const CommentItem = React.memo(({ comment, onReply, onResolve, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, onNavigate }) => {
   const replyInputRef = useRef(null);
   
@@ -243,19 +243,7 @@ const CommentsPanel = ({ comments, elements, activeIndex, token, docId, onClose,
 
   const handleNavigate = (elementId) => {
     const index = elements.findIndex(el => el.id === elementId);
-    if (index !== -1) {
-      onNavigateToElement(index);
-    }
-  };
-
-  const handleReply = (commentId) => {
-    setReplyTo(replyTo === commentId ? null : commentId);
-    setReplyContent('');
-  };
-
-  const handleCancelReply = () => {
-    setReplyTo(null);
-    setReplyContent('');
+    if (index !== -1) onNavigateToElement(index);
   };
 
   return (
@@ -275,66 +263,22 @@ const CommentsPanel = ({ comments, elements, activeIndex, token, docId, onClose,
         {elementComments.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ color: '#fbbf24', fontSize: 12, marginBottom: 8, fontWeight: 'bold' }}>Sur cet élément ({elementComments.length})</div>
-            {elementComments.map(c => (
-              <CommentItem 
-                key={c.id} 
-                comment={c} 
-                onReply={handleReply}
-                onResolve={toggleResolve}
-                canComment={canComment}
-                isReplying={replyTo === c.id}
-                replyContent={replyTo === c.id ? replyContent : ''}
-                onReplyChange={setReplyContent}
-                onSubmitReply={addReply}
-                onCancelReply={handleCancelReply}
-                onNavigate={handleNavigate}
-              />
-            ))}
+            {elementComments.map(c => <CommentItem key={c.id} comment={c} onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }} onResolve={toggleResolve} canComment={canComment} isReplying={replyTo === c.id} replyContent={replyTo === c.id ? replyContent : ''} onReplyChange={setReplyContent} onSubmitReply={addReply} onCancelReply={() => { setReplyTo(null); setReplyContent(''); }} onNavigate={handleNavigate} />)}
           </div>
         )}
         {otherComments.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ color: '#9ca3af', fontSize: 12, marginBottom: 8 }}>Autres commentaires ({otherComments.length})</div>
-            {otherComments.map(c => (
-              <CommentItem 
-                key={c.id} 
-                comment={c} 
-                onReply={handleReply}
-                onResolve={toggleResolve}
-                canComment={canComment}
-                isReplying={replyTo === c.id}
-                replyContent={replyTo === c.id ? replyContent : ''}
-                onReplyChange={setReplyContent}
-                onSubmitReply={addReply}
-                onCancelReply={handleCancelReply}
-                onNavigate={handleNavigate}
-              />
-            ))}
+            {otherComments.map(c => <CommentItem key={c.id} comment={c} onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }} onResolve={toggleResolve} canComment={canComment} isReplying={replyTo === c.id} replyContent={replyTo === c.id ? replyContent : ''} onReplyChange={setReplyContent} onSubmitReply={addReply} onCancelReply={() => { setReplyTo(null); setReplyContent(''); }} onNavigate={handleNavigate} />)}
           </div>
         )}
         {resolvedComments.length > 0 && (
           <div>
             <div style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>Résolus ({resolvedComments.length})</div>
-            {resolvedComments.map(c => (
-              <CommentItem 
-                key={c.id} 
-                comment={c} 
-                onReply={handleReply}
-                onResolve={toggleResolve}
-                canComment={canComment}
-                isReplying={replyTo === c.id}
-                replyContent={replyTo === c.id ? replyContent : ''}
-                onReplyChange={setReplyContent}
-                onSubmitReply={addReply}
-                onCancelReply={handleCancelReply}
-                onNavigate={handleNavigate}
-              />
-            ))}
+            {resolvedComments.map(c => <CommentItem key={c.id} comment={c} onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }} onResolve={toggleResolve} canComment={canComment} isReplying={replyTo === c.id} replyContent={replyTo === c.id ? replyContent : ''} onReplyChange={setReplyContent} onSubmitReply={addReply} onCancelReply={() => { setReplyTo(null); setReplyContent(''); }} onNavigate={handleNavigate} />)}
           </div>
         )}
-        {comments.length === 0 && (
-          <p style={{ color: '#6b7280', textAlign: 'center', marginTop: 40 }}>Aucun commentaire.<br/>Sélectionnez un élément pour commenter.</p>
-        )}
+        {comments.length === 0 && <p style={{ color: '#6b7280', textAlign: 'center', marginTop: 40 }}>Aucun commentaire.</p>}
       </div>
     </div>
   );
@@ -362,22 +306,12 @@ const getPlaceholder = (type) => {
 const getNextType = (t) => ({ scene: 'action', action: 'action', character: 'dialogue', dialogue: 'character', parenthetical: 'dialogue', transition: 'scene' }[t] || 'action');
 
 // ============ SCENE LINE ============
-const SceneLine = React.forwardRef(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, onSelectCharacter, remoteCursors, onCursorMove, commentCount, canEdit }, ref) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, onSelectCharacter, remoteCursors, onCursorMove, commentCount, canEdit }) => {
   const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
   const [filtered, setFiltered] = useState([]);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
-
-  // Expose scrollIntoView via ref
-  React.useImperativeHandle(ref, () => ({
-    scrollIntoView: () => {
-      textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    },
-    focus: () => {
-      textareaRef.current?.focus();
-    }
-  }));
 
   useEffect(() => { if (isActive && textareaRef.current) textareaRef.current.focus(); }, [isActive]);
   useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'; } }, [element.content]);
@@ -401,30 +335,13 @@ const SceneLine = React.forwardRef(({ element, index, isActive, onUpdate, onFocu
 
   return (
     <div style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
-      {/* Curseurs distants - FIXED */}
       {usersOnLine.map(u => (
-        <div key={u.id} style={{ position: 'absolute', left: -8, top: 0, bottom: 0, display: 'flex', alignItems: 'flex-start' }}>
+        <div key={u.id} style={{ position: 'absolute', left: -8, top: 0, bottom: 0, display: 'flex', alignItems: 'flex-start', pointerEvents: 'none' }}>
           <div style={{ width: 3, height: '100%', background: u.color, borderRadius: 2 }} />
-          <div style={{ 
-            marginLeft: 4,
-            marginTop: -2,
-            background: u.color, 
-            color: 'white', 
-            fontSize: 9, 
-            padding: '1px 4px', 
-            borderRadius: 3, 
-            whiteSpace: 'nowrap', 
-            fontFamily: 'system-ui, sans-serif',
-            fontWeight: 500,
-            maxWidth: 60,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
-          }}>{u.name}</div>
+          <div style={{ marginLeft: 4, marginTop: -2, background: u.color, color: 'white', fontSize: 9, padding: '1px 4px', borderRadius: 3, whiteSpace: 'nowrap', fontFamily: 'system-ui, sans-serif', fontWeight: 500, maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.name}</div>
         </div>
       ))}
-      {/* Badge commentaires */}
       {commentCount > 0 && <div style={{ position: 'absolute', right: -30, top: 0, background: '#f59e0b', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 10, fontFamily: 'sans-serif' }}>{commentCount}</div>}
-      {/* Label type */}
       {isActive && <span style={{ position: 'absolute', left: -110, top: 0, fontSize: 10, color: '#888', width: 100, textAlign: 'right', lineHeight: '1.2', fontFamily: 'sans-serif' }}>{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       <textarea ref={textareaRef} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.9 }} rows={1} readOnly={!canEdit} />
       {element.type === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
@@ -451,35 +368,75 @@ export default function ScreenplayEditor() {
   const [connected, setConnected] = useState(false);
   const [users, setUsers] = useState([]);
   const [myId, setMyId] = useState(null);
-  const [myRole, setMyRole] = useState('viewer');
+  const [myRole, setMyRole] = useState('editor');
   const [currentUser, setCurrentUser] = useState(() => { const s = localStorage.getItem('screenplay-user'); return s ? JSON.parse(s) : null; });
   const [token, setToken] = useState(() => localStorage.getItem('screenplay-token'));
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showDocsList, setShowDocsList] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [loading, setLoading] = useState(false);
   const socketRef = useRef(null);
-  const elementRefs = useRef({});
 
   // Hash change listener
   useEffect(() => {
-    const handleHash = () => setDocId(window.location.hash.slice(1) || null);
+    const handleHash = () => {
+      const newDocId = window.location.hash.slice(1) || null;
+      setDocId(newDocId);
+    };
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  // Socket connection
+  // Load document via REST API (more reliable for large docs)
+  useEffect(() => {
+    const loadDocument = async () => {
+      if (!docId) return;
+      setLoading(true);
+      try {
+        const headers = token ? { Authorization: 'Bearer ' + token } : {};
+        const res = await fetch(SERVER_URL + '/api/documents/' + docId, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          console.log('Loaded document with', data.elements?.length, 'elements');
+          setTitle(data.title || 'SANS TITRE');
+          setElements(data.elements || [{ id: crypto.randomUUID(), type: 'scene', content: '' }]);
+          setCharacters(data.characters || []);
+          setComments(data.comments || []);
+          // Set role based on publicAccess
+          if (data.isOwner) setMyRole('editor');
+          else if (data.publicAccess?.enabled) setMyRole(data.publicAccess.role || 'viewer');
+          else setMyRole('viewer');
+        }
+      } catch (err) { console.error('Load document error:', err); }
+      setLoading(false);
+    };
+    loadDocument();
+  }, [docId, token]);
+
+  // Socket connection (only for real-time updates, not initial load)
   useEffect(() => {
     const socket = io(SERVER_URL, { 
-  transports: ['websocket', 'polling'], 
-  auth: { token },
-  timeout: 60000,
-  reconnectionAttempts: 5,
-  maxHttpBufferSize: 1e8
-});    socketRef.current = socket;
-    socket.on('connect', () => { setConnected(true); setMyId(socket.id); if (docId) socket.emit('join-document', { docId }); });
+      transports: ['websocket', 'polling'], 
+      auth: { token },
+      reconnectionAttempts: 10,
+      timeout: 30000
+    });
+    socketRef.current = socket;
+    
+    socket.on('connect', () => { 
+      setConnected(true); 
+      setMyId(socket.id); 
+      if (docId) socket.emit('join-document', { docId }); 
+    });
     socket.on('disconnect', () => setConnected(false));
-    socket.on('document-state', data => { setTitle(data.title); setElements(data.elements); setCharacters(data.characters || []); setComments(data.comments || []); setUsers(data.users || []); setMyRole(data.role || 'viewer'); });
+    
+    // Only use socket for users list and role (not full document)
+    socket.on('document-state', data => {
+      setUsers(data.users || []);
+      if (data.role) setMyRole(data.role);
+    });
+    
     socket.on('title-updated', ({ title }) => setTitle(title));
     socket.on('element-updated', ({ index, element }) => setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = element; return u; }));
     socket.on('element-type-updated', ({ index, type }) => setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = { ...u[index], type }; return u; }));
@@ -492,7 +449,7 @@ export default function ScreenplayEditor() {
     socket.on('comment-added', ({ comment }) => setComments(p => [...p, comment]));
     socket.on('comment-reply-added', ({ commentId, reply }) => setComments(p => p.map(c => c.id === commentId ? { ...c, replies: [...(c.replies || []), reply] } : c)));
     socket.on('comment-resolved', ({ commentId, resolved }) => setComments(p => p.map(c => c.id === commentId ? { ...c, resolved } : c)));
-    socket.on('full-sync', ({ title, elements }) => { setTitle(title); setElements(elements); });
+    
     return () => socket.disconnect();
   }, [docId, token]);
 
@@ -507,30 +464,22 @@ export default function ScreenplayEditor() {
       setDocId(data.id);
       window.location.hash = data.id;
       setShowDocsList(false);
-      if (socketRef.current) socketRef.current.emit('join-document', { docId: data.id });
     } catch (err) { console.error(err); }
   };
 
   const selectDocument = (id) => {
-    setDocId(id);
     window.location.hash = id;
     setShowDocsList(false);
-    if (socketRef.current?.connected) socketRef.current.emit('join-document', { docId: id });
   };
 
-  // Navigate to element (for comments)
   const navigateToElement = useCallback((index) => {
     setActiveIndex(index);
-    // Scroll to element
     setTimeout(() => {
       const el = document.querySelector(`[data-element-index="${index}"]`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 50);
   }, []);
 
-  // Page breaks
   const pageBreaks = useMemo(() => {
     const breaks = []; let h = 0; let p = 1;
     const getLines = el => { const l = el.content ? Math.ceil(el.content.length / 60) : 1; const e = { scene: 2, action: 1, character: 2, dialogue: 0.5, parenthetical: 1, transition: 2 }; return l + (e[el.type] || 0); };
@@ -576,7 +525,6 @@ export default function ScreenplayEditor() {
 
   const elementsWithBreaks = useMemo(() => { const r = []; const m = new Map(pageBreaks.map(b => [b.afterIndex, b.pageNumber])); elements.forEach((el, i) => { r.push({ type: 'element', element: el, index: i }); if (m.has(i)) r.push({ type: 'pageBreak', pageNumber: m.get(i) }); }); return r; }, [elements, pageBreaks]);
 
-  // ============ IMPORT FDX ============
   const importFDX = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -610,7 +558,6 @@ export default function ScreenplayEditor() {
     input.click();
   };
 
-  // ============ EXPORT FDX ============
   const exportFDX = () => {
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<FinalDraft DocumentType="Script" Version="3">\n<Content>\n';
@@ -619,19 +566,9 @@ export default function ScreenplayEditor() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([xml], { type: 'application/xml' })); a.download = title.toLowerCase().replace(/\s+/g, '-') + '.fdx'; a.click();
   };
 
-  // ============ EXPORT PDF ============
   const exportPDF = () => {
     const printWindow = window.open('', '_blank');
-    const styles = `
-      body { font-family: 'Courier Prime', 'Courier New', monospace; font-size: 12pt; line-height: 1; margin: 1in; }
-      .scene { text-transform: uppercase; font-weight: bold; margin-top: 2em; }
-      .action { margin-top: 1em; }
-      .character { text-transform: uppercase; font-weight: bold; margin-left: 37%; margin-top: 1em; }
-      .dialogue { margin-left: 17%; width: 42%; }
-      .parenthetical { margin-left: 27%; font-style: italic; }
-      .transition { text-transform: uppercase; text-align: right; margin-top: 1em; }
-      @media print { @page { margin: 1in; } }
-    `;
+    const styles = `body { font-family: 'Courier Prime', 'Courier New', monospace; font-size: 12pt; line-height: 1; margin: 1in; } .scene { text-transform: uppercase; font-weight: bold; margin-top: 2em; } .action { margin-top: 1em; } .character { text-transform: uppercase; font-weight: bold; margin-left: 37%; margin-top: 1em; } .dialogue { margin-left: 17%; width: 42%; } .parenthetical { margin-left: 27%; font-style: italic; } .transition { text-transform: uppercase; text-align: right; margin-top: 1em; } @media print { @page { margin: 1in; } }`;
     let html = `<!DOCTYPE html><html><head><title>${title}</title><style>${styles}</style></head><body>`;
     elements.forEach(el => { html += `<p class="${el.type}">${el.content || '&nbsp;'}</p>`; });
     html += '</body></html>';
@@ -646,7 +583,7 @@ export default function ScreenplayEditor() {
     <div style={{ minHeight: '100vh', background: '#111827', color: '#e5e7eb' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={createNewDocument} onClose={() => setShowDocsList(false)} />}
-      {showHistory && token && docId && <HistoryPanel docId={docId} token={token} onRestore={() => socketRef.current?.emit('join-document', { docId })} onClose={() => setShowHistory(false)} />}
+      {showHistory && token && docId && <HistoryPanel docId={docId} token={token} onRestore={() => window.location.reload()} onClose={() => setShowHistory(false)} />}
       {showComments && <CommentsPanel comments={comments} elements={elements} activeIndex={activeIndex} token={token} docId={docId} onClose={() => setShowComments(false)} canComment={canComment} onNavigateToElement={navigateToElement} />}
       
       {/* HEADER */}
@@ -656,12 +593,10 @@ export default function ScreenplayEditor() {
           <span style={{ color: '#6b7280', fontSize: 14 }}>{totalPages} page{totalPages > 1 ? 's' : ''}</span>
           <span style={{ fontSize: 12, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '● En ligne' : '● Hors ligne'}</span>
           {!canEdit && <span style={{ fontSize: 12, background: '#f59e0b', color: 'black', padding: '2px 8px', borderRadius: 4 }}>Lecture seule</span>}
+          {loading && <span style={{ fontSize: 12, color: '#60a5fa' }}>Chargement...</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Users */}
           <div style={{ display: 'flex', gap: -8 }}>{users.slice(0, 5).map((u, i) => <div key={u.id} style={{ marginLeft: i > 0 ? -8 : 0 }}><UserAvatar user={u} isYou={u.id === myId} /></div>)}{users.length > 5 && <span style={{ color: '#9ca3af', fontSize: 12, marginLeft: 8 }}>+{users.length - 5}</span>}</div>
-          
-          {/* Auth */}
           {currentUser ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 14, color: '#9ca3af' }}>{currentUser.name}</span>
@@ -670,60 +605,31 @@ export default function ScreenplayEditor() {
           ) : (
             <button onClick={() => setShowAuthModal(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>Connexion</button>
           )}
-          
-          {/* Documents button */}
           {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>📁</button>}
-          
-          {/* New / Share */}
           {!docId ? (
             <button onClick={createNewDocument} style={{ padding: '6px 16px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>+ Nouveau</button>
           ) : (
             <button onClick={copyLink} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>🔗</button>
           )}
-          
-          {/* History */}
           {token && docId && <button onClick={() => setShowHistory(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>📜</button>}
-          
-          {/* Comments */}
           <button onClick={() => setShowComments(!showComments)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: showComments ? '#374151' : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13, position: 'relative' }}>
             💬 {totalComments > 0 && <span style={{ position: 'absolute', top: -6, right: -6, background: '#f59e0b', color: 'black', fontSize: 10, padding: '2px 6px', borderRadius: 10 }}>{totalComments}</span>}
           </button>
-          
-          {/* Help */}
           <button onClick={() => setShowHelp(!showHelp)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: showHelp ? '#374151' : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>?</button>
-          
-          {/* Import */}
           <button onClick={importFDX} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>📥</button>
-          
-          {/* Export */}
           <button onClick={exportFDX} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>FDX</button>
           <button onClick={exportPDF} style={{ padding: '6px 12px', background: '#7c3aed', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>PDF</button>
         </div>
       </div>
       
-      {/* HELP BAR */}
       {showHelp && <div style={{ background: '#1f2937', borderBottom: '1px solid #374151', padding: '12px 24px', fontSize: 12, color: '#9ca3af' }}>Entrée → Nouvelle ligne | Tab → Changer type | ⌘1-6 → Types directs | ⌘↑/↓ → Navigation | Backspace sur ligne vide → Supprimer</div>}
       
-      {/* EDITOR */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: 32, paddingRight: showComments ? 372 : 32 }}>
         <div style={{ background: 'white', color: '#111', width: '210mm', minHeight: '297mm', padding: '25mm 25mm 25mm 38mm', boxSizing: 'border-box', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
           <div style={{ position: 'relative' }}><span style={{ position: 'absolute', right: -50, top: 0, background: '#f5f5f5', padding: '2px 8px', fontSize: 10, color: '#666' }}>1</span></div>
           {elementsWithBreaks.map((item, idx) => item.type === 'pageBreak' ? <PageBreak key={'b' + idx} pageNumber={item.pageNumber} /> : (
             <div key={item.element.id} data-element-index={item.index}>
-              <SceneLine 
-                element={item.element} 
-                index={item.index} 
-                isActive={activeIndex === item.index} 
-                onUpdate={updateElement} 
-                onFocus={setActiveIndex} 
-                onKeyDown={handleKeyDown} 
-                characters={extractedCharacters} 
-                onSelectCharacter={handleSelectChar} 
-                remoteCursors={remoteCursors} 
-                onCursorMove={handleCursor} 
-                commentCount={commentCounts[item.element.id] || 0} 
-                canEdit={canEdit} 
-              />
+              <SceneLine element={item.element} index={item.index} isActive={activeIndex === item.index} onUpdate={updateElement} onFocus={setActiveIndex} onKeyDown={handleKeyDown} characters={extractedCharacters} onSelectCharacter={handleSelectChar} remoteCursors={remoteCursors} onCursorMove={handleCursor} commentCount={commentCounts[item.element.id] || 0} canEdit={canEdit} />
             </div>
           ))}
         </div>
