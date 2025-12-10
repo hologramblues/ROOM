@@ -327,6 +327,149 @@ const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canCom
   );
 };
 
+// ============ CHARACTERS PANEL ============
+const CharactersPanel = ({ characterStats, darkMode, onClose, onNavigate }) => {
+  return (
+    <div style={{ 
+      position: 'fixed', 
+      right: 0, 
+      top: 60, 
+      bottom: 0, 
+      width: 320, 
+      background: darkMode ? '#1f2937' : 'white', 
+      borderLeft: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
+      zIndex: 100, 
+      display: 'flex', 
+      flexDirection: 'column',
+      boxShadow: '-4px 0 20px rgba(0,0,0,0.2)'
+    }}>
+      <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>👥 Personnages</h3>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+        {characterStats.length === 0 ? (
+          <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>Aucun personnage</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
+                <th style={{ textAlign: 'left', padding: '8px 4px', color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: 600 }}>Personnage</th>
+                <th style={{ textAlign: 'center', padding: '8px 4px', color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: 600 }}>Répliques</th>
+                <th style={{ textAlign: 'center', padding: '8px 4px', color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: 600 }}>Scènes</th>
+                <th style={{ textAlign: 'center', padding: '8px 4px', color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: 600 }}>1ère app.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {characterStats.map((char, idx) => (
+                <tr 
+                  key={char.name} 
+                  onClick={() => onNavigate(char.firstIndex)}
+                  style={{ 
+                    borderBottom: `1px solid ${darkMode ? '#374151' : '#f3f4f6'}`,
+                    cursor: 'pointer',
+                    background: idx % 2 === 0 ? 'transparent' : (darkMode ? '#374151' : '#f9fafb')
+                  }}
+                >
+                  <td style={{ padding: '10px 4px', color: darkMode ? 'white' : 'black', fontWeight: 500 }}>{char.name}</td>
+                  <td style={{ padding: '10px 4px', textAlign: 'center', color: darkMode ? '#d1d5db' : '#374151' }}>{char.lines}</td>
+                  <td style={{ padding: '10px 4px', textAlign: 'center', color: darkMode ? '#d1d5db' : '#374151' }}>{char.sceneCount}</td>
+                  <td style={{ padding: '10px 4px', textAlign: 'center', color: darkMode ? '#9ca3af' : '#6b7280' }}>Sc. {char.firstAppearance}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 12, color: '#6b7280', textAlign: 'center' }}>
+        {characterStats.length} personnage{characterStats.length > 1 ? 's' : ''} • {characterStats.reduce((a, c) => a + c.lines, 0)} répliques
+      </div>
+    </div>
+  );
+};
+
+// ============ NOTE EDITOR MODAL ============
+const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, darkMode, canPush }) => {
+  const [content, setContent] = useState(note?.content || '');
+  const [color, setColor] = useState(note?.color || '#fef3c7');
+  const colors = ['#fef3c7', '#dcfce7', '#dbeafe', '#fce7f3', '#f3e8ff'];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black' }}>📝 Note personnelle</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
+        </div>
+        
+        <textarea 
+          autoFocus
+          value={content}
+          onChange={e => setContent(e.target.value)}
+          placeholder="Votre note (visible uniquement par vous)..."
+          style={{ 
+            width: '100%', 
+            padding: 12, 
+            background: color, 
+            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
+            borderRadius: 8, 
+            color: '#374151', 
+            fontSize: 14, 
+            resize: 'none', 
+            boxSizing: 'border-box',
+            minHeight: 120
+          }}
+          rows={5}
+        />
+        
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          {colors.map(c => (
+            <button 
+              key={c}
+              onClick={() => setColor(c)}
+              style={{ 
+                width: 28, 
+                height: 28, 
+                borderRadius: 6, 
+                background: c, 
+                border: color === c ? '2px solid #2563eb' : '1px solid #d1d5db',
+                cursor: 'pointer'
+              }}
+            />
+          ))}
+        </div>
+        
+        <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button 
+              onClick={() => onSave(elementId, content, color)} 
+              style={{ padding: '10px 20px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+            >
+              Sauvegarder
+            </button>
+            {note && (
+              <button 
+                onClick={() => onSave(elementId, '', '')} 
+                style={{ padding: '10px 20px', background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 14 }}
+              >
+                Supprimer
+              </button>
+            )}
+          </div>
+          {note && canPush && (
+            <button 
+              onClick={() => onPushToComment(elementId)} 
+              style={{ padding: '10px 16px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              💬 Publier en commentaire
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ============ ELEMENT STYLES ============
 const getElementStyle = (type) => {
   const base = { fontFamily: 'Courier Prime, Courier New, monospace', fontSize: '12pt', lineHeight: '1', outline: 'none', border: 'none', width: '100%', background: 'transparent', resize: 'none', padding: 0, margin: 0, display: 'block', minHeight: '1em' };
@@ -353,28 +496,48 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, onSelectCharacter, remoteCursors, onCursorMove, commentCount, canEdit }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, sceneNumber, showSceneNumbers, note, onNoteClick }) => {
   const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
   const [filtered, setFiltered] = useState([]);
+  const [autoType, setAutoType] = useState(null); // 'character' or 'location'
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
 
   useEffect(() => { if (isActive && textareaRef.current) textareaRef.current.focus(); }, [isActive]);
   useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'; } }, [element.content]);
+  
+  // Character autocomplete
   useEffect(() => {
     if (element.type === 'character' && isActive && element.content.length > 0) {
       const q = element.content.toUpperCase();
       const f = characters.filter(c => c.toUpperCase().startsWith(q) && c.toUpperCase() !== q);
-      setFiltered(f); setShowAuto(f.length > 0); setAutoIdx(0);
+      setFiltered(f); setShowAuto(f.length > 0); setAutoIdx(0); setAutoType('character');
+    } else if (element.type === 'scene' && isActive && element.content.length > 4) {
+      // Location autocomplete after INT. or EXT.
+      const match = element.content.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*(.*)$/i);
+      if (match && match[2] && match[2].length > 0) {
+        const q = match[2].toUpperCase();
+        const f = locations.filter(l => l.startsWith(q) && l !== q);
+        setFiltered(f); setShowAuto(f.length > 0); setAutoIdx(0); setAutoType('location');
+      } else { setShowAuto(false); setFiltered([]); }
     } else { setShowAuto(false); setFiltered([]); }
-  }, [element.content, element.type, isActive, characters]);
+  }, [element.content, element.type, isActive, characters, locations]);
 
   const handleKey = (e) => {
     if (showAuto && filtered.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setAutoIdx(i => (i + 1) % filtered.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setAutoIdx(i => (i - 1 + filtered.length) % filtered.length); return; }
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSelectCharacter(index, filtered[autoIdx]); setShowAuto(false); return; }
+      if (e.key === 'Enter' && !e.shiftKey) { 
+        e.preventDefault(); 
+        if (autoType === 'character') {
+          onSelectCharacter(index, filtered[autoIdx]); 
+        } else if (autoType === 'location') {
+          onSelectLocation(index, filtered[autoIdx]);
+        }
+        setShowAuto(false); 
+        return; 
+      }
       if (e.key === 'Escape') { setShowAuto(false); return; }
     }
     onKeyDown(e, index);
@@ -383,10 +546,39 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   return (
     <div style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
       {usersOnLine.map(u => <RemoteCursor key={u.id} user={u} />)}
-      {commentCount > 0 && <div style={{ position: 'absolute', right: -30, top: 2, width: 18, height: 18, background: '#fbbf24', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 'bold', color: '#78350f', boxShadow: '1px 1px 2px rgba(0,0,0,0.2)' }}>{commentCount}</div>}
-      {isActive && <span style={{ position: 'absolute', left: -110, top: 2, fontSize: 10, color: '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
+      
+      {/* Scene number (left side) */}
+      {element.type === 'scene' && showSceneNumbers && sceneNumber && (
+        <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
+      )}
+      
+      {/* Scene number (right side) */}
+      {element.type === 'scene' && showSceneNumbers && sceneNumber && (
+        <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
+      )}
+      
+      {/* Note indicator */}
+      {note && (
+        <div 
+          onClick={() => onNoteClick(element.id)} 
+          style={{ position: 'absolute', right: -55, top: 2, width: 20, height: 20, background: note.color || '#fbbf24', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, cursor: 'pointer', boxShadow: '1px 1px 3px rgba(0,0,0,0.2)' }}
+          title={note.content}
+        >📝</div>
+      )}
+      
+      {/* Comment badge */}
+      {commentCount > 0 && <div style={{ position: 'absolute', right: note ? -80 : -30, top: 2, width: 18, height: 18, background: '#fbbf24', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 'bold', color: '#78350f', boxShadow: '1px 1px 2px rgba(0,0,0,0.2)' }}>{commentCount}</div>}
+      
+      {/* Type label */}
+      {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
+      
       <textarea ref={textareaRef} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.9 }} rows={1} readOnly={!canEdit} />
-      {element.type === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
+      
+      {/* Character autocomplete */}
+      {autoType === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
+      
+      {/* Location autocomplete */}
+      {autoType === 'location' && showAuto && <div style={{ position: 'absolute', top: '100%', left: 0, background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 250 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectLocation(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
     </div>
   );
 });
@@ -422,6 +614,11 @@ export default function ScreenplayEditor() {
   const [replaceQuery, setReplaceQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [showOutline, setShowOutline] = useState(false);
+  const [showSceneNumbers, setShowSceneNumbers] = useState(false);
+  const [notes, setNotes] = useState({}); // { elementId: { content, color } }
+  const [showNoteFor, setShowNoteFor] = useState(null);
+  const [showCharactersPanel, setShowCharactersPanel] = useState(false);
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
 
@@ -571,6 +768,95 @@ export default function ScreenplayEditor() {
     return { words, chars, scenes };
   }, [elements]);
 
+  // Outline - list of scenes with their index
+  const outline = useMemo(() => {
+    const scenes = [];
+    let sceneNumber = 0;
+    elements.forEach((el, idx) => {
+      if (el.type === 'scene') {
+        sceneNumber++;
+        scenes.push({
+          index: idx,
+          number: sceneNumber,
+          content: el.content || '(sans titre)',
+          id: el.id
+        });
+      }
+    });
+    return scenes;
+  }, [elements]);
+
+  // Find current scene based on activeIndex
+  const currentSceneNumber = useMemo(() => {
+    let lastScene = 0;
+    for (let i = 0; i <= activeIndex; i++) {
+      if (elements[i]?.type === 'scene') lastScene++;
+    }
+    return lastScene;
+  }, [elements, activeIndex]);
+
+  // Map element ID to scene number (for display in script)
+  const sceneNumbersMap = useMemo(() => {
+    const map = {};
+    let num = 0;
+    elements.forEach(el => {
+      if (el.type === 'scene') {
+        num++;
+        map[el.id] = num;
+      }
+    });
+    return map;
+  }, [elements]);
+
+  // Extract locations from scene headings
+  const extractedLocations = useMemo(() => {
+    const locs = new Set();
+    elements.forEach(el => {
+      if (el.type === 'scene' && el.content) {
+        // Extract location: "INT. MAISON - JOUR" -> "MAISON"
+        const match = el.content.match(/(?:INT\.|EXT\.|INT\/EXT\.?)\s*(.+?)(?:\s*-\s*(?:JOUR|NUIT|MATIN|SOIR|AUBE|CRÉPUSCULE|CONTINUOUS|LATER|SAME))?$/i);
+        if (match && match[1]) {
+          locs.add(match[1].trim().toUpperCase());
+        }
+      }
+    });
+    return Array.from(locs).sort();
+  }, [elements]);
+
+  // Character statistics
+  const characterStats = useMemo(() => {
+    const stats = {};
+    let currentScene = 0;
+    
+    elements.forEach((el, idx) => {
+      if (el.type === 'scene') {
+        currentScene++;
+      }
+      if (el.type === 'character' && el.content.trim()) {
+        const name = el.content.trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase();
+        if (!stats[name]) {
+          stats[name] = { 
+            name, 
+            lines: 0, 
+            firstAppearance: currentScene || 1,
+            firstIndex: idx,
+            scenes: new Set()
+          };
+        }
+        stats[name].lines++;
+        if (currentScene > 0) stats[name].scenes.add(currentScene);
+      }
+    });
+    
+    // Convert scenes Set to count
+    Object.values(stats).forEach(s => {
+      s.sceneCount = s.scenes.size;
+      delete s.scenes;
+    });
+    
+    return Object.values(stats).sort((a, b) => b.lines - a.lines);
+  }, [elements]);
+
   // Search functionality
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -623,6 +909,15 @@ export default function ScreenplayEditor() {
     setShowSearch(false);
   };
 
+  // Navigate to scene from outline
+  const navigateToScene = (index) => {
+    setActiveIndex(index);
+    setTimeout(() => {
+      const el = document.querySelector(`[data-element-index="${index}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  };
+
   // Create snapshot manually
   const createSnapshot = async () => {
     if (!token || !docId) return;
@@ -657,14 +952,27 @@ export default function ScreenplayEditor() {
         e.preventDefault();
         setShowSearch(true);
       }
-      // Escape = Close search
-      if (e.key === 'Escape' && showSearch) {
-        setShowSearch(false);
+      // Cmd+O = Outline (prevent default open file dialog)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
+        e.preventDefault();
+        setShowOutline(prev => !prev);
+      }
+      // Cmd+N = Add note to current element (prevent default new window)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n' && docId) {
+        e.preventDefault();
+        setShowNoteFor(elements[activeIndex]?.id);
+      }
+      // Escape = Close panels (one at a time)
+      if (e.key === 'Escape') {
+        if (showNoteFor) { setShowNoteFor(null); return; }
+        if (showSearch) { setShowSearch(false); return; }
+        if (showCharactersPanel) { setShowCharactersPanel(false); return; }
+        if (showOutline) setShowOutline(false);
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [showSearch, token, docId, title, elements]);
+  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, token, docId, title, elements, activeIndex]);
 
   const emitTitle = useCallback(t => { setTitle(t); if (socketRef.current && connected && canEdit) socketRef.current.emit('title-change', { title: t }); }, [connected, canEdit]);
   const updateElement = useCallback((i, el) => { setElements(p => { const u = [...p]; u[i] = el; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el }); }, [connected, canEdit]);
@@ -673,6 +981,37 @@ export default function ScreenplayEditor() {
   const changeType = useCallback((i, t) => { setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-type-change', { index: i, type: t }); }, [connected, canEdit]);
   const handleCursor = useCallback((i, pos) => { if (socketRef.current && connected) socketRef.current.emit('cursor-move', { index: i, position: pos }); }, [connected]);
   const handleSelectChar = useCallback((i, name) => { updateElement(i, { ...elements[i], content: name }); setTimeout(() => insertElement(i, 'dialogue'), 50); }, [elements, updateElement, insertElement]);
+  
+  const handleSelectLocation = useCallback((i, location) => {
+    const el = elements[i];
+    const match = el.content.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*/i);
+    const prefix = match ? match[1] + ' ' : '';
+    updateElement(i, { ...el, content: prefix + location + ' - ' });
+  }, [elements, updateElement]);
+
+  // Notes management
+  const updateNote = useCallback((elementId, content, color = '#fef3c7') => {
+    if (!content || !content.trim()) {
+      setNotes(prev => { const n = { ...prev }; delete n[elementId]; return n; });
+    } else {
+      setNotes(prev => ({ ...prev, [elementId]: { content: content.trim(), color } }));
+    }
+    setShowNoteFor(null);
+  }, []);
+
+  const pushNoteToComment = async (elementId) => {
+    const note = notes[elementId];
+    if (!note || !token || !docId) return;
+    try {
+      await fetch(SERVER_URL + '/api/documents/' + docId + '/comments', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, 
+        body: JSON.stringify({ elementId, content: '📝 ' + note.content }) 
+      });
+      // Remove the note after pushing
+      setNotes(prev => { const n = { ...prev }; delete n[elementId]; return n; });
+    } catch (err) { console.error(err); }
+  };
 
   const handleKeyDown = useCallback((e, index) => {
     if (!canEdit) return;
@@ -856,7 +1195,7 @@ export default function ScreenplayEditor() {
       
       {/* Search Panel */}
       {showSearch && (
-        <div style={{ position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)', background: darkMode ? '#1f2937' : 'white', borderRadius: 8, padding: 16, boxShadow: '0 10px 40px rgba(0,0,0,0.3)', zIndex: 200, display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ position: 'fixed', top: 70, left: showOutline ? 'calc(50% + 140px)' : '50%', transform: 'translateX(-50%)', background: darkMode ? '#1f2937' : 'white', borderRadius: 8, padding: 16, boxShadow: '0 10px 40px rgba(0,0,0,0.3)', zIndex: 200, display: 'flex', gap: 8, alignItems: 'center', transition: 'left 0.2s ease' }}>
           <input 
             autoFocus
             value={searchQuery} 
@@ -879,6 +1218,81 @@ export default function ScreenplayEditor() {
           <button onClick={replaceOne} disabled={searchResults.length === 0} style={{ padding: '6px 10px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 12 }}>Remplacer</button>
           <button onClick={replaceAll} disabled={searchResults.length === 0} style={{ padding: '6px 10px', background: '#7c3aed', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 12 }}>Tout</button>
           <button onClick={() => setShowSearch(false)} style={{ padding: '6px 10px', background: 'transparent', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: 16 }}>✕</button>
+        </div>
+      )}
+
+      {/* Outline Panel */}
+      {showOutline && (
+        <div style={{ 
+          position: 'fixed', 
+          left: 0, 
+          top: 60, 
+          bottom: 0, 
+          width: 280, 
+          background: darkMode ? '#1f2937' : 'white', 
+          borderRight: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
+          zIndex: 100, 
+          display: 'flex', 
+          flexDirection: 'column',
+          boxShadow: '4px 0 20px rgba(0,0,0,0.2)'
+        }}>
+          <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>📋 Outline</h3>
+            <button onClick={() => setShowOutline(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
+            {outline.length === 0 ? (
+              <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>Aucune scène</p>
+            ) : (
+              outline.map(scene => (
+                <button
+                  key={scene.id}
+                  onClick={() => navigateToScene(scene.index)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: currentSceneNumber === scene.number ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent',
+                    border: 'none',
+                    borderRadius: 6,
+                    color: darkMode ? 'white' : 'black',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    marginBottom: 4,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 10
+                  }}
+                >
+                  <span style={{ 
+                    color: '#6b7280', 
+                    fontSize: 11, 
+                    fontWeight: 'bold',
+                    minWidth: 24,
+                    padding: '2px 6px',
+                    background: darkMode ? '#4b5563' : '#d1d5db',
+                    borderRadius: 4,
+                    textAlign: 'center'
+                  }}>
+                    {scene.number}
+                  </span>
+                  <span style={{ 
+                    fontSize: 12, 
+                    lineHeight: 1.4,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical'
+                  }}>
+                    {scene.content}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+          <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 12, color: '#6b7280', textAlign: 'center' }}>
+            {outline.length} scène{outline.length > 1 ? 's' : ''} • Position: {currentSceneNumber}/{outline.length}
+          </div>
         </div>
       )}
       
@@ -906,6 +1320,10 @@ export default function ScreenplayEditor() {
             <button onClick={() => setShowAuthModal(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>Connexion</button>
           )}
           {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Mes documents">📁</button>}
+          <button onClick={() => setShowOutline(!showOutline)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showOutline ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Outline (⌘O)">📋</button>
+          <button onClick={() => setShowCharactersPanel(!showCharactersPanel)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showCharactersPanel ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Personnages">👥</button>
+          <button onClick={() => setShowSceneNumbers(!showSceneNumbers)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showSceneNumbers ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Numéros de scènes">#</button>
+          {docId && <button onClick={() => setShowNoteFor(elements[activeIndex]?.id)} style={{ padding: '6px 12px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Ajouter une note (⌘N)">📝</button>}
           {!docId ? (
             <button onClick={createNewDocument} style={{ padding: '6px 16px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>+ Nouveau</button>
           ) : (
@@ -946,7 +1364,7 @@ export default function ScreenplayEditor() {
         </div>
       </div>
       
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 32, gap: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 32, gap: 20, marginLeft: showOutline ? 280 : 0, transition: 'margin-left 0.2s ease' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {pages.map((page) => (
             <div key={page.number} style={{ position: 'relative' }}>
@@ -983,12 +1401,18 @@ export default function ScreenplayEditor() {
                       onUpdate={updateElement} 
                       onFocus={setActiveIndex} 
                       onKeyDown={handleKeyDown} 
-                      characters={extractedCharacters} 
-                      onSelectCharacter={handleSelectChar} 
+                      characters={extractedCharacters}
+                      locations={extractedLocations}
+                      onSelectCharacter={handleSelectChar}
+                      onSelectLocation={handleSelectLocation}
                       remoteCursors={remoteCursors} 
                       onCursorMove={handleCursor} 
                       commentCount={commentCounts[element.id] || 0} 
-                      canEdit={canEdit} 
+                      canEdit={canEdit}
+                      sceneNumber={sceneNumbersMap[element.id]}
+                      showSceneNumbers={showSceneNumbers}
+                      note={notes[element.id]}
+                      onNoteClick={(id) => setShowNoteFor(id)}
                     />
                   </div>
                 ))}
@@ -1007,6 +1431,35 @@ export default function ScreenplayEditor() {
           />
         )}
       </div>
+      
+      {/* Characters Panel */}
+      {showCharactersPanel && (
+        <CharactersPanel 
+          characterStats={characterStats}
+          darkMode={darkMode}
+          onClose={() => setShowCharactersPanel(false)}
+          onNavigate={(idx) => {
+            setActiveIndex(idx);
+            setTimeout(() => {
+              const el = document.querySelector(`[data-element-index="${idx}"]`);
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 50);
+          }}
+        />
+      )}
+      
+      {/* Note Editor Modal */}
+      {showNoteFor && (
+        <NoteEditorModal
+          elementId={showNoteFor}
+          note={notes[showNoteFor]}
+          onSave={updateNote}
+          onPushToComment={pushNoteToComment}
+          onClose={() => setShowNoteFor(null)}
+          darkMode={darkMode}
+          canPush={!!token && !!docId && canComment}
+        />
+      )}
     </div>
   );
 }
