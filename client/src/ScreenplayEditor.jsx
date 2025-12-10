@@ -16,7 +16,6 @@ const TYPE_TO_FDX = { scene: 'Scene Heading', action: 'Action', character: 'Char
 const FDX_TO_TYPE = { 'Scene Heading': 'scene', 'Action': 'action', 'Character': 'character', 'Dialogue': 'dialogue', 'Parenthetical': 'parenthetical', 'Transition': 'transition', 'General': 'action' };
 const LINES_PER_PAGE = 55;
 
-// Couleurs distinctes pour les utilisateurs
 const USER_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8B500', '#00CED1', '#FF69B4', '#32CD32', '#FF4500'];
 
 // ============ AUTH MODAL ============
@@ -158,8 +157,58 @@ const HistoryPanel = ({ docId, token, onRestore, onClose }) => {
   );
 };
 
+// ============ COMMENT ITEM (separate component to fix re-render issue) ============
+const CommentItem = React.memo(({ comment, onReply, onResolve, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, onNavigate }) => {
+  const replyInputRef = useRef(null);
+  
+  useEffect(() => {
+    if (isReplying && replyInputRef.current) {
+      replyInputRef.current.focus();
+    }
+  }, [isReplying]);
+
+  return (
+    <div style={{ padding: 12, background: '#374151', borderRadius: 8, marginBottom: 8, cursor: 'pointer' }} onClick={() => onNavigate(comment.elementId)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{ width: 24, height: 24, borderRadius: '50%', background: comment.userColor || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: 10 }}>{comment.userName?.charAt(0).toUpperCase()}</div>
+        <span style={{ color: 'white', fontWeight: 'bold', fontSize: 13 }}>{comment.userName}</span>
+        <span style={{ color: '#6b7280', fontSize: 11 }}>{new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+      </div>
+      <p style={{ color: '#e5e7eb', margin: '0 0 8px 0', fontSize: 13 }}>{comment.content}</p>
+      {comment.replies?.map(reply => (
+        <div key={reply.id} style={{ marginLeft: 16, paddingLeft: 12, borderLeft: '2px solid #4b5563', marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span style={{ color: '#9ca3af', fontWeight: 'bold', fontSize: 12 }}>{reply.userName}</span>
+          </div>
+          <p style={{ color: '#d1d5db', margin: 0, fontSize: 12 }}>{reply.content}</p>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }} onClick={e => e.stopPropagation()}>
+        {canComment && <button onClick={(e) => { e.stopPropagation(); onReply(comment.id); }} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', fontSize: 12 }}>Répondre</button>}
+        {canComment && <button onClick={(e) => { e.stopPropagation(); onResolve(comment.id); }} style={{ background: 'none', border: 'none', color: comment.resolved ? '#10b981' : '#9ca3af', cursor: 'pointer', fontSize: 12 }}>{comment.resolved ? '↩️ Rouvrir' : '✓ Résoudre'}</button>}
+      </div>
+      {isReplying && (
+        <div style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}>
+          <textarea 
+            ref={replyInputRef}
+            value={replyContent} 
+            onChange={e => onReplyChange(e.target.value)} 
+            placeholder="Votre réponse..." 
+            style={{ width: '100%', padding: 8, background: '#1f2937', border: '1px solid #4b5563', borderRadius: 6, color: 'white', fontSize: 12, resize: 'none', boxSizing: 'border-box' }} 
+            rows={2} 
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button onClick={() => onSubmitReply(comment.id)} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 12 }}>Envoyer</button>
+            <button onClick={onCancelReply} style={{ padding: '6px 12px', background: 'transparent', border: '1px solid #4b5563', borderRadius: 4, color: '#9ca3af', cursor: 'pointer', fontSize: 12 }}>Annuler</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
 // ============ COMMENTS PANEL ============
-const CommentsPanel = ({ comments, elements, activeIndex, token, docId, onClose, canComment }) => {
+const CommentsPanel = ({ comments, elements, activeIndex, token, docId, onClose, canComment, onNavigateToElement }) => {
   const [newComment, setNewComment] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
@@ -192,34 +241,22 @@ const CommentsPanel = ({ comments, elements, activeIndex, token, docId, onClose,
     } catch (err) { console.error(err); }
   };
 
-  const CommentItem = ({ comment, showResolve = true }) => (
-    <div style={{ padding: 12, background: '#374151', borderRadius: 8, marginBottom: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <div style={{ width: 24, height: 24, borderRadius: '50%', background: comment.userColor || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: 10 }}>{comment.userName?.charAt(0).toUpperCase()}</div>
-        <span style={{ color: 'white', fontWeight: 'bold', fontSize: 13 }}>{comment.userName}</span>
-        <span style={{ color: '#6b7280', fontSize: 11 }}>{new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
-      </div>
-      <p style={{ color: '#e5e7eb', margin: '0 0 8px 0', fontSize: 13 }}>{comment.content}</p>
-      {comment.replies?.map(reply => (
-        <div key={reply.id} style={{ marginLeft: 16, paddingLeft: 12, borderLeft: '2px solid #4b5563', marginTop: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-            <span style={{ color: '#9ca3af', fontWeight: 'bold', fontSize: 12 }}>{reply.userName}</span>
-          </div>
-          <p style={{ color: '#d1d5db', margin: 0, fontSize: 12 }}>{reply.content}</p>
-        </div>
-      ))}
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        {canComment && <button onClick={() => setReplyTo(replyTo === comment.id ? null : comment.id)} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', fontSize: 12 }}>Répondre</button>}
-        {showResolve && canComment && <button onClick={() => toggleResolve(comment.id)} style={{ background: 'none', border: 'none', color: comment.resolved ? '#10b981' : '#9ca3af', cursor: 'pointer', fontSize: 12 }}>{comment.resolved ? '↩️ Rouvrir' : '✓ Résoudre'}</button>}
-      </div>
-      {replyTo === comment.id && (
-        <div style={{ marginTop: 8 }}>
-          <textarea value={replyContent} onChange={e => setReplyContent(e.target.value)} placeholder="Votre réponse..." style={{ width: '100%', padding: 8, background: '#1f2937', border: '1px solid #4b5563', borderRadius: 6, color: 'white', fontSize: 12, resize: 'none', boxSizing: 'border-box' }} rows={2} />
-          <button onClick={() => addReply(comment.id)} style={{ marginTop: 4, padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 12 }}>Envoyer</button>
-        </div>
-      )}
-    </div>
-  );
+  const handleNavigate = (elementId) => {
+    const index = elements.findIndex(el => el.id === elementId);
+    if (index !== -1) {
+      onNavigateToElement(index);
+    }
+  };
+
+  const handleReply = (commentId) => {
+    setReplyTo(replyTo === commentId ? null : commentId);
+    setReplyContent('');
+  };
+
+  const handleCancelReply = () => {
+    setReplyTo(null);
+    setReplyContent('');
+  };
 
   return (
     <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 340, background: '#1f2937', borderLeft: '1px solid #374151', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
@@ -238,20 +275,65 @@ const CommentsPanel = ({ comments, elements, activeIndex, token, docId, onClose,
         {elementComments.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ color: '#fbbf24', fontSize: 12, marginBottom: 8, fontWeight: 'bold' }}>Sur cet élément ({elementComments.length})</div>
-            {elementComments.map(c => <CommentItem key={c.id} comment={c} />)}
+            {elementComments.map(c => (
+              <CommentItem 
+                key={c.id} 
+                comment={c} 
+                onReply={handleReply}
+                onResolve={toggleResolve}
+                canComment={canComment}
+                isReplying={replyTo === c.id}
+                replyContent={replyTo === c.id ? replyContent : ''}
+                onReplyChange={setReplyContent}
+                onSubmitReply={addReply}
+                onCancelReply={handleCancelReply}
+                onNavigate={handleNavigate}
+              />
+            ))}
           </div>
         )}
         {otherComments.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ color: '#9ca3af', fontSize: 12, marginBottom: 8 }}>Autres commentaires ({otherComments.length})</div>
-            {otherComments.map(c => <CommentItem key={c.id} comment={c} />)}
+            {otherComments.map(c => (
+              <CommentItem 
+                key={c.id} 
+                comment={c} 
+                onReply={handleReply}
+                onResolve={toggleResolve}
+                canComment={canComment}
+                isReplying={replyTo === c.id}
+                replyContent={replyTo === c.id ? replyContent : ''}
+                onReplyChange={setReplyContent}
+                onSubmitReply={addReply}
+                onCancelReply={handleCancelReply}
+                onNavigate={handleNavigate}
+              />
+            ))}
           </div>
         )}
         {resolvedComments.length > 0 && (
           <div>
             <div style={{ color: '#6b7280', fontSize: 12, marginBottom: 8 }}>Résolus ({resolvedComments.length})</div>
-            {resolvedComments.map(c => <CommentItem key={c.id} comment={c} showResolve={true} />)}
+            {resolvedComments.map(c => (
+              <CommentItem 
+                key={c.id} 
+                comment={c} 
+                onReply={handleReply}
+                onResolve={toggleResolve}
+                canComment={canComment}
+                isReplying={replyTo === c.id}
+                replyContent={replyTo === c.id ? replyContent : ''}
+                onReplyChange={setReplyContent}
+                onSubmitReply={addReply}
+                onCancelReply={handleCancelReply}
+                onNavigate={handleNavigate}
+              />
+            ))}
           </div>
+        )}
+        {comments.length === 0 && (
+          <p style={{ color: '#6b7280', textAlign: 'center', marginTop: 40 }}>Aucun commentaire.<br/>Sélectionnez un élément pour commenter.</p>
         )}
       </div>
     </div>
@@ -280,15 +362,25 @@ const getPlaceholder = (type) => {
 const getNextType = (t) => ({ scene: 'action', action: 'action', character: 'dialogue', dialogue: 'character', parenthetical: 'dialogue', transition: 'scene' }[t] || 'action');
 
 // ============ SCENE LINE ============
-const SceneLine = ({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, onSelectCharacter, remoteCursors, onCursorMove, commentCount, canEdit }) => {
-  const ref = useRef(null);
+const SceneLine = React.forwardRef(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, onSelectCharacter, remoteCursors, onCursorMove, commentCount, canEdit }, ref) => {
+  const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
   const [filtered, setFiltered] = useState([]);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
 
-  useEffect(() => { if (isActive && ref.current) ref.current.focus(); }, [isActive]);
-  useEffect(() => { if (ref.current) { ref.current.style.height = 'auto'; ref.current.style.height = ref.current.scrollHeight + 'px'; } }, [element.content]);
+  // Expose scrollIntoView via ref
+  React.useImperativeHandle(ref, () => ({
+    scrollIntoView: () => {
+      textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+    focus: () => {
+      textareaRef.current?.focus();
+    }
+  }));
+
+  useEffect(() => { if (isActive && textareaRef.current) textareaRef.current.focus(); }, [isActive]);
+  useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'; } }, [element.content]);
   useEffect(() => {
     if (element.type === 'character' && isActive && element.content.length > 0) {
       const q = element.content.toUpperCase();
@@ -309,21 +401,36 @@ const SceneLine = ({ element, index, isActive, onUpdate, onFocus, onKeyDown, cha
 
   return (
     <div style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
-      {/* Curseurs distants */}
+      {/* Curseurs distants - FIXED */}
       {usersOnLine.map(u => (
-        <div key={u.id} style={{ position: 'absolute', left: -20, top: 0, bottom: 0, width: 4, background: u.color, borderRadius: 2 }}>
-          <div style={{ position: 'absolute', left: -2, top: -20, background: u.color, color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap', fontFamily: 'sans-serif' }}>{u.name}</div>
+        <div key={u.id} style={{ position: 'absolute', left: -8, top: 0, bottom: 0, display: 'flex', alignItems: 'flex-start' }}>
+          <div style={{ width: 3, height: '100%', background: u.color, borderRadius: 2 }} />
+          <div style={{ 
+            marginLeft: 4,
+            marginTop: -2,
+            background: u.color, 
+            color: 'white', 
+            fontSize: 9, 
+            padding: '1px 4px', 
+            borderRadius: 3, 
+            whiteSpace: 'nowrap', 
+            fontFamily: 'system-ui, sans-serif',
+            fontWeight: 500,
+            maxWidth: 60,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>{u.name}</div>
         </div>
       ))}
       {/* Badge commentaires */}
       {commentCount > 0 && <div style={{ position: 'absolute', right: -30, top: 0, background: '#f59e0b', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 10, fontFamily: 'sans-serif' }}>{commentCount}</div>}
       {/* Label type */}
       {isActive && <span style={{ position: 'absolute', left: -110, top: 0, fontSize: 10, color: '#888', width: 100, textAlign: 'right', lineHeight: '1.2', fontFamily: 'sans-serif' }}>{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
-      <textarea ref={ref} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.9 }} rows={1} readOnly={!canEdit} />
+      <textarea ref={textareaRef} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.9 }} rows={1} readOnly={!canEdit} />
       {element.type === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
     </div>
   );
-};
+});
 
 // ============ PAGE BREAK ============
 const PageBreak = ({ pageNumber }) => <div style={{ position: 'relative', borderTop: '1px dashed #ccc', marginTop: 20, marginBottom: 20 }}><span style={{ position: 'absolute', right: -60, top: -10, background: '#f5f5f5', padding: '2px 8px', fontSize: 10, color: '#666' }}>{pageNumber}</span></div>;
@@ -352,6 +459,7 @@ export default function ScreenplayEditor() {
   const [showHistory, setShowHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const socketRef = useRef(null);
+  const elementRefs = useRef({});
 
   // Hash change listener
   useEffect(() => {
@@ -362,8 +470,13 @@ export default function ScreenplayEditor() {
 
   // Socket connection
   useEffect(() => {
-    const socket = io(SERVER_URL, { transports: ['websocket', 'polling'], auth: { token } });
-    socketRef.current = socket;
+    const socket = io(SERVER_URL, { 
+  transports: ['websocket', 'polling'], 
+  auth: { token },
+  timeout: 60000,
+  reconnectionAttempts: 5,
+  maxHttpBufferSize: 1e8
+});    socketRef.current = socket;
     socket.on('connect', () => { setConnected(true); setMyId(socket.id); if (docId) socket.emit('join-document', { docId }); });
     socket.on('disconnect', () => setConnected(false));
     socket.on('document-state', data => { setTitle(data.title); setElements(data.elements); setCharacters(data.characters || []); setComments(data.comments || []); setUsers(data.users || []); setMyRole(data.role || 'viewer'); });
@@ -379,6 +492,7 @@ export default function ScreenplayEditor() {
     socket.on('comment-added', ({ comment }) => setComments(p => [...p, comment]));
     socket.on('comment-reply-added', ({ commentId, reply }) => setComments(p => p.map(c => c.id === commentId ? { ...c, replies: [...(c.replies || []), reply] } : c)));
     socket.on('comment-resolved', ({ commentId, resolved }) => setComments(p => p.map(c => c.id === commentId ? { ...c, resolved } : c)));
+    socket.on('full-sync', ({ title, elements }) => { setTitle(title); setElements(elements); });
     return () => socket.disconnect();
   }, [docId, token]);
 
@@ -403,6 +517,18 @@ export default function ScreenplayEditor() {
     setShowDocsList(false);
     if (socketRef.current?.connected) socketRef.current.emit('join-document', { docId: id });
   };
+
+  // Navigate to element (for comments)
+  const navigateToElement = useCallback((index) => {
+    setActiveIndex(index);
+    // Scroll to element
+    setTimeout(() => {
+      const el = document.querySelector(`[data-element-index="${index}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 50);
+  }, []);
 
   // Page breaks
   const pageBreaks = useMemo(() => {
@@ -521,7 +647,7 @@ export default function ScreenplayEditor() {
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={createNewDocument} onClose={() => setShowDocsList(false)} />}
       {showHistory && token && docId && <HistoryPanel docId={docId} token={token} onRestore={() => socketRef.current?.emit('join-document', { docId })} onClose={() => setShowHistory(false)} />}
-      {showComments && <CommentsPanel comments={comments} elements={elements} activeIndex={activeIndex} token={token} docId={docId} onClose={() => setShowComments(false)} canComment={canComment} />}
+      {showComments && <CommentsPanel comments={comments} elements={elements} activeIndex={activeIndex} token={token} docId={docId} onClose={() => setShowComments(false)} canComment={canComment} onNavigateToElement={navigateToElement} />}
       
       {/* HEADER */}
       <div style={{ position: 'sticky', top: 0, background: '#1f2937', borderBottom: '1px solid #374151', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
@@ -546,17 +672,17 @@ export default function ScreenplayEditor() {
           )}
           
           {/* Documents button */}
-          {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>📁 Documents</button>}
+          {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>📁</button>}
           
           {/* New / Share */}
           {!docId ? (
             <button onClick={createNewDocument} style={{ padding: '6px 16px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>+ Nouveau</button>
           ) : (
-            <button onClick={copyLink} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>🔗 Partager</button>
+            <button onClick={copyLink} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>🔗</button>
           )}
           
           {/* History */}
-          {token && docId && <button onClick={() => setShowHistory(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>📜 Historique</button>}
+          {token && docId && <button onClick={() => setShowHistory(true)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>📜</button>}
           
           {/* Comments */}
           <button onClick={() => setShowComments(!showComments)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: showComments ? '#374151' : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13, position: 'relative' }}>
@@ -567,13 +693,11 @@ export default function ScreenplayEditor() {
           <button onClick={() => setShowHelp(!showHelp)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: showHelp ? '#374151' : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>?</button>
           
           {/* Import */}
-          <button onClick={importFDX} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>📥 Import</button>
+          <button onClick={importFDX} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }}>📥</button>
           
-          {/* Export dropdown */}
-          <div style={{ position: 'relative' }}>
-            <button onClick={exportFDX} style={{ padding: '6px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>FDX</button>
-          </div>
-          <button onClick={exportPDF} style={{ padding: '6px 16px', background: '#7c3aed', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>PDF</button>
+          {/* Export */}
+          <button onClick={exportFDX} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>FDX</button>
+          <button onClick={exportPDF} style={{ padding: '6px 12px', background: '#7c3aed', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>PDF</button>
         </div>
       </div>
       
@@ -584,7 +708,24 @@ export default function ScreenplayEditor() {
       <div style={{ display: 'flex', justifyContent: 'center', padding: 32, paddingRight: showComments ? 372 : 32 }}>
         <div style={{ background: 'white', color: '#111', width: '210mm', minHeight: '297mm', padding: '25mm 25mm 25mm 38mm', boxSizing: 'border-box', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
           <div style={{ position: 'relative' }}><span style={{ position: 'absolute', right: -50, top: 0, background: '#f5f5f5', padding: '2px 8px', fontSize: 10, color: '#666' }}>1</span></div>
-          {elementsWithBreaks.map((item, idx) => item.type === 'pageBreak' ? <PageBreak key={'b' + idx} pageNumber={item.pageNumber} /> : <SceneLine key={item.element.id} element={item.element} index={item.index} isActive={activeIndex === item.index} onUpdate={updateElement} onFocus={setActiveIndex} onKeyDown={handleKeyDown} characters={extractedCharacters} onSelectCharacter={handleSelectChar} remoteCursors={remoteCursors} onCursorMove={handleCursor} commentCount={commentCounts[item.element.id] || 0} canEdit={canEdit} />)}
+          {elementsWithBreaks.map((item, idx) => item.type === 'pageBreak' ? <PageBreak key={'b' + idx} pageNumber={item.pageNumber} /> : (
+            <div key={item.element.id} data-element-index={item.index}>
+              <SceneLine 
+                element={item.element} 
+                index={item.index} 
+                isActive={activeIndex === item.index} 
+                onUpdate={updateElement} 
+                onFocus={setActiveIndex} 
+                onKeyDown={handleKeyDown} 
+                characters={extractedCharacters} 
+                onSelectCharacter={handleSelectChar} 
+                remoteCursors={remoteCursors} 
+                onCursorMove={handleCursor} 
+                commentCount={commentCounts[item.element.id] || 0} 
+                canEdit={canEdit} 
+              />
+            </div>
+          ))}
         </div>
       </div>
     </div>
