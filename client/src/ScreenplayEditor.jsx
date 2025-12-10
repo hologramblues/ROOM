@@ -96,7 +96,7 @@ const DocumentsList = ({ token, onSelectDoc, onCreateDoc, onClose }) => {
       <div style={{ background: '#1f2937', borderRadius: 12, padding: 32, width: '100%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h2 style={{ color: 'white', fontSize: 24, margin: 0 }}>Mes documents</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
         </div>
         <button onClick={onCreateDoc} style={{ width: '100%', padding: 16, background: '#059669', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, fontWeight: 'bold', cursor: 'pointer', marginBottom: 24 }}>+ Nouveau document</button>
         {loading ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Chargement...</p> : docs.length === 0 ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Aucun document</p> : (
@@ -115,9 +115,10 @@ const DocumentsList = ({ token, onSelectDoc, onCreateDoc, onClose }) => {
 };
 
 // ============ HISTORY PANEL ============
-const HistoryPanel = ({ docId, token, onRestore, onClose }) => {
+const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [restoring, setRestoring] = useState(false);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -131,12 +132,35 @@ const HistoryPanel = ({ docId, token, onRestore, onClose }) => {
     if (token && docId) fetchHistory();
   }, [token, docId]);
 
-  const handleRestore = async (historyId) => {
-    if (!window.confirm('Restaurer cette version ? La version actuelle sera sauvegardée.')) return;
+  const handleRestore = async (entry) => {
+    if (!window.confirm('Créer un nouveau document à partir de ce snapshot ?')) return;
+    setRestoring(true);
     try {
-      const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/restore/' + historyId, { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
-      if (res.ok) { onRestore(); onClose(); }
-    } catch (err) { console.error(err); }
+      // Format date from snapshot
+      const snapshotDate = new Date(entry.createdAt);
+      const dateStr = snapshotDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(/[/:]/g, '-').replace(', ', '_');
+      const newTitle = (entry.data.title || currentTitle || 'SANS TITRE') + '_' + dateStr;
+      
+      // Create new document with snapshot data
+      const res = await fetch(SERVER_URL + '/api/documents/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ title: newTitle, elements: entry.data.elements })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        console.log('[RESTORE] Created new document:', data.id);
+        onClose();
+        window.location.hash = data.id;
+      } else {
+        alert('Erreur lors de la restauration');
+      }
+    } catch (err) { 
+      console.error(err);
+      alert('Erreur: ' + err.message);
+    }
+    setRestoring(false);
   };
 
   const actionLabels = { 'title-change': '📝 Titre modifié', 'element-change': '✏️ Élément modifié', 'element-type-change': '🔄 Type changé', 'element-insert': '➕ Élément ajouté', 'element-delete': '🗑️ Élément supprimé', 'snapshot': '📸 Snapshot' };
@@ -146,8 +170,9 @@ const HistoryPanel = ({ docId, token, onRestore, onClose }) => {
       <div style={{ background: '#1f2937', borderRadius: 12, padding: 32, width: '100%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h2 style={{ color: 'white', fontSize: 24, margin: 0 }}>Historique</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
         </div>
+        {restoring && <p style={{ color: '#60a5fa', textAlign: 'center', marginBottom: 16 }}>Restauration en cours...</p>}
         {loading ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Chargement...</p> : history.length === 0 ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Aucun historique</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {history.map(entry => (
@@ -157,7 +182,7 @@ const HistoryPanel = ({ docId, token, onRestore, onClose }) => {
                   <div style={{ color: 'white', fontWeight: 'bold', marginBottom: 4 }}>{actionLabels[entry.action] || entry.action}</div>
                   <div style={{ fontSize: 12, color: '#9ca3af' }}>{entry.userName} • {new Date(entry.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
                 </div>
-                {entry.action === 'snapshot' && <button onClick={() => handleRestore(entry._id)} style={{ padding: '8px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12 }}>Restaurer</button>}
+                {entry.action === 'snapshot' && <button onClick={() => handleRestore(entry)} disabled={restoring} style={{ padding: '8px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12, opacity: restoring ? 0.5 : 1 }}>Restaurer</button>}
               </div>
             ))}
           </div>
@@ -243,7 +268,7 @@ const CommentsPanel = ({ comments, elements, activeIndex, token, docId, onClose,
     <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 340, background: '#1f2937', borderLeft: '1px solid #374151', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: 16, borderBottom: '1px solid #374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ color: 'white', margin: 0, fontSize: 16 }}>💬 Commentaires</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 20, cursor: 'pointer' }}>×</button>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
       </div>
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         {activeElementId && canComment && (
@@ -367,6 +392,7 @@ export default function ScreenplayEditor() {
   const [showDocsList, setShowDocsList] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [showImportExport, setShowImportExport] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const socketRef = useRef(null);
@@ -383,6 +409,15 @@ export default function ScreenplayEditor() {
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
   }, [docId]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setShowImportExport(false);
+    if (showImportExport) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showImportExport]);
 
   // Load document via REST API
   useEffect(() => {
@@ -542,8 +577,12 @@ export default function ScreenplayEditor() {
         paragraphs.forEach((p, i) => {
           const fdxType = p.getAttribute('Type');
           const type = FDX_TO_TYPE[fdxType] || 'action';
-          const textNode = p.querySelector('Text');
-          const content = textNode ? textNode.textContent : '';
+          
+          // Get ALL Text nodes and concatenate them
+          const textNodes = p.querySelectorAll('Text');
+          let content = '';
+          textNodes.forEach(t => { content += t.textContent || ''; });
+          
           if (content.trim() || newElements.length === 0) {
             const id = generateId();
             newElements.push({ id, type, content: content.trim() });
@@ -628,7 +667,7 @@ export default function ScreenplayEditor() {
     <div style={{ minHeight: '100vh', background: '#111827', color: '#e5e7eb' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={createNewDocument} onClose={() => setShowDocsList(false)} />}
-      {showHistory && token && docId && <HistoryPanel docId={docId} token={token} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} />}
+      {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} />}
       {showComments && <CommentsPanel comments={comments} elements={elements} activeIndex={activeIndex} token={token} docId={docId} onClose={() => setShowComments(false)} canComment={canComment} onNavigateToElement={navigateToElement} />}
       
       {/* HEADER */}
@@ -664,9 +703,24 @@ export default function ScreenplayEditor() {
             💬 {totalComments > 0 && <span style={{ position: 'absolute', top: -6, right: -6, background: '#f59e0b', color: 'black', fontSize: 10, padding: '2px 6px', borderRadius: 10 }}>{totalComments}</span>}
           </button>
           <button onClick={() => setShowHelp(!showHelp)} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: showHelp ? '#374151' : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Aide">?</button>
-          <button onClick={importFDX} disabled={importing} style={{ padding: '6px 12px', border: '1px solid #4b5563', borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 13 }} title="Importer FDX">📥</button>
-          <button onClick={exportFDX} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>FDX</button>
-          <button onClick={exportPDF} style={{ padding: '6px 12px', background: '#7c3aed', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>PDF</button>
+          <div style={{ position: 'relative' }}>
+            <button onClick={(e) => { e.stopPropagation(); setShowImportExport(!showImportExport); }} style={{ padding: '6px 12px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>
+              Import/Export ▾
+            </button>
+            {showImportExport && (
+              <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#1f2937', border: '1px solid #374151', borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                <button onClick={() => { importFDX(); setShowImportExport(false); }} disabled={importing || !token} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: '1px solid #374151', color: !token ? '#6b7280' : 'white', cursor: !token ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  📥 Importer FDX
+                </button>
+                <button onClick={() => { exportFDX(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: '1px solid #374151', color: !docId ? '#6b7280' : 'white', cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  📤 Exporter FDX
+                </button>
+                <button onClick={() => { exportPDF(); setShowImportExport(false); }} disabled={!docId} style={{ width: '100%', padding: '12px 16px', background: 'transparent', border: 'none', color: !docId ? '#6b7280' : 'white', cursor: !docId ? 'default' : 'pointer', fontSize: 13, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  📄 Exporter PDF
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       
