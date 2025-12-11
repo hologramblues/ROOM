@@ -1133,6 +1133,30 @@ export default function ScreenplayEditor() {
     localStorage.setItem('rooms-writing-goal', JSON.stringify(writingGoal));
   }, [writingGoal]);
 
+  // Stats calculation - MUST be before useEffects that use it
+  const stats = useMemo(() => {
+    const allText = elements.map(el => el.content).join(' ');
+    const words = allText.trim() ? allText.trim().split(/\s+/).length : 0;
+    const chars = allText.length;
+    const scenes = elements.filter(el => el.type === 'scene').length;
+    
+    // Advanced stats
+    const dialogueWords = elements
+      .filter(el => el.type === 'dialogue')
+      .map(el => el.content.trim().split(/\s+/).length)
+      .reduce((a, b) => a + b, 0);
+    const actionWords = elements
+      .filter(el => el.type === 'action')
+      .map(el => el.content.trim().split(/\s+/).length)
+      .reduce((a, b) => a + b, 0);
+    
+    const dialogueRatio = words > 0 ? Math.round((dialogueWords / words) * 100) : 0;
+    const readingTimeMin = Math.ceil(words / 200); // ~200 words/min for screenplay
+    const screenTimeMin = Math.round(words / 150); // ~1 page/min, ~150 words/page
+    
+    return { words, chars, scenes, dialogueWords, actionWords, dialogueRatio, readingTimeMin, screenTimeMin };
+  }, [elements]);
+
   // Track word count changes for writing goals
   const prevWordCountRef = useRef(0);
   useEffect(() => {
@@ -1315,30 +1339,6 @@ export default function ScreenplayEditor() {
   }, [elements, lockedScenes]);
   const commentCounts = useMemo(() => { const counts = {}; comments.filter(c => !c.resolved).forEach(c => { counts[c.elementId] = (counts[c.elementId] || 0) + 1; }); return counts; }, [comments]);
   const totalComments = comments.filter(c => !c.resolved).length;
-
-  // Stats calculation
-  const stats = useMemo(() => {
-    const allText = elements.map(el => el.content).join(' ');
-    const words = allText.trim() ? allText.trim().split(/\s+/).length : 0;
-    const chars = allText.length;
-    const scenes = elements.filter(el => el.type === 'scene').length;
-    
-    // Advanced stats
-    const dialogueWords = elements
-      .filter(el => el.type === 'dialogue')
-      .map(el => el.content.trim().split(/\s+/).length)
-      .reduce((a, b) => a + b, 0);
-    const actionWords = elements
-      .filter(el => el.type === 'action')
-      .map(el => el.content.trim().split(/\s+/).length)
-      .reduce((a, b) => a + b, 0);
-    
-    const dialogueRatio = words > 0 ? Math.round((dialogueWords / words) * 100) : 0;
-    const readingTimeMin = Math.ceil(words / 200); // ~200 words/min for screenplay
-    const screenTimeMin = Math.round(words / 150); // ~1 page/min, ~150 words/page
-    
-    return { words, chars, scenes, dialogueWords, actionWords, dialogueRatio, readingTimeMin, screenTimeMin };
-  }, [elements]);
 
   // Outline - list of scenes with their index
   const outline = useMemo(() => {
