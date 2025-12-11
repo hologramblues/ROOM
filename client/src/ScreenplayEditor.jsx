@@ -1171,12 +1171,20 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
             onChange={e => setFrom(e.target.value)}
             style={{ 
               width: '100%', 
-              padding: '10px 12px', 
+              padding: '10px 28px 10px 12px', 
               background: darkMode ? '#374151' : 'white', 
               border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
               borderRadius: 6, 
               color: darkMode ? 'white' : 'black', 
-              fontSize: 14 
+              fontSize: 14,
+              cursor: 'pointer',
+              outline: 'none',
+              WebkitAppearance: 'none',
+              MozAppearance: 'none',
+              appearance: 'none',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='${darkMode ? '%239ca3af' : '%236b7280'}' d='M3 5l3 3 3-3'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 10px center'
             }}
           >
             <option value="">Sélectionner...</option>
@@ -2827,18 +2835,25 @@ export default function ScreenplayEditor() {
               value={outlineFilter.status} 
               onChange={e => setOutlineFilter(f => ({ ...f, status: e.target.value }))}
               style={{ 
-                flex: 1, 
-                padding: '6px 10px', 
+                flex: 1,
+                minWidth: 0,
+                padding: '6px 24px 6px 10px', 
                 fontSize: 11, 
-                background: darkMode ? '#374151' : 'white', 
-                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+                background: darkMode ? '#374151' : '#1f2937', 
+                border: 'none', 
                 borderRadius: 6, 
-                color: darkMode ? 'white' : 'black',
+                color: 'white',
                 cursor: 'pointer',
-                outline: 'none'
+                outline: 'none',
+                WebkitAppearance: 'none',
+                MozAppearance: 'none',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M3 5l3 3 3-3'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 8px center'
               }}
             >
-              <option value="">Tous les statuts</option>
+              <option value="">Statut</option>
               <option value="draft">Brouillon</option>
               <option value="review">Révision</option>
               <option value="final">Final</option>
@@ -2847,24 +2862,31 @@ export default function ScreenplayEditor() {
               value={outlineFilter.character} 
               onChange={e => setOutlineFilter(f => ({ ...f, character: e.target.value }))}
               style={{ 
-                flex: 1, 
-                padding: '6px 10px', 
+                flex: 1,
+                minWidth: 0,
+                padding: '6px 24px 6px 10px', 
                 fontSize: 11, 
-                background: darkMode ? '#374151' : 'white', 
-                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+                background: darkMode ? '#374151' : '#1f2937', 
+                border: 'none', 
                 borderRadius: 6, 
-                color: darkMode ? 'white' : 'black',
+                color: 'white',
                 cursor: 'pointer',
-                outline: 'none'
+                outline: 'none',
+                WebkitAppearance: 'none',
+                MozAppearance: 'none',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M3 5l3 3 3-3'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 8px center'
               }}
             >
-              <option value="">Tous les personnages</option>
+              <option value="">Personnage</option>
               {[...new Set(elements.filter(e => e.type === 'character').map(e => e.content.toUpperCase()))].sort().map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
             {(outlineFilter.status || outlineFilter.character) && (
-              <button onClick={() => setOutlineFilter({ status: '', character: '' })} style={{ padding: '6px 10px', fontSize: 11, background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setOutlineFilter({ status: '', character: '' })} style={{ padding: '6px 10px', fontSize: 11, background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', flexShrink: 0 }}>✕</button>
             )}
           </div>
           
@@ -3000,14 +3022,21 @@ export default function ScreenplayEditor() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Cycle through known users (including "none")
-                        const allKnown = [null, ...knownUsers];
+                        // Merge online users with known users (no duplicates)
+                        const allUsers = [...users];
+                        knownUsers.forEach(ku => {
+                          if (!allUsers.find(u => u.name === ku.name)) {
+                            allUsers.push(ku);
+                          }
+                        });
+                        // Cycle through users (including "none")
+                        const allOptions = [null, ...allUsers];
                         const currentAssignment = sceneAssignments[scene.id];
                         const currentIdx = currentAssignment 
-                          ? allKnown.findIndex(u => u?.name === currentAssignment.userName)
+                          ? allOptions.findIndex(u => u?.name === currentAssignment.userName)
                           : 0;
-                        const nextIdx = (currentIdx + 1) % allKnown.length;
-                        const nextUser = allKnown[nextIdx];
+                        const nextIdx = (currentIdx + 1) % allOptions.length;
+                        const nextUser = allOptions[nextIdx];
                         if (nextUser) {
                           setSceneAssignments(prev => ({ 
                             ...prev, 
