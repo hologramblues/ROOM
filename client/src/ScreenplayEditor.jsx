@@ -1088,6 +1088,7 @@ const ShortcutsPanel = ({ onClose, darkMode }) => {
       { keys: '⌘Z', desc: 'Annuler' },
       { keys: '⌘⇧Z', desc: 'Rétablir' },
       { keys: '⌘S', desc: 'Créer un snapshot' },
+      { keys: '⌘D', desc: 'Dupliquer la scène' },
       { keys: '⌘F', desc: 'Rechercher/Remplacer' },
       { keys: '⌘N', desc: 'Ajouter une note' },
       { keys: 'Tab', desc: 'Changer type élément' },
@@ -1387,7 +1388,17 @@ export default function ScreenplayEditor() {
   const [showImportExport, setShowImportExport] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
+  const [themeMode, setThemeMode] = useState('dark'); // 'dark', 'light', 'sepia'
+  const darkMode = themeMode === 'dark';
+  const sepiaMode = themeMode === 'sepia';
+  
+  // Theme colors
+  const themeColors = {
+    dark: { bg: '#111827', paper: '#1f2937', text: '#e5e7eb', border: '#374151' },
+    light: { bg: '#e5e7eb', paper: 'white', text: '#111827', border: '#d1d5db' },
+    sepia: { bg: '#f4e4c1', paper: '#fdf6e3', text: '#5b4636', border: '#d4c4a8' }
+  };
+  const theme = themeColors[themeMode];
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [replaceQuery, setReplaceQuery] = useState('');
@@ -1419,6 +1430,7 @@ export default function ScreenplayEditor() {
   const [sessionStartWords, setSessionStartWords] = useState(0);
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
   const [lastSaved, setLastSaved] = useState(null);
+  const [lastModifiedBy, setLastModifiedBy] = useState(null); // { userName, timestamp }
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [draggedScene, setDraggedScene] = useState(null);
@@ -1433,6 +1445,7 @@ export default function ScreenplayEditor() {
   const [showGoToScene, setShowGoToScene] = useState(false);
   const [showWritingGoals, setShowWritingGoals] = useState(false);
   const [editingSynopsis, setEditingSynopsis] = useState(null);
+  const [typewriterSound, setTypewriterSound] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
@@ -2131,6 +2144,18 @@ export default function ScreenplayEditor() {
         e.preventDefault();
         setShowGoToScene(true);
       }
+      // Cmd+D = Duplicate current scene
+      if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
+        e.preventDefault();
+        // Find the current scene (look backward from activeIndex for a scene element)
+        let sceneIdx = activeIndex;
+        while (sceneIdx >= 0 && elements[sceneIdx]?.type !== 'scene') {
+          sceneIdx--;
+        }
+        if (sceneIdx >= 0) {
+          duplicateScene(sceneIdx);
+        }
+      }
       // Escape = Close panels (one at a time)
       if (e.key === 'Escape') {
         if (showGoToScene) { setShowGoToScene(false); return; }
@@ -2145,14 +2170,57 @@ export default function ScreenplayEditor() {
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, showWritingGoals, token, docId, title, elements, activeIndex, undo, redo]);
+  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, showWritingGoals, token, docId, title, elements, activeIndex, undo, redo, duplicateScene]);
+
+  // Typewriter sound effect
+  const audioContextRef = useRef(null);
+  const playTypewriterSound = useCallback(() => {
+    if (!typewriterSound) return;
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      // Quick click sound
+      oscillator.frequency.setValueAtTime(800 + Math.random() * 400, ctx.currentTime);
+      oscillator.type = 'square';
+      
+      gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+      
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.05);
+    } catch (e) {
+      // Audio not supported
+    }
+  }, [typewriterSound]);
+
+  // Typewriter sound on keypress
+  useEffect(() => {
+    if (!typewriterSound) return;
+    const handleKeyPress = (e) => {
+      // Only play sound for printable characters (not modifiers, arrows, etc.)
+      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
+        playTypewriterSound();
+      }
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [typewriterSound, playTypewriterSound]);
 
   const updateElement = useCallback((i, el, skipUndo = false) => { 
     if (!skipUndo) pushToUndo(elements);
     setElements(p => { const u = [...p]; u[i] = el; return u; }); 
     if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el }); 
     setLastSaved(new Date());
-  }, [connected, canEdit, elements, pushToUndo]);
+    setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
+  }, [connected, canEdit, elements, pushToUndo, currentUser]);
   const insertElement = useCallback((after, type) => { 
     pushToUndo(elements);
     const el = { id: generateId(), type, content: '' }; 
@@ -2466,10 +2534,81 @@ export default function ScreenplayEditor() {
     a.click();
   };
 
+  const exportTXT = () => {
+    let txt = `${title.toUpperCase()}\n${'='.repeat(title.length)}\n\n`;
+    
+    elements.forEach(el => {
+      switch (el.type) {
+        case 'scene':
+          txt += `\n${el.content.toUpperCase()}\n\n`;
+          break;
+        case 'action':
+          txt += `${el.content}\n\n`;
+          break;
+        case 'character':
+          txt += `\t\t\t${el.content.toUpperCase()}\n`;
+          break;
+        case 'dialogue':
+          txt += `\t\t${el.content}\n\n`;
+          break;
+        case 'parenthetical':
+          txt += `\t\t${el.content.startsWith('(') ? el.content : '(' + el.content + ')'}\n`;
+          break;
+        case 'transition':
+          txt += `\n\t\t\t\t\t${el.content.toUpperCase()}\n\n`;
+          break;
+        default:
+          txt += `${el.content}\n\n`;
+      }
+    });
+    
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+    a.download = title.toLowerCase().replace(/\s+/g, '-') + '.txt';
+    a.click();
+  };
+
+  const exportMarkdown = () => {
+    let md = `# ${title}\n\n`;
+    md += `*Exporté le ${new Date().toLocaleDateString('fr-FR')}*\n\n---\n\n`;
+    
+    let currentScene = 0;
+    elements.forEach(el => {
+      switch (el.type) {
+        case 'scene':
+          currentScene++;
+          md += `## Scène ${currentScene}: ${el.content}\n\n`;
+          break;
+        case 'action':
+          md += `*${el.content}*\n\n`;
+          break;
+        case 'character':
+          md += `**${el.content.toUpperCase()}**\n`;
+          break;
+        case 'dialogue':
+          md += `> ${el.content}\n\n`;
+          break;
+        case 'parenthetical':
+          md += `*(${el.content.replace(/[()]/g, '')})*\n`;
+          break;
+        case 'transition':
+          md += `\n**${el.content.toUpperCase()}**\n\n---\n\n`;
+          break;
+        default:
+          md += `${el.content}\n\n`;
+      }
+    });
+    
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+    a.download = title.toLowerCase().replace(/\s+/g, '-') + '.md';
+    a.click();
+  };
+
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
 
   return (
-    <div className={focusMode ? 'focus-mode-active' : ''} style={{ minHeight: '100vh', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s' }}>
+    <div className={focusMode ? 'focus-mode-active' : ''} style={{ minHeight: '100vh', background: theme.bg, color: theme.text, transition: 'background 0.3s, color 0.3s' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={createNewDocument} onClose={() => setShowDocsList(false)} />}
       {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} />}
@@ -2688,6 +2827,7 @@ export default function ScreenplayEditor() {
           <span style={{ color: '#6b7280', fontSize: 12 }}>{totalPages}p • {stats.scenes}sc • {stats.words}m</span>
           <span style={{ fontSize: 10, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '●' : '○'}</span>
           {lastSaved && <span style={{ fontSize: 10, color: '#6b7280' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
+          {lastModifiedBy && <span style={{ fontSize: 10, color: '#6b7280' }}>par {lastModifiedBy.userName}</span>}
           {!canEdit && <span style={{ fontSize: 11, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
           {(loading || importing) && <span style={{ fontSize: 11, color: '#60a5fa' }}>...</span>}
         </div>
@@ -2793,8 +2933,11 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       # Numéros de scènes
                     </button>
-                    <button onClick={() => { setDarkMode(!darkMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
+                    <button onClick={() => { 
+                      setThemeMode(prev => prev === 'dark' ? 'light' : prev === 'light' ? 'sepia' : 'dark'); 
+                      setShowViewMenu(false); 
+                    }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : (sepiaMode ? '#5b4636' : 'black'), cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      {themeMode === 'dark' ? '☀️ Mode clair' : themeMode === 'light' ? '📜 Mode sépia' : '🌙 Mode sombre'}
                     </button>
                     <button onClick={() => { setFocusMode(!focusMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: focusMode ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       🎯 Mode focus {focusMode && '✓'}
@@ -2824,6 +2967,9 @@ export default function ScreenplayEditor() {
                     </button>
                     <button onClick={() => { setShowTimer(!showTimer); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showTimer ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       ⏱️ Timer d'écriture {showTimer && '✓'}
+                    </button>
+                    <button onClick={() => { setTypewriterSound(!typewriterSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: typewriterSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      🎹 Son machine à écrire {typewriterSound && '✓'}
                     </button>
                     <button onClick={() => { setShowStats(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📊 Statistiques
@@ -2874,8 +3020,14 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { exportFountain(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📝 Exporter Fountain
                     </button>
-                    <button onClick={() => { exportPDF(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={() => { exportPDF(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📄 Exporter PDF
+                    </button>
+                    <button onClick={() => { exportTXT(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      📃 Exporter TXT
+                    </button>
+                    <button onClick={() => { exportMarkdown(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      📋 Exporter Markdown
                     </button>
                   </div>
                 )}
@@ -2891,8 +3043,8 @@ export default function ScreenplayEditor() {
             <div key={page.number} style={{ position: 'relative' }}>
               {/* Page content */}
               <div style={{ 
-                background: 'white', 
-                color: '#111', 
+                background: sepiaMode ? '#fdf6e3' : 'white', 
+                color: sepiaMode ? '#5b4636' : '#111', 
                 width: '210mm', 
                 minHeight: '297mm',
                 padding: '20mm 25mm 25mm 38mm', 
