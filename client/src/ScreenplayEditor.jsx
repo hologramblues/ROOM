@@ -1620,7 +1620,15 @@ export default function ScreenplayEditor() {
     
     socket.on('connect', () => { setConnected(true); setMyId(socket.id); if (docId) socket.emit('join-document', { docId }); });
     socket.on('disconnect', () => setConnected(false));
-    socket.on('document-state', data => { setUsers(data.users || []); if (data.role) setMyRole(data.role); if (data.collaborators) setCollaborators(data.collaborators); });
+    socket.on('document-state', data => { 
+      setUsers(data.users || []); 
+      if (data.role) setMyRole(data.role); 
+      // Use server collaborators if available, otherwise build from online users
+      console.log('Received collaborators:', data.collaborators);
+      if (data.collaborators && data.collaborators.length > 0) {
+        setCollaborators(data.collaborators);
+      }
+    });
     socket.on('title-updated', ({ title }) => setTitle(title));
     socket.on('element-updated', ({ index, element }) => setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = element; return u; }));
     socket.on('element-type-updated', ({ index, type }) => setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = { ...u[index], type }; return u; }));
@@ -3466,8 +3474,8 @@ export default function ScreenplayEditor() {
               <span style={{ width: 24, height: 24, borderRadius: 4, border: '1px dashed #6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>✕</span>
               <span>Aucun</span>
             </button>
-            {/* List all collaborators */}
-            {collaborators.map(user => (
+            {/* List all collaborators (fallback to online users if empty) */}
+            {(collaborators.length > 0 ? collaborators : users).map(user => (
               <button
                 key={user.name}
                 onClick={() => {
