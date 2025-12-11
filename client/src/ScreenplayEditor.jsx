@@ -3064,7 +3064,6 @@ export default function ScreenplayEditor() {
                     >
                       {getInitials(sceneAssignments[scene.id]?.userName) || ''}
                     </button>
-                    </button>
                   </div>
                 </div>
               ))
