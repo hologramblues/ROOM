@@ -431,19 +431,44 @@ const CharactersPanel = ({ characterStats, darkMode, onClose, onNavigate }) => {
 };
 
 // ============ NOTE EDITOR MODAL ============
-const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, darkMode, canPush }) => {
+const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, darkMode, canPush, position, onDragStart }) => {
   const [content, setContent] = useState(note?.content || '');
   const [color, setColor] = useState(note?.color || '#fef3c7');
   const colors = ['#fef3c7', '#dcfce7', '#dbeafe', '#fce7f3', '#f3e8ff'];
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
-      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black' }}>📝 Note personnelle</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
-        </div>
-        
+    <div 
+      style={{ 
+        position: 'fixed', 
+        left: position?.x || '50%',
+        top: position?.y || '50%',
+        transform: position ? 'none' : 'translate(-50%, -50%)',
+        background: darkMode ? '#1f2937' : 'white', 
+        borderRadius: 12, 
+        width: 380, 
+        boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
+        zIndex: 300,
+        overflow: 'hidden'
+      }}
+    >
+      {/* Draggable header */}
+      <div 
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          padding: '12px 16px',
+          background: darkMode ? '#374151' : '#f3f4f6',
+          cursor: 'move',
+          userSelect: 'none'
+        }}
+        onMouseDown={onDragStart}
+      >
+        <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>📝 Note personnelle</h3>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+      </div>
+      
+      <div style={{ padding: '16px 20px' }}>
         <textarea 
           autoFocus
           value={content}
@@ -459,9 +484,9 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
             fontSize: 14, 
             resize: 'none', 
             boxSizing: 'border-box',
-            minHeight: 120
+            minHeight: 100
           }}
-          rows={5}
+          rows={4}
         />
         
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
@@ -470,8 +495,8 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
               key={c}
               onClick={() => setColor(c)}
               style={{ 
-                width: 28, 
-                height: 28, 
+                width: 26, 
+                height: 26, 
                 borderRadius: 6, 
                 background: c, 
                 border: color === c ? '2px solid #2563eb' : '1px solid #d1d5db',
@@ -481,18 +506,18 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
           ))}
         </div>
         
-        <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <button 
               onClick={() => onSave(elementId, content, color)} 
-              style={{ padding: '10px 20px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+              style={{ padding: '8px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
             >
               Sauvegarder
             </button>
             {note && (
               <button 
                 onClick={() => onSave(elementId, '', '')} 
-                style={{ padding: '10px 20px', background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 14 }}
+                style={{ padding: '8px 16px', background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 13 }}
               >
                 Supprimer
               </button>
@@ -501,9 +526,9 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
           {note && canPush && (
             <button 
               onClick={() => onPushToComment(elementId)} 
-              style={{ padding: '10px 16px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+              style={{ padding: '8px 12px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
             >
-              💬 Publier en commentaire
+              💬 Publier
             </button>
           )}
         </div>
@@ -1077,6 +1102,11 @@ export default function ScreenplayEditor() {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [chatPosition, setChatPosition] = useState({ x: window.innerWidth - 340, y: 80 });
+  const [notePosition, setNotePosition] = useState({ x: window.innerWidth / 2 - 200, y: window.innerHeight / 2 - 150 });
+  const [isDraggingChat, setIsDraggingChat] = useState(false);
+  const [isDraggingNote, setIsDraggingNote] = useState(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
   const chatEndRef = useRef(null);
@@ -1271,6 +1301,36 @@ export default function ScreenplayEditor() {
       setUnreadMessages(0);
     }
   }, [showChat]);
+
+  // Drag handlers for floating panels
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (isDraggingChat) {
+        setChatPosition({
+          x: Math.max(0, Math.min(window.innerWidth - 320, e.clientX - dragOffsetRef.current.x)),
+          y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffsetRef.current.y))
+        });
+      }
+      if (isDraggingNote) {
+        setNotePosition({
+          x: Math.max(0, Math.min(window.innerWidth - 400, e.clientX - dragOffsetRef.current.x)),
+          y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffsetRef.current.y))
+        });
+      }
+    };
+    const handleMouseUp = () => {
+      setIsDraggingChat(false);
+      setIsDraggingNote(false);
+    };
+    if (isDraggingChat || isDraggingNote) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingChat, isDraggingNote]);
 
   const createNewDocument = async () => {
     if (!token) { setShowAuthModal(true); return; }
@@ -2011,7 +2071,7 @@ export default function ScreenplayEditor() {
       
       {/* Search Panel */}
       {showSearch && (
-        <div style={{ position: 'fixed', top: 70, left: showOutline ? 'calc(50% + 140px)' : '50%', transform: 'translateX(-50%)', background: darkMode ? '#1f2937' : 'white', borderRadius: 8, padding: 16, boxShadow: '0 10px 40px rgba(0,0,0,0.3)', zIndex: 200, display: 'flex', gap: 8, alignItems: 'center', transition: 'left 0.2s ease' }}>
+        <div style={{ position: 'fixed', top: 70, left: showOutline ? 'calc(50% + 150px)' : '50%', transform: 'translateX(-50%)', background: darkMode ? '#1f2937' : 'white', borderRadius: 8, padding: 16, boxShadow: '0 10px 40px rgba(0,0,0,0.3)', zIndex: 200, display: 'flex', gap: 8, alignItems: 'center', transition: 'left 0.2s ease' }}>
           <input 
             autoFocus
             value={searchQuery} 
@@ -2044,7 +2104,7 @@ export default function ScreenplayEditor() {
           left: 0, 
           top: 60, 
           bottom: 0, 
-          width: 320, 
+          width: 300, 
           background: darkMode ? '#1f2937' : 'white', 
           borderRight: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
           zIndex: 100, 
@@ -2063,54 +2123,33 @@ export default function ScreenplayEditor() {
               outline.map(scene => (
                 <div
                   key={scene.id}
-                  draggable
-                  onDragStart={(e) => {
-                    setDraggedScene(scene.index);
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (draggedScene !== null && draggedScene !== scene.index) {
-                      moveScene(draggedScene, scene.index);
-                    }
-                    setDraggedScene(null);
-                  }}
-                  onDragEnd={() => setDraggedScene(null)}
+                  onClick={() => navigateToScene(scene.index)}
                   style={{
                     width: '100%',
                     padding: '8px 10px',
-                    background: draggedScene === scene.index 
-                      ? (darkMode ? '#4b5563' : '#d1d5db')
-                      : currentSceneNumber === scene.number 
-                        ? (darkMode ? '#374151' : '#e5e7eb') 
-                        : 'transparent',
+                    background: currentSceneNumber === scene.number 
+                      ? (darkMode ? '#374151' : '#e5e7eb') 
+                      : 'transparent',
                     borderRadius: 6,
                     marginBottom: 4,
                     display: 'flex',
                     alignItems: 'flex-start',
-                    gap: 6,
-                    cursor: 'grab',
-                    opacity: draggedScene !== null && draggedScene !== scene.index ? 0.7 : 1,
+                    gap: 8,
+                    cursor: 'pointer',
                     borderLeft: sceneStatus[scene.id] ? `3px solid ${
                       sceneStatus[scene.id] === 'final' ? '#22c55e' : 
                       sceneStatus[scene.id] === 'review' ? '#f59e0b' : '#6b7280'
-                    }` : '3px solid transparent'
+                    }` : '3px solid transparent',
+                    boxSizing: 'border-box'
                   }}
                 >
-                  {/* Drag handle */}
-                  <span style={{ color: '#6b7280', fontSize: 10, cursor: 'grab', padding: '2px 0', flexShrink: 0 }}>⋮⋮</span>
-                  
                   {/* Scene number */}
                   <span style={{ 
                     color: '#6b7280', 
                     fontSize: 9, 
                     fontWeight: 'bold',
-                    minWidth: 18,
-                    padding: '2px 3px',
+                    minWidth: 20,
+                    padding: '2px 4px',
                     background: darkMode ? '#4b5563' : '#d1d5db',
                     borderRadius: 3,
                     textAlign: 'center',
@@ -2119,39 +2158,27 @@ export default function ScreenplayEditor() {
                     {scene.number}
                   </span>
                   
-                  {/* Scene content - clickable */}
-                  <button
-                    onClick={() => navigateToScene(scene.index)}
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      background: 'none',
-                      border: 'none',
-                      color: darkMode ? 'white' : 'black',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      padding: 0,
-                      overflow: 'hidden'
-                    }}
-                  >
+                  {/* Scene content */}
+                  <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                     <span style={{ 
                       fontSize: 11, 
                       lineHeight: 1.3,
                       display: 'block',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      color: darkMode ? 'white' : 'black'
                     }}>
                       {scene.content}
                     </span>
                     <span style={{ fontSize: 9, color: '#6b7280', display: 'block', marginTop: 1 }}>
                       {scene.wordCount}m • ~{Math.max(1, Math.round(scene.wordCount / 150))}min
                     </span>
-                  </button>
+                  </div>
                   
-                  {/* Action buttons - grouped */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                    {/* Lock */}
+                  {/* Action buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                    {/* Lock - RED when locked */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -2162,7 +2189,15 @@ export default function ScreenplayEditor() {
                           return newSet;
                         });
                       }}
-                      style={{ background: 'none', border: 'none', color: lockedScenes.has(scene.id) ? '#f59e0b' : '#4b5563', cursor: 'pointer', fontSize: 12, padding: '2px', opacity: lockedScenes.has(scene.id) ? 1 : 0.5 }}
+                      style={{ 
+                        background: lockedScenes.has(scene.id) ? 'rgba(239, 68, 68, 0.2)' : 'none', 
+                        border: 'none', 
+                        color: lockedScenes.has(scene.id) ? '#ef4444' : '#6b7280', 
+                        cursor: 'pointer', 
+                        fontSize: 11, 
+                        padding: '3px 4px',
+                        borderRadius: 4
+                      }}
                       title={lockedScenes.has(scene.id) ? 'Déverrouiller' : 'Verrouiller'}
                     >
                       {lockedScenes.has(scene.id) ? '🔒' : '🔓'}
@@ -2408,7 +2443,7 @@ export default function ScreenplayEditor() {
         </div>
       </div>
       
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 32, gap: 20, marginLeft: showOutline ? 280 : 0, transition: 'margin-left 0.2s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 32, gap: 20, marginLeft: showOutline ? 300 : 0, transition: 'margin-left 0.2s ease' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {pages.map((page) => (
             <div key={page.number} style={{ position: 'relative' }}>
@@ -2498,7 +2533,7 @@ export default function ScreenplayEditor() {
         />
       )}
       
-      {/* Note Editor Modal */}
+      {/* Note Editor Modal - FLOATING */}
       {showNoteFor && (
         <NoteEditorModal
           elementId={showNoteFor}
@@ -2508,6 +2543,12 @@ export default function ScreenplayEditor() {
           onClose={() => setShowNoteFor(null)}
           darkMode={darkMode}
           canPush={!!token && !!docId && canComment}
+          position={notePosition}
+          onDragStart={(e) => {
+            if (e.target.tagName === 'BUTTON') return;
+            setIsDraggingNote(true);
+            dragOffsetRef.current = { x: e.clientX - notePosition.x, y: e.clientY - notePosition.y };
+          }}
         />
       )}
       
@@ -2560,46 +2601,63 @@ export default function ScreenplayEditor() {
         />
       )}
       
-      {/* Chat Panel */}
+      {/* Chat Panel - FLOATING */}
       {showChat && (
-        <div style={{
-          position: 'fixed',
-          right: 0,
-          top: 60,
-          bottom: 0,
-          width: 320,
-          background: darkMode ? '#1f2937' : 'white',
-          borderLeft: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
-          display: 'flex',
-          flexDirection: 'column',
-          zIndex: 100,
-          boxShadow: '-4px 0 20px rgba(0,0,0,0.2)'
-        }}>
-          {/* Chat Header */}
-          <div style={{ 
-            padding: '16px', 
-            borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+        <div 
+          style={{
+            position: 'fixed',
+            left: chatPosition.x,
+            top: chatPosition.y,
+            width: 320,
+            height: 450,
+            background: darkMode ? '#1f2937' : 'white',
+            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+            borderRadius: 12,
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
+            flexDirection: 'column',
+            zIndex: 200,
+            boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+            resize: 'both',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Chat Header - DRAGGABLE */}
+          <div 
+            style={{ 
+              padding: '12px 16px', 
+              borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'move',
+              background: darkMode ? '#374151' : '#f3f4f6',
+              borderRadius: '12px 12px 0 0',
+              userSelect: 'none'
+            }}
+            onMouseDown={(e) => {
+              if (e.target.tagName === 'BUTTON') return;
+              setIsDraggingChat(true);
+              dragOffsetRef.current = { x: e.clientX - chatPosition.x, y: e.clientY - chatPosition.y };
+            }}
+          >
             <div>
-              <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>💬 Chat</h3>
-              <span style={{ fontSize: 11, color: '#6b7280' }}>{users.length} connecté{users.length > 1 ? 's' : ''}</span>
+              <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : 'black' }}>💬 Chat</h3>
+              <span style={{ fontSize: 10, color: '#6b7280' }}>{users.length} connecté{users.length > 1 ? 's' : ''}</span>
             </div>
             <button 
               onClick={() => setShowChat(false)} 
-              style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18 }}
+              style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 16 }}
             >✕</button>
           </div>
           
           {/* Online Users */}
           <div style={{ 
-            padding: '8px 16px', 
+            padding: '6px 12px', 
             borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
             display: 'flex',
-            gap: 8,
-            overflowX: 'auto'
+            gap: 6,
+            overflowX: 'auto',
+            flexShrink: 0
           }}>
             {users.map(user => (
               <div 
@@ -2608,19 +2666,14 @@ export default function ScreenplayEditor() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
-                  padding: '4px 8px',
+                  padding: '3px 6px',
                   background: darkMode ? '#374151' : '#f3f4f6',
-                  borderRadius: 12,
-                  fontSize: 11,
+                  borderRadius: 10,
+                  fontSize: 10,
                   whiteSpace: 'nowrap'
                 }}
               >
-                <span style={{ 
-                  width: 8, 
-                  height: 8, 
-                  borderRadius: '50%', 
-                  background: user.color || '#22c55e' 
-                }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: user.color || '#22c55e' }} />
                 <span style={{ color: darkMode ? 'white' : 'black' }}>
                   {user.name}{user.id === myId ? ' (vous)' : ''}
                 </span>
@@ -2632,13 +2685,13 @@ export default function ScreenplayEditor() {
           <div style={{ 
             flex: 1, 
             overflow: 'auto', 
-            padding: 16,
+            padding: 12,
             display: 'flex',
             flexDirection: 'column',
-            gap: 12
+            gap: 10
           }}>
             {chatMessages.length === 0 ? (
-              <p style={{ color: '#6b7280', textAlign: 'center', marginTop: 40, fontSize: 13 }}>
+              <p style={{ color: '#6b7280', textAlign: 'center', marginTop: 30, fontSize: 12 }}>
                 Aucun message.<br/>Commencez la conversation !
               </p>
             ) : (
@@ -2652,34 +2705,23 @@ export default function ScreenplayEditor() {
                   }}
                 >
                   {msg.senderId !== myId && (
-                    <span style={{ 
-                      fontSize: 10, 
-                      color: msg.senderColor || '#6b7280',
-                      marginBottom: 2,
-                      fontWeight: 'bold'
-                    }}>
+                    <span style={{ fontSize: 9, color: msg.senderColor || '#6b7280', marginBottom: 1, fontWeight: 'bold' }}>
                       {msg.senderName}
                     </span>
                   )}
                   <div style={{
-                    background: msg.senderId === myId 
-                      ? '#3b82f6' 
-                      : (darkMode ? '#374151' : '#f3f4f6'),
+                    background: msg.senderId === myId ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'),
                     color: msg.senderId === myId ? 'white' : (darkMode ? 'white' : 'black'),
-                    padding: '8px 12px',
-                    borderRadius: 12,
+                    padding: '6px 10px',
+                    borderRadius: 10,
                     maxWidth: '85%',
-                    fontSize: 13,
-                    lineHeight: 1.4,
+                    fontSize: 12,
+                    lineHeight: 1.3,
                     wordBreak: 'break-word'
                   }}>
                     {msg.content}
                   </div>
-                  <span style={{ 
-                    fontSize: 9, 
-                    color: '#6b7280', 
-                    marginTop: 2 
-                  }}>
+                  <span style={{ fontSize: 8, color: '#6b7280', marginTop: 1 }}>
                     {new Date(msg.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
@@ -2690,10 +2732,11 @@ export default function ScreenplayEditor() {
           
           {/* Input */}
           <div style={{ 
-            padding: 12, 
+            padding: 10, 
             borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
             display: 'flex',
-            gap: 8
+            gap: 6,
+            flexShrink: 0
           }}>
             <input
               value={chatInput}
@@ -2702,12 +2745,12 @@ export default function ScreenplayEditor() {
               placeholder="Message..."
               style={{
                 flex: 1,
-                padding: '10px 14px',
-                borderRadius: 20,
+                padding: '8px 12px',
+                borderRadius: 16,
                 border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
                 background: darkMode ? '#374151' : 'white',
                 color: darkMode ? 'white' : 'black',
-                fontSize: 13,
+                fontSize: 12,
                 outline: 'none'
               }}
             />
@@ -2715,14 +2758,14 @@ export default function ScreenplayEditor() {
               onClick={sendChatMessage}
               disabled={!chatInput.trim()}
               style={{
-                width: 40,
-                height: 40,
+                width: 34,
+                height: 34,
                 borderRadius: '50%',
                 border: 'none',
                 background: chatInput.trim() ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'),
                 color: chatInput.trim() ? 'white' : '#9ca3af',
                 cursor: chatInput.trim() ? 'pointer' : 'default',
-                fontSize: 16,
+                fontSize: 14,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
@@ -2739,7 +2782,7 @@ export default function ScreenplayEditor() {
         <div style={{
           position: 'fixed',
           bottom: 20,
-          right: showChat ? 340 : 20,
+          right: 20,
           background: darkMode ? '#1f2937' : 'white',
           border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
           borderRadius: 12,
