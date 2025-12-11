@@ -499,11 +499,11 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
         <div style={{ 
           padding: '12px 16px', 
           borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-          background: darkMode ? '#2d3748' : '#f9fafb',
+          background: 'white',
           flexShrink: 0
         }}>
           <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 6 }}>
-            Commenter sur : <span style={{ fontStyle: 'italic', color: darkMode ? '#d1d5db' : '#374151' }}>
+            Commenter sur : <span style={{ fontStyle: 'italic', color: '#374151' }}>
               "{elements[activeIndex].content.slice(0, 40)}{elements[activeIndex].content.length > 40 ? '...' : ''}"
             </span>
           </div>
@@ -516,13 +516,13 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                 style={{
                   width: '100%',
                   padding: 8,
-                  border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                  border: '1px solid #d1d5db',
                   borderRadius: 6,
                   fontSize: 12,
                   resize: 'vertical',
                   minHeight: 60,
-                  background: darkMode ? '#1f2937' : 'white',
-                  color: darkMode ? 'white' : 'black'
+                  background: 'white',
+                  color: 'black'
                 }}
                 autoFocus
               />
@@ -551,7 +551,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                     padding: '6px 12px',
                     background: 'transparent',
                     color: '#6b7280',
-                    border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                    border: '1px solid #d1d5db',
                     borderRadius: 4,
                     fontSize: 12,
                     cursor: 'pointer'
@@ -567,10 +567,10 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
               style={{
                 width: '100%',
                 padding: '8px 12px',
-                background: darkMode ? '#374151' : 'white',
-                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                background: '#f9fafb',
+                border: '1px solid #d1d5db',
                 borderRadius: 6,
-                color: '#6b7280',
+                color: '#374151',
                 fontSize: 12,
                 cursor: 'pointer',
                 textAlign: 'left'
@@ -1409,6 +1409,10 @@ export default function ScreenplayEditor() {
   const [renameTo, setRenameTo] = useState('');
   const [focusMode, setFocusMode] = useState(false);
   const [sceneAssignments, setSceneAssignments] = useState({}); // { sceneId: { userId, userName, userColor } }
+  const [knownUsers, setKnownUsers] = useState(() => {
+    const saved = localStorage.getItem('rooms-known-users');
+    return saved ? JSON.parse(saved) : [];
+  }); // All users who have ever accessed documents
   const [showTimer, setShowTimer] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -1419,22 +1423,8 @@ export default function ScreenplayEditor() {
   const [sessionWordCount, setSessionWordCount] = useState(0);
   const [sessionStartWords, setSessionStartWords] = useState(0);
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
-  const [outlineFilter, setOutlineFilter] = useState({ status: '', character: '', location: '', tag: '' });
-  const [customTags, setCustomTags] = useState(() => {
-    const saved = localStorage.getItem('rooms-custom-tags');
-    return saved ? JSON.parse(saved) : [
-      { id: 'action', name: 'Action', color: '#ef4444' },
-      { id: 'emotion', name: 'Émotion', color: '#8b5cf6' },
-      { id: 'flashback', name: 'Flashback', color: '#06b6d4' },
-      { id: 'montage', name: 'Montage', color: '#f59e0b' }
-    ];
-  });
-  const [sceneTags, setSceneTags] = useState(() => {
-    const saved = localStorage.getItem('rooms-scene-tags');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [outlineFilter, setOutlineFilter] = useState({ status: '', character: '' });
   const [showBeatSheet, setShowBeatSheet] = useState(false);
-  const [showTagsManager, setShowTagsManager] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [lastModifiedBy, setLastModifiedBy] = useState(null); // { userName, timestamp }
   const [undoStack, setUndoStack] = useState([]);
@@ -1630,7 +1620,20 @@ export default function ScreenplayEditor() {
     socket.on('element-type-updated', ({ index, type }) => setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = { ...u[index], type }; return u; }));
     socket.on('element-inserted', ({ afterIndex, element }) => setElements(p => { const u = [...p]; u.splice(afterIndex + 1, 0, element); return u; }));
     socket.on('element-deleted', ({ index }) => setElements(p => p.filter((_, i) => i !== index)));
-    socket.on('user-joined', ({ users }) => setUsers(users));
+    socket.on('user-joined', ({ users }) => {
+      setUsers(users);
+      // Add new users to knownUsers list
+      setKnownUsers(prev => {
+        const newKnown = [...prev];
+        users.forEach(u => {
+          if (!newKnown.find(k => k.name === u.name)) {
+            newKnown.push({ name: u.name, color: u.color });
+          }
+        });
+        localStorage.setItem('rooms-known-users', JSON.stringify(newKnown));
+        return newKnown;
+      });
+    });
     socket.on('user-left', ({ users }) => setUsers(users));
     socket.on('cursor-updated', ({ userId, cursor }) => setUsers(p => p.map(u => u.id === userId ? { ...u, cursor } : u)));
     socket.on('document-restored', ({ title, elements }) => { setTitle(title); setElements(elements); });
@@ -1652,7 +1655,20 @@ export default function ScreenplayEditor() {
     return () => socket.disconnect();
   }, [docId, token, playChatNotification]);
 
-  const handleLogin = (user, newToken) => { setCurrentUser(user); setToken(newToken); setShowAuthModal(false); };
+  const handleLogin = (user, newToken) => { 
+    setCurrentUser(user); 
+    setToken(newToken); 
+    setShowAuthModal(false);
+    // Add self to knownUsers
+    setKnownUsers(prev => {
+      if (!prev.find(k => k.name === user.name)) {
+        const newList = [...prev, { name: user.name, color: user.color || '#3b82f6' }];
+        localStorage.setItem('rooms-known-users', JSON.stringify(newList));
+        return newList;
+      }
+      return prev;
+    });
+  };
   const handleLogout = () => { localStorage.removeItem('screenplay-token'); localStorage.removeItem('screenplay-user'); setCurrentUser(null); setToken(null); };
 
   // Send chat message
@@ -1694,16 +1710,6 @@ export default function ScreenplayEditor() {
     }
   }, [chatMessages, docId]);
 
-  // Save custom tags to localStorage
-  useEffect(() => {
-    localStorage.setItem('rooms-custom-tags', JSON.stringify(customTags));
-  }, [customTags]);
-
-  // Save scene tags to localStorage
-  useEffect(() => {
-    localStorage.setItem('rooms-scene-tags', JSON.stringify(sceneTags));
-  }, [sceneTags]);
-
   // Load chat history from localStorage on mount
   useEffect(() => {
     if (docId) {
@@ -1723,12 +1729,14 @@ export default function ScreenplayEditor() {
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (isDraggingChat) {
+        e.preventDefault();
         setChatPosition({
           x: Math.max(0, Math.min(window.innerWidth - 320, e.clientX - dragOffsetRef.current.x)),
           y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffsetRef.current.y))
         });
       }
       if (isDraggingNote) {
+        e.preventDefault();
         setNotePosition({
           x: Math.max(0, Math.min(window.innerWidth - 400, e.clientX - dragOffsetRef.current.x)),
           y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffsetRef.current.y))
@@ -1738,8 +1746,12 @@ export default function ScreenplayEditor() {
     const handleMouseUp = () => {
       setIsDraggingChat(false);
       setIsDraggingNote(false);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
     };
     if (isDraggingChat || isDraggingNote) {
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'grabbing';
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     }
@@ -1883,11 +1895,9 @@ export default function ScreenplayEditor() {
       if (outlineFilter.status && sceneStatus[scene.id] !== outlineFilter.status) return false;
       // Filter by character
       if (outlineFilter.character && !scene.characters.includes(outlineFilter.character)) return false;
-      // Filter by tag
-      if (outlineFilter.tag && !(sceneTags[scene.id] || []).includes(outlineFilter.tag)) return false;
       return true;
     });
-  }, [outline, outlineFilter, sceneStatus, sceneTags]);
+  }, [outline, outlineFilter, sceneStatus]);
 
   // Find current scene based on activeIndex
   const currentSceneNumber = useMemo(() => {
@@ -2302,63 +2312,47 @@ export default function ScreenplayEditor() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, showWritingGoals, token, docId, title, elements, activeIndex, undo, redo, duplicateScene]);
 
-  // Typewriter sound effect - Web Audio API synthesis
-  const audioCtxRef = useRef(null);
+  // Typewriter sound effect - placeholder for custom audio files
+  // To add real typewriter sounds, place audio files in public folder and update URLs below
+  const typewriterAudioRef = useRef({
+    key: null,
+    enter: null,
+    backspace: null,
+    initialized: false
+  });
   
   const playTypewriterSound = useCallback((type = 'key') => {
     if (!typewriterSound) return;
     
+    // Initialize audio elements on first use
+    if (!typewriterAudioRef.current.initialized) {
+      typewriterAudioRef.current = {
+        initialized: true,
+        // Replace these URLs with your own typewriter sound files:
+        // key: new Audio('/sounds/typewriter-key.mp3'),
+        // enter: new Audio('/sounds/typewriter-return.mp3'),
+        // backspace: new Audio('/sounds/typewriter-backspace.mp3'),
+        key: null,
+        enter: null,
+        backspace: null
+      };
+    }
+    
+    const audio = typewriterAudioRef.current;
     try {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      if (type === 'enter' && audio.enter) {
+        audio.enter.currentTime = 0;
+        audio.enter.volume = 0.4;
+        audio.enter.play().catch(() => {});
+      } else if (type === 'backspace' && audio.backspace) {
+        audio.backspace.currentTime = 0;
+        audio.backspace.volume = 0.3;
+        audio.backspace.play().catch(() => {});
+      } else if (audio.key) {
+        audio.key.currentTime = 0;
+        audio.key.volume = 0.3;
+        audio.key.play().catch(() => {});
       }
-      const ctx = audioCtxRef.current;
-      const now = ctx.currentTime;
-      
-      // Create noise for mechanical sound
-      const bufferSize = ctx.sampleRate * 0.1;
-      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const output = noiseBuffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
-      }
-      
-      const noise = ctx.createBufferSource();
-      noise.buffer = noiseBuffer;
-      
-      // Filter to shape the sound
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      
-      const gain = ctx.createGain();
-      
-      if (type === 'enter') {
-        // Carriage return - deeper, longer sound
-        filter.frequency.value = 400;
-        filter.Q.value = 2;
-        gain.gain.setValueAtTime(0.4, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-        noise.stop(now + 0.15);
-      } else if (type === 'backspace') {
-        // Lighter click
-        filter.frequency.value = 2000;
-        filter.Q.value = 3;
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.03);
-        noise.stop(now + 0.03);
-      } else {
-        // Regular key - crisp mechanical clack with variation
-        filter.frequency.value = 800 + Math.random() * 600;
-        filter.Q.value = 2 + Math.random();
-        gain.gain.setValueAtTime(0.25 + Math.random() * 0.1, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.04 + Math.random() * 0.02);
-        noise.stop(now + 0.06);
-      }
-      
-      noise.connect(filter);
-      filter.connect(gain);
-      gain.connect(ctx.destination);
-      noise.start(now);
     } catch (e) {}
   }, [typewriterSound]);
 
@@ -2828,13 +2822,23 @@ export default function ScreenplayEditor() {
           </div>
           
           {/* Filters */}
-          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', gap: 8 }}>
             <select 
               value={outlineFilter.status} 
               onChange={e => setOutlineFilter(f => ({ ...f, status: e.target.value }))}
-              style={{ flex: 1, minWidth: 80, padding: '4px 6px', fontSize: 10, background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black' }}
+              style={{ 
+                flex: 1, 
+                padding: '6px 10px', 
+                fontSize: 11, 
+                background: darkMode ? '#374151' : 'white', 
+                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+                borderRadius: 6, 
+                color: darkMode ? 'white' : 'black',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
             >
-              <option value="">Statut</option>
+              <option value="">Tous les statuts</option>
               <option value="draft">Brouillon</option>
               <option value="review">Révision</option>
               <option value="final">Final</option>
@@ -2842,25 +2846,25 @@ export default function ScreenplayEditor() {
             <select 
               value={outlineFilter.character} 
               onChange={e => setOutlineFilter(f => ({ ...f, character: e.target.value }))}
-              style={{ flex: 1, minWidth: 80, padding: '4px 6px', fontSize: 10, background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black' }}
+              style={{ 
+                flex: 1, 
+                padding: '6px 10px', 
+                fontSize: 11, 
+                background: darkMode ? '#374151' : 'white', 
+                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+                borderRadius: 6, 
+                color: darkMode ? 'white' : 'black',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
             >
-              <option value="">Personnage</option>
+              <option value="">Tous les personnages</option>
               {[...new Set(elements.filter(e => e.type === 'character').map(e => e.content.toUpperCase()))].sort().map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
-            <select 
-              value={outlineFilter.tag} 
-              onChange={e => setOutlineFilter(f => ({ ...f, tag: e.target.value }))}
-              style={{ flex: 1, minWidth: 80, padding: '4px 6px', fontSize: 10, background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black' }}
-            >
-              <option value="">Tag</option>
-              {customTags.map(tag => (
-                <option key={tag.id} value={tag.id}>{tag.name}</option>
-              ))}
-            </select>
-            {(outlineFilter.status || outlineFilter.character || outlineFilter.tag) && (
-              <button onClick={() => setOutlineFilter({ status: '', character: '', location: '', tag: '' })} style={{ padding: '4px 8px', fontSize: 9, background: '#ef4444', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer' }}>✕</button>
+            {(outlineFilter.status || outlineFilter.character) && (
+              <button onClick={() => setOutlineFilter({ status: '', character: '' })} style={{ padding: '6px 10px', fontSize: 11, background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer' }}>✕</button>
             )}
           </div>
           
@@ -2881,7 +2885,7 @@ export default function ScreenplayEditor() {
                       background: darkMode ? '#374151' : '#f3f4f6', 
                       borderRadius: 8,
                       cursor: 'pointer',
-                      borderLeft: `3px solid ${customTags.find(t => (sceneTags[scene.id] || [])[0] === t.id)?.color || '#6b7280'}`
+                      borderLeft: `3px solid ${sceneStatus[scene.id] === 'final' ? '#22c55e' : sceneStatus[scene.id] === 'review' ? '#f59e0b' : '#6b7280'}`
                     }}
                   >
                     <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>
@@ -2992,61 +2996,23 @@ export default function ScreenplayEditor() {
                     >
                       {sceneStatus[scene.id] === 'final' ? '✓' : sceneStatus[scene.id] === 'review' ? '◐' : '○'}
                     </button>
-                    {/* Tags */}
+                    {/* User Assignment - cycles through known users */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Cycle through tags
-                        const currentTags = sceneTags[scene.id] || [];
-                        const tagIdx = currentTags.length > 0 
-                          ? customTags.findIndex(t => t.id === currentTags[0]) 
-                          : -1;
-                        const nextIdx = (tagIdx + 2) % (customTags.length + 1) - 1;
-                        if (nextIdx >= 0) {
-                          setSceneTags(prev => ({ ...prev, [scene.id]: [customTags[nextIdx].id] }));
-                        } else {
-                          setSceneTags(prev => {
-                            const newTags = { ...prev };
-                            delete newTags[scene.id];
-                            return newTags;
-                          });
-                        }
-                      }}
-                      style={{ 
-                        background: sceneTags[scene.id]?.length > 0 
-                          ? customTags.find(t => t.id === sceneTags[scene.id][0])?.color || 'transparent'
-                          : 'transparent',
-                        border: sceneTags[scene.id]?.length > 0 ? 'none' : '1px dashed #6b7280',
-                        cursor: 'pointer', 
-                        fontSize: 8, 
-                        padding: '2px 4px',
-                        borderRadius: 3,
-                        color: 'white',
-                        minWidth: 12
-                      }}
-                      title={sceneTags[scene.id]?.length > 0 
-                        ? customTags.find(t => t.id === sceneTags[scene.id][0])?.name 
-                        : 'Ajouter tag'}
-                    >
-                      {sceneTags[scene.id]?.length > 0 ? '●' : ''}
-                    </button>
-                    {/* User Assignment */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Cycle through users (including "none")
-                        const allUsers = [null, ...users];
+                        // Cycle through known users (including "none")
+                        const allKnown = [null, ...knownUsers];
                         const currentAssignment = sceneAssignments[scene.id];
                         const currentIdx = currentAssignment 
-                          ? allUsers.findIndex(u => u?.id === currentAssignment.userId)
+                          ? allKnown.findIndex(u => u?.name === currentAssignment.userName)
                           : 0;
-                        const nextIdx = (currentIdx + 1) % allUsers.length;
-                        const nextUser = allUsers[nextIdx];
+                        const nextIdx = (currentIdx + 1) % allKnown.length;
+                        const nextUser = allKnown[nextIdx];
                         if (nextUser) {
                           setSceneAssignments(prev => ({ 
                             ...prev, 
                             [scene.id]: { 
-                              userId: nextUser.id, 
+                              odName: nextUser.name, 
                               userName: nextUser.name, 
                               userColor: nextUser.color 
                             } 
@@ -3060,21 +3026,21 @@ export default function ScreenplayEditor() {
                         }
                       }}
                       style={{ 
-                        width: 16, 
-                        height: 16, 
-                        borderRadius: '50%', 
+                        minWidth: 18,
+                        height: 18, 
+                        borderRadius: 4, 
                         border: sceneAssignments[scene.id] ? 'none' : `1px dashed #6b7280`, 
                         background: sceneAssignments[scene.id]?.userColor || 'transparent', 
                         cursor: 'pointer', 
-                        padding: 0,
-                        fontSize: 8,
+                        padding: '0 4px',
+                        fontSize: 9,
                         fontWeight: 'bold',
                         color: 'white',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center'
                       }}
-                      title={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner un utilisateur'}
+                      title={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner'}
                     >
                       {sceneAssignments[scene.id]?.userName?.charAt(0).toUpperCase() || ''}
                     </button>
@@ -3248,9 +3214,6 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { setShowWritingGoals(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>🎯 Objectif d'écriture</span>
                       <span style={{ fontSize: 10, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : '#6b7280' }}>{Math.round((writingGoal.todayWords / writingGoal.daily) * 100)}%</span>
-                    </button>
-                    <button onClick={() => { setShowTagsManager(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      🏷️ Gérer les tags
                     </button>
                     <button onClick={() => { setShowShortcuts(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>⌨️ Raccourcis</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
@@ -3429,47 +3392,6 @@ export default function ScreenplayEditor() {
             dragOffsetRef.current = { x: e.clientX - notePosition.x, y: e.clientY - notePosition.y };
           }}
         />
-      )}
-      
-      {/* Tags Manager Modal */}
-      {showTagsManager && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowTagsManager(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: 400, maxHeight: '80vh', overflow: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, color: darkMode ? 'white' : 'black' }}>🏷️ Gérer les tags</h3>
-              <button onClick={() => setShowTagsManager(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20 }}>✕</button>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-              {customTags.map((tag, idx) => (
-                <div key={tag.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: darkMode ? '#374151' : '#f3f4f6', borderRadius: 6 }}>
-                  <input 
-                    type="color" 
-                    value={tag.color} 
-                    onChange={e => setCustomTags(prev => prev.map((t, i) => i === idx ? { ...t, color: e.target.value } : t))}
-                    style={{ width: 32, height: 32, border: 'none', borderRadius: 4, cursor: 'pointer' }}
-                  />
-                  <input 
-                    value={tag.name}
-                    onChange={e => setCustomTags(prev => prev.map((t, i) => i === idx ? { ...t, name: e.target.value } : t))}
-                    style={{ flex: 1, padding: '6px 10px', background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 4, color: darkMode ? 'white' : 'black', fontSize: 14 }}
-                  />
-                  <button 
-                    onClick={() => setCustomTags(prev => prev.filter((_, i) => i !== idx))}
-                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16 }}
-                  >✕</button>
-                </div>
-              ))}
-            </div>
-            
-            <button 
-              onClick={() => setCustomTags(prev => [...prev, { id: `tag-${Date.now()}`, name: 'Nouveau tag', color: '#6b7280' }])}
-              style={{ width: '100%', padding: '10px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 14 }}
-            >
-              + Ajouter un tag
-            </button>
-          </div>
-        </div>
       )}
       
       {/* Shortcuts Panel */}
