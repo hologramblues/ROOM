@@ -1412,6 +1412,9 @@ export default function ScreenplayEditor() {
   const [showStats, setShowStats] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
+  const [timerMode, setTimerMode] = useState('chrono'); // 'chrono' or 'sprint'
+  const [sprintDuration, setSprintDuration] = useState(25 * 60); // 25 minutes default
+  const [sprintTimeLeft, setSprintTimeLeft] = useState(25 * 60);
   const [sessionWordCount, setSessionWordCount] = useState(0);
   const [sessionStartWords, setSessionStartWords] = useState(0);
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
@@ -1944,16 +1947,36 @@ export default function ScreenplayEditor() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // Writing timer
+  // Writing timer - supports both chrono (count up) and sprint (countdown) modes
   useEffect(() => {
     let interval;
     if (timerRunning) {
       interval = setInterval(() => {
-        setTimerSeconds(s => s + 1);
+        if (timerMode === 'chrono') {
+          setTimerSeconds(s => s + 1);
+        } else {
+          // Sprint mode - countdown
+          setSprintTimeLeft(t => {
+            if (t <= 1) {
+              // Sprint finished!
+              setTimerRunning(false);
+              // Play sound notification
+              try {
+                const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleB8LZKzW8NJ2KQ5TiMD6zYI+E0R1sbznl0gaMmKe0eOmWyAbJ0+Ax+e+fD8kXqLk9Nhnf0lVhKSsloFzYGJ6mamgejEgI0RtiJuTfl9OUUZ9oL62p4JlPUBakL7NoIVpKnuq1c2RUy4qXIvG7MB3QiQ4WpTK76tiOipGe6/e2aFXMSVCcKPk7MJqPSZAX5XX8NN9QwkqXJjH3pd5MChLkdT+wpqBVzI0');
+                audio.play().catch(() => {});
+              } catch (e) {}
+              // Show alert
+              alert('🎉 Sprint terminé ! Bravo !');
+              return sprintDuration; // Reset for next sprint
+            }
+            return t - 1;
+          });
+          setTimerSeconds(s => s + 1); // Still track total time
+        }
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [timerRunning]);
+  }, [timerRunning, timerMode, sprintDuration]);
 
   // Track session word count
   useEffect(() => {
@@ -1970,6 +1993,14 @@ export default function ScreenplayEditor() {
     setTimerRunning(false);
     setSessionWordCount(0);
     setSessionStartWords(0);
+    setSprintTimeLeft(sprintDuration);
+  };
+
+  // Change sprint duration
+  const setSprintMinutes = (minutes) => {
+    const seconds = minutes * 60;
+    setSprintDuration(seconds);
+    setSprintTimeLeft(seconds);
   };
 
   // Track element positions and scroll for comments sync (Google Docs style)
@@ -2745,8 +2776,8 @@ export default function ScreenplayEditor() {
             <>
               {/* VIEW MENU */}
               <div style={{ position: 'relative' }}>
-                <button onClick={(e) => { e.stopPropagation(); setShowViewMenu(!showViewMenu); setShowToolsMenu(false); setShowDocMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: (showOutline || showCharactersPanel || showSceneNumbers) ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }}>
-                  Affichage ▾
+                <button onClick={(e) => { e.stopPropagation(); setShowViewMenu(!showViewMenu); setShowToolsMenu(false); setShowDocMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: (showOutline || showCharactersPanel || showSceneNumbers || showComments) ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12, position: 'relative' }}>
+                  Affichage ▾ {totalComments > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#f59e0b', color: 'black', fontSize: 9, padding: '1px 4px', borderRadius: 8 }}>{totalComments}</span>}
                 </button>
                 {showViewMenu && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
@@ -2755,6 +2786,9 @@ export default function ScreenplayEditor() {
                     </button>
                     <button onClick={() => { setShowCharactersPanel(!showCharactersPanel); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showCharactersPanel ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       👥 Personnages
+                    </button>
+                    <button onClick={() => { setShowComments(!showComments); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showComments ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>💬 Commentaires</span>{totalComments > 0 && <span style={{ background: '#f59e0b', color: 'black', fontSize: 10, padding: '1px 6px', borderRadius: 8 }}>{totalComments}</span>}
                     </button>
                     <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       # Numéros de scènes
@@ -2765,16 +2799,6 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { setFocusMode(!focusMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: focusMode ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       🎯 Mode focus {focusMode && '✓'}
                     </button>
-                    <button onClick={() => { setShowTimer(!showTimer); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showTimer ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      ⏱️ Timer d'écriture {showTimer && '✓'}
-                    </button>
-                    <button onClick={() => { setShowStats(true); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      📊 Statistiques
-                    </button>
-                    <button onClick={() => { setShowWritingGoals(true); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>🎯 Objectif d'écriture</span>
-                      <span style={{ fontSize: 10, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : '#6b7280' }}>{Math.round((writingGoal.todayWords / writingGoal.daily) * 100)}%</span>
-                    </button>
                     <button onClick={() => { setShowGoToScene(true); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>🎬 Aller à la scène</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘G</span>
                     </button>
@@ -2784,8 +2808,8 @@ export default function ScreenplayEditor() {
               
               {/* TOOLS MENU */}
               <div style={{ position: 'relative' }}>
-                <button onClick={(e) => { e.stopPropagation(); setShowToolsMenu(!showToolsMenu); setShowViewMenu(false); setShowDocMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: showComments ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12, position: 'relative' }}>
-                  Outils ▾ {totalComments > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#f59e0b', color: 'black', fontSize: 9, padding: '1px 4px', borderRadius: 8 }}>{totalComments}</span>}
+                <button onClick={(e) => { e.stopPropagation(); setShowToolsMenu(!showToolsMenu); setShowViewMenu(false); setShowDocMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12, position: 'relative' }}>
+                  Outils ▾
                 </button>
                 {showToolsMenu && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
@@ -2798,8 +2822,15 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { setShowRenameChar(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       ✏️ Renommer personnage
                     </button>
-                    <button onClick={() => { setShowComments(!showComments); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showComments ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>💬 Commentaires</span>{totalComments > 0 && <span style={{ background: '#f59e0b', color: 'black', fontSize: 10, padding: '1px 6px', borderRadius: 8 }}>{totalComments}</span>}
+                    <button onClick={() => { setShowTimer(!showTimer); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showTimer ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      ⏱️ Timer d'écriture {showTimer && '✓'}
+                    </button>
+                    <button onClick={() => { setShowStats(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      📊 Statistiques
+                    </button>
+                    <button onClick={() => { setShowWritingGoals(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>🎯 Objectif d'écriture</span>
+                      <span style={{ fontSize: 10, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : '#6b7280' }}>{Math.round((writingGoal.todayWords / writingGoal.daily) * 100)}%</span>
                     </button>
                     <button onClick={() => { setShowShortcuts(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>⌨️ Raccourcis</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
@@ -3211,15 +3242,77 @@ export default function ScreenplayEditor() {
           padding: 16,
           boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
           zIndex: 200,
-          minWidth: 180
+          minWidth: 220
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: '#6b7280' }}>⏱️ Timer</span>
             <button onClick={() => setShowTimer(false)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 14 }}>✕</button>
           </div>
-          <div style={{ fontSize: 32, fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center', color: darkMode ? 'white' : 'black', marginBottom: 8 }}>
-            {formatTime(timerSeconds)}
+          
+          {/* Mode selector */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 6, padding: 3 }}>
+            <button 
+              onClick={() => { setTimerMode('chrono'); if (!timerRunning) resetTimer(); }}
+              style={{ 
+                flex: 1, 
+                padding: '6px 10px', 
+                background: timerMode === 'chrono' ? (darkMode ? '#1f2937' : 'white') : 'transparent', 
+                border: 'none', 
+                borderRadius: 4, 
+                color: timerMode === 'chrono' ? (darkMode ? 'white' : 'black') : '#6b7280', 
+                cursor: 'pointer', 
+                fontSize: 11,
+                fontWeight: timerMode === 'chrono' ? 600 : 400
+              }}
+            >
+              ⏱️ Chrono
+            </button>
+            <button 
+              onClick={() => { setTimerMode('sprint'); if (!timerRunning) { resetTimer(); setSprintTimeLeft(sprintDuration); } }}
+              style={{ 
+                flex: 1, 
+                padding: '6px 10px', 
+                background: timerMode === 'sprint' ? (darkMode ? '#1f2937' : 'white') : 'transparent', 
+                border: 'none', 
+                borderRadius: 4, 
+                color: timerMode === 'sprint' ? (darkMode ? 'white' : 'black') : '#6b7280', 
+                cursor: 'pointer', 
+                fontSize: 11,
+                fontWeight: timerMode === 'sprint' ? 600 : 400
+              }}
+            >
+              🏃 Sprint
+            </button>
           </div>
+          
+          {/* Timer display */}
+          <div style={{ fontSize: 32, fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center', color: timerMode === 'sprint' && sprintTimeLeft < 60 ? '#ef4444' : (darkMode ? 'white' : 'black'), marginBottom: 8 }}>
+            {timerMode === 'chrono' ? formatTime(timerSeconds) : formatTime(sprintTimeLeft)}
+          </div>
+          
+          {/* Sprint duration selector */}
+          {timerMode === 'sprint' && !timerRunning && (
+            <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 12 }}>
+              {[15, 25, 45, 60].map(mins => (
+                <button 
+                  key={mins}
+                  onClick={() => setSprintMinutes(mins)}
+                  style={{ 
+                    padding: '4px 8px', 
+                    background: sprintDuration === mins * 60 ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), 
+                    border: 'none', 
+                    borderRadius: 4, 
+                    color: sprintDuration === mins * 60 ? 'white' : (darkMode ? '#d1d5db' : '#374151'), 
+                    cursor: 'pointer', 
+                    fontSize: 10 
+                  }}
+                >
+                  {mins}m
+                </button>
+              ))}
+            </div>
+          )}
+          
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
             <button 
               onClick={() => setTimerRunning(!timerRunning)}
