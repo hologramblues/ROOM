@@ -1419,6 +1419,22 @@ export default function ScreenplayEditor() {
   const [sessionWordCount, setSessionWordCount] = useState(0);
   const [sessionStartWords, setSessionStartWords] = useState(0);
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
+  const [outlineFilter, setOutlineFilter] = useState({ status: '', character: '', location: '', tag: '' });
+  const [customTags, setCustomTags] = useState(() => {
+    const saved = localStorage.getItem('rooms-custom-tags');
+    return saved ? JSON.parse(saved) : [
+      { id: 'action', name: 'Action', color: '#ef4444' },
+      { id: 'emotion', name: 'Émotion', color: '#8b5cf6' },
+      { id: 'flashback', name: 'Flashback', color: '#06b6d4' },
+      { id: 'montage', name: 'Montage', color: '#f59e0b' }
+    ];
+  });
+  const [sceneTags, setSceneTags] = useState(() => {
+    const saved = localStorage.getItem('rooms-scene-tags');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [showBeatSheet, setShowBeatSheet] = useState(false);
+  const [showTagsManager, setShowTagsManager] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [lastModifiedBy, setLastModifiedBy] = useState(null); // { userName, timestamp }
   const [undoStack, setUndoStack] = useState([]);
@@ -1440,6 +1456,7 @@ export default function ScreenplayEditor() {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [chatNotificationSound, setChatNotificationSound] = useState(true);
   const [chatPosition, setChatPosition] = useState({ x: window.innerWidth - 340, y: 80 });
   const [notePosition, setNotePosition] = useState({ x: window.innerWidth / 2 - 200, y: window.innerHeight / 2 - 150 });
   const [isDraggingChat, setIsDraggingChat] = useState(false);
@@ -1448,6 +1465,35 @@ export default function ScreenplayEditor() {
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
   const chatEndRef = useRef(null);
+  const chatNotificationSoundRef = useRef(chatNotificationSound);
+  
+  // Keep ref in sync
+  useEffect(() => {
+    chatNotificationSoundRef.current = chatNotificationSound;
+  }, [chatNotificationSound]);
+  
+  // Chat notification audio - Web Audio synthesis
+  const playChatNotification = useCallback(() => {
+    if (!chatNotificationSoundRef.current) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = ctx.currentTime;
+      
+      // Create pleasant notification chime (two notes)
+      [880, 1100].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.3, now + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.1);
+        osc.stop(now + i * 0.1 + 0.2);
+      });
+    } catch (e) {}
+  }, []);
 
   useEffect(() => {
     const handleHash = () => { 
@@ -1598,12 +1644,13 @@ export default function ScreenplayEditor() {
       // Increment unread if chat is closed and message is from someone else
       if (message.senderId !== socket.id) {
         setUnreadMessages(prev => prev + 1);
+        playChatNotification();
       }
     });
     socket.on('chat-history', (messages) => setChatMessages(messages));
     
     return () => socket.disconnect();
-  }, [docId, token]);
+  }, [docId, token, playChatNotification]);
 
   const handleLogin = (user, newToken) => { setCurrentUser(user); setToken(newToken); setShowAuthModal(false); };
   const handleLogout = () => { localStorage.removeItem('screenplay-token'); localStorage.removeItem('screenplay-user'); setCurrentUser(null); setToken(null); };
@@ -1639,6 +1686,38 @@ export default function ScreenplayEditor() {
       setUnreadMessages(0);
     }
   }, [showChat]);
+
+  // Save chat history to localStorage
+  useEffect(() => {
+    if (docId && chatMessages.length > 0) {
+      localStorage.setItem(`rooms-chat-${docId}`, JSON.stringify(chatMessages.slice(-100))); // Keep last 100 messages
+    }
+  }, [chatMessages, docId]);
+
+  // Save custom tags to localStorage
+  useEffect(() => {
+    localStorage.setItem('rooms-custom-tags', JSON.stringify(customTags));
+  }, [customTags]);
+
+  // Save scene tags to localStorage
+  useEffect(() => {
+    localStorage.setItem('rooms-scene-tags', JSON.stringify(sceneTags));
+  }, [sceneTags]);
+
+  // Load chat history from localStorage on mount
+  useEffect(() => {
+    if (docId) {
+      const saved = localStorage.getItem(`rooms-chat-${docId}`);
+      if (saved) {
+        try {
+          const messages = JSON.parse(saved);
+          if (messages.length > 0 && chatMessages.length === 0) {
+            setChatMessages(messages);
+          }
+        } catch (e) {}
+      }
+    }
+  }, [docId]); // eslint-disable-line
 
   // Drag handlers for floating panels
   useEffect(() => {
@@ -1733,8 +1812,23 @@ export default function ScreenplayEditor() {
         break;
       }
     }
-    return currentSceneId && lockedScenes.has(currentSceneId);
-  }, [elements, lockedScenes]);
+    
+    // Check if globally locked
+    if (currentSceneId && lockedScenes.has(currentSceneId)) {
+      return true;
+    }
+    
+    // Check if assigned to another user (user-specific lock)
+    if (currentSceneId && sceneAssignments[currentSceneId]) {
+      const assignment = sceneAssignments[currentSceneId];
+      // If assigned to someone else, it's locked for current user
+      if (assignment.userId && assignment.userId !== myId) {
+        return true;
+      }
+    }
+    
+    return false;
+  }, [elements, lockedScenes, sceneAssignments, myId]);
   const commentCounts = useMemo(() => { const counts = {}; comments.filter(c => !c.resolved).forEach(c => { counts[c.elementId] = (counts[c.elementId] || 0) + 1; }); return counts; }, [comments]);
   const totalComments = comments.filter(c => !c.resolved).length;
 
@@ -1751,18 +1845,22 @@ export default function ScreenplayEditor() {
       }
     });
     
-    // Second pass: calculate word count for each scene
+    // Second pass: calculate word count and characters for each scene
     elements.forEach((el, idx) => {
       if (el.type === 'scene') {
         sceneNumber++;
         const sceneIdx = sceneIndices.indexOf(idx);
         const nextSceneIdx = sceneIndices[sceneIdx + 1] || elements.length;
         
-        // Count words in this scene's content
+        // Count words and collect characters in this scene
         let wordCount = 0;
+        const sceneCharacters = new Set();
         for (let i = idx; i < nextSceneIdx; i++) {
           const content = elements[i]?.content || '';
           wordCount += content.trim().split(/\s+/).filter(w => w).length;
+          if (elements[i]?.type === 'character') {
+            sceneCharacters.add(content.toUpperCase());
+          }
         }
         
         scenes.push({
@@ -1770,12 +1868,26 @@ export default function ScreenplayEditor() {
           number: sceneNumber,
           content: el.content || '(sans titre)',
           id: el.id,
-          wordCount
+          wordCount,
+          characters: [...sceneCharacters]
         });
       }
     });
     return scenes;
   }, [elements]);
+
+  // Filtered outline based on filters
+  const filteredOutline = useMemo(() => {
+    return outline.filter(scene => {
+      // Filter by status
+      if (outlineFilter.status && sceneStatus[scene.id] !== outlineFilter.status) return false;
+      // Filter by character
+      if (outlineFilter.character && !scene.characters.includes(outlineFilter.character)) return false;
+      // Filter by tag
+      if (outlineFilter.tag && !(sceneTags[scene.id] || []).includes(outlineFilter.tag)) return false;
+      return true;
+    });
+  }, [outline, outlineFilter, sceneStatus, sceneTags]);
 
   // Find current scene based on activeIndex
   const currentSceneNumber = useMemo(() => {
@@ -2190,63 +2302,77 @@ export default function ScreenplayEditor() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, showWritingGoals, token, docId, title, elements, activeIndex, undo, redo, duplicateScene]);
 
-  // Typewriter sound effect - realistic mechanical clack
-  const audioContextRef = useRef(null);
-  const noiseBufferRef = useRef(null);
+  // Typewriter sound effect - Web Audio API synthesis
+  const audioCtxRef = useRef(null);
   
-  const playTypewriterSound = useCallback(() => {
+  const playTypewriterSound = useCallback((type = 'key') => {
     if (!typewriterSound) return;
+    
     try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        // Create noise buffer once
-        const ctx = audioContextRef.current;
-        const bufferSize = ctx.sampleRate * 0.1; // 100ms of noise
-        noiseBufferRef.current = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const output = noiseBufferRef.current.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          output[i] = Math.random() * 2 - 1;
-        }
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      const now = ctx.currentTime;
+      
+      // Create noise for mechanical sound
+      const bufferSize = ctx.sampleRate * 0.1;
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
       }
       
-      const ctx = audioContextRef.current;
+      const noise = ctx.createBufferSource();
+      noise.buffer = noiseBuffer;
       
-      // Create noise source
-      const noiseSource = ctx.createBufferSource();
-      noiseSource.buffer = noiseBufferRef.current;
-      
-      // Filter for mechanical sound
+      // Filter to shape the sound
       const filter = ctx.createBiquadFilter();
       filter.type = 'bandpass';
-      filter.frequency.value = 1000 + Math.random() * 500;
-      filter.Q.value = 1;
       
-      // Envelope for sharp attack
-      const gainNode = ctx.createGain();
-      const now = ctx.currentTime;
-      gainNode.gain.setValueAtTime(0, now);
-      gainNode.gain.linearRampToValueAtTime(0.3, now + 0.002); // Fast attack
-      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.04); // Quick decay
+      const gain = ctx.createGain();
       
-      // Connect
-      noiseSource.connect(filter);
-      filter.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      if (type === 'enter') {
+        // Carriage return - deeper, longer sound
+        filter.frequency.value = 400;
+        filter.Q.value = 2;
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        noise.stop(now + 0.15);
+      } else if (type === 'backspace') {
+        // Lighter click
+        filter.frequency.value = 2000;
+        filter.Q.value = 3;
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.03);
+        noise.stop(now + 0.03);
+      } else {
+        // Regular key - crisp mechanical clack with variation
+        filter.frequency.value = 800 + Math.random() * 600;
+        filter.Q.value = 2 + Math.random();
+        gain.gain.setValueAtTime(0.25 + Math.random() * 0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.04 + Math.random() * 0.02);
+        noise.stop(now + 0.06);
+      }
       
-      noiseSource.start(now);
-      noiseSource.stop(now + 0.05);
-    } catch (e) {
-      // Audio not supported
-    }
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start(now);
+    } catch (e) {}
   }, [typewriterSound]);
 
   // Typewriter sound on keypress
   useEffect(() => {
     if (!typewriterSound) return;
     const handleKeyPress = (e) => {
-      // Only play sound for printable characters (not modifiers, arrows, etc.)
-      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
-        playTypewriterSound();
+      // Different sounds for different keys
+      if (e.key === 'Enter') {
+        playTypewriterSound('enter');
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        playTypewriterSound('backspace');
+      } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
+        playTypewriterSound('key');
       }
     };
     window.addEventListener('keydown', handleKeyPress);
@@ -2391,19 +2517,24 @@ export default function ScreenplayEditor() {
     }
     if (e.key === 'Backspace' && el.content === '' && elements.length > 1) { e.preventDefault(); deleteElement(index); }
     
-    // Smart arrow navigation: move to next/prev element when at bounds
+    // Smart arrow navigation: move to next/prev element when at last/first line
     if (e.key === 'ArrowDown' && !e.metaKey && !e.ctrlKey) {
-      const cursorAtEnd = textarea.selectionStart === el.content.length && textarea.selectionEnd === el.content.length;
-      const isSingleLine = !el.content.includes('\n');
-      if ((cursorAtEnd || isSingleLine) && index < elements.length - 1) {
+      const cursorPos = textarea.selectionStart;
+      const textBeforeCursor = el.content.substring(0, cursorPos);
+      const textAfterCursor = el.content.substring(cursorPos);
+      const isOnLastLine = !textAfterCursor.includes('\n');
+      
+      if (isOnLastLine && index < elements.length - 1) {
         e.preventDefault();
         setActiveIndex(index + 1);
       }
     }
     if (e.key === 'ArrowUp' && !e.metaKey && !e.ctrlKey) {
-      const cursorAtStart = textarea.selectionStart === 0 && textarea.selectionEnd === 0;
-      const isSingleLine = !el.content.includes('\n');
-      if ((cursorAtStart || isSingleLine) && index > 0) {
+      const cursorPos = textarea.selectionStart;
+      const textBeforeCursor = el.content.substring(0, cursorPos);
+      const isOnFirstLine = !textBeforeCursor.includes('\n');
+      
+      if (isOnFirstLine && index > 0) {
         e.preventDefault();
         setActiveIndex(index - 1);
       }
@@ -2690,13 +2821,83 @@ export default function ScreenplayEditor() {
         }}>
           <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>📋 Outline</h3>
-            <button onClick={() => setShowOutline(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button onClick={() => setShowBeatSheet(!showBeatSheet)} style={{ background: showBeatSheet ? '#3b82f6' : 'none', border: 'none', color: showBeatSheet ? 'white' : '#9ca3af', cursor: 'pointer', fontSize: 12, padding: '2px 6px', borderRadius: 4 }} title="Beat Sheet">📝</button>
+              <button onClick={() => setShowOutline(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+            </div>
           </div>
+          
+          {/* Filters */}
+          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <select 
+              value={outlineFilter.status} 
+              onChange={e => setOutlineFilter(f => ({ ...f, status: e.target.value }))}
+              style={{ flex: 1, minWidth: 80, padding: '4px 6px', fontSize: 10, background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black' }}
+            >
+              <option value="">Statut</option>
+              <option value="draft">Brouillon</option>
+              <option value="review">Révision</option>
+              <option value="final">Final</option>
+            </select>
+            <select 
+              value={outlineFilter.character} 
+              onChange={e => setOutlineFilter(f => ({ ...f, character: e.target.value }))}
+              style={{ flex: 1, minWidth: 80, padding: '4px 6px', fontSize: 10, background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black' }}
+            >
+              <option value="">Personnage</option>
+              {[...new Set(elements.filter(e => e.type === 'character').map(e => e.content.toUpperCase()))].sort().map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <select 
+              value={outlineFilter.tag} 
+              onChange={e => setOutlineFilter(f => ({ ...f, tag: e.target.value }))}
+              style={{ flex: 1, minWidth: 80, padding: '4px 6px', fontSize: 10, background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black' }}
+            >
+              <option value="">Tag</option>
+              {customTags.map(tag => (
+                <option key={tag.id} value={tag.id}>{tag.name}</option>
+              ))}
+            </select>
+            {(outlineFilter.status || outlineFilter.character || outlineFilter.tag) && (
+              <button onClick={() => setOutlineFilter({ status: '', character: '', location: '', tag: '' })} style={{ padding: '4px 8px', fontSize: 9, background: '#ef4444', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer' }}>✕</button>
+            )}
+          </div>
+          
           <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
-            {outline.length === 0 ? (
-              <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>Aucune scène</p>
+            {filteredOutline.length === 0 ? (
+              <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>
+                {outline.length === 0 ? 'Aucune scène' : 'Aucun résultat'}
+              </p>
+            ) : showBeatSheet ? (
+              // Beat Sheet Mode - condensed synopsis view
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {filteredOutline.map(scene => (
+                  <div 
+                    key={scene.id}
+                    onClick={() => navigateToScene(scene.index)}
+                    style={{ 
+                      padding: 10, 
+                      background: darkMode ? '#374151' : '#f3f4f6', 
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      borderLeft: `3px solid ${customTags.find(t => (sceneTags[scene.id] || [])[0] === t.id)?.color || '#6b7280'}`
+                    }}
+                  >
+                    <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>
+                      Scène {scene.number} • {scene.wordCount}m
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 'bold', color: darkMode ? 'white' : 'black', marginBottom: 6 }}>
+                      {scene.content}
+                    </div>
+                    <div style={{ fontSize: 11, color: darkMode ? '#d1d5db' : '#4b5563', fontStyle: 'italic' }}>
+                      {sceneSynopsis[scene.id] || '(pas de synopsis)'}
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
-              outline.map(scene => (
+              filteredOutline.map(scene => (
                 <div
                   key={scene.id}
                   onClick={() => navigateToScene(scene.index)}
@@ -2790,6 +2991,44 @@ export default function ScreenplayEditor() {
                       title="Statut"
                     >
                       {sceneStatus[scene.id] === 'final' ? '✓' : sceneStatus[scene.id] === 'review' ? '◐' : '○'}
+                    </button>
+                    {/* Tags */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Cycle through tags
+                        const currentTags = sceneTags[scene.id] || [];
+                        const tagIdx = currentTags.length > 0 
+                          ? customTags.findIndex(t => t.id === currentTags[0]) 
+                          : -1;
+                        const nextIdx = (tagIdx + 2) % (customTags.length + 1) - 1;
+                        if (nextIdx >= 0) {
+                          setSceneTags(prev => ({ ...prev, [scene.id]: [customTags[nextIdx].id] }));
+                        } else {
+                          setSceneTags(prev => {
+                            const newTags = { ...prev };
+                            delete newTags[scene.id];
+                            return newTags;
+                          });
+                        }
+                      }}
+                      style={{ 
+                        background: sceneTags[scene.id]?.length > 0 
+                          ? customTags.find(t => t.id === sceneTags[scene.id][0])?.color || 'transparent'
+                          : 'transparent',
+                        border: sceneTags[scene.id]?.length > 0 ? 'none' : '1px dashed #6b7280',
+                        cursor: 'pointer', 
+                        fontSize: 8, 
+                        padding: '2px 4px',
+                        borderRadius: 3,
+                        color: 'white',
+                        minWidth: 12
+                      }}
+                      title={sceneTags[scene.id]?.length > 0 
+                        ? customTags.find(t => t.id === sceneTags[scene.id][0])?.name 
+                        : 'Ajouter tag'}
+                    >
+                      {sceneTags[scene.id]?.length > 0 ? '●' : ''}
                     </button>
                     {/* User Assignment */}
                     <button
@@ -3000,12 +3239,18 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { setTypewriterSound(!typewriterSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: typewriterSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       🎹 Son machine à écrire {typewriterSound && '✓'}
                     </button>
+                    <button onClick={() => { setChatNotificationSound(!chatNotificationSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: chatNotificationSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      🔔 Notifications chat {chatNotificationSound && '✓'}
+                    </button>
                     <button onClick={() => { setShowStats(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📊 Statistiques
                     </button>
                     <button onClick={() => { setShowWritingGoals(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>🎯 Objectif d'écriture</span>
                       <span style={{ fontSize: 10, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : '#6b7280' }}>{Math.round((writingGoal.todayWords / writingGoal.daily) * 100)}%</span>
+                    </button>
+                    <button onClick={() => { setShowTagsManager(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      🏷️ Gérer les tags
                     </button>
                     <button onClick={() => { setShowShortcuts(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>⌨️ Raccourcis</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
@@ -3184,6 +3429,47 @@ export default function ScreenplayEditor() {
             dragOffsetRef.current = { x: e.clientX - notePosition.x, y: e.clientY - notePosition.y };
           }}
         />
+      )}
+      
+      {/* Tags Manager Modal */}
+      {showTagsManager && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowTagsManager(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: 400, maxHeight: '80vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, color: darkMode ? 'white' : 'black' }}>🏷️ Gérer les tags</h3>
+              <button onClick={() => setShowTagsManager(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20 }}>✕</button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+              {customTags.map((tag, idx) => (
+                <div key={tag.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: darkMode ? '#374151' : '#f3f4f6', borderRadius: 6 }}>
+                  <input 
+                    type="color" 
+                    value={tag.color} 
+                    onChange={e => setCustomTags(prev => prev.map((t, i) => i === idx ? { ...t, color: e.target.value } : t))}
+                    style={{ width: 32, height: 32, border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                  />
+                  <input 
+                    value={tag.name}
+                    onChange={e => setCustomTags(prev => prev.map((t, i) => i === idx ? { ...t, name: e.target.value } : t))}
+                    style={{ flex: 1, padding: '6px 10px', background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 4, color: darkMode ? 'white' : 'black', fontSize: 14 }}
+                  />
+                  <button 
+                    onClick={() => setCustomTags(prev => prev.filter((_, i) => i !== idx))}
+                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16 }}
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+            
+            <button 
+              onClick={() => setCustomTags(prev => [...prev, { id: `tag-${Date.now()}`, name: 'Nouveau tag', color: '#6b7280' }])}
+              style={{ width: '100%', padding: '10px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 14 }}
+            >
+              + Ajouter un tag
+            </button>
+          </div>
+        </div>
       )}
       
       {/* Shortcuts Panel */}
