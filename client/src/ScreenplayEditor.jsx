@@ -373,25 +373,40 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
     return positions;
   }, [sortedIndices, elementPositions, cardHeights]);
   
-  // Sync sidebar scroll with main document scroll
+  // Track if we just selected a comment (to do one-time scroll)
+  const hasScrolledToSelectedRef = useRef(true);
+  const prevSelectedRef = useRef(null);
+  
+  // Scroll to selected comment when clicking the badge (one-time)
   useEffect(() => {
-    if (sidebarRef.current && selectedCommentIndex === null) {
-      sidebarRef.current.scrollTop = scrollTop;
-    }
-  }, [scrollTop, selectedCommentIndex]);
-
-  // Scroll to selected comment when clicking the badge
-  useEffect(() => {
-    if (selectedCommentIndex !== null && adjustedPositions[selectedCommentIndex] !== undefined) {
-      if (sidebarRef.current) {
+    if (selectedCommentIndex !== null && selectedCommentIndex !== prevSelectedRef.current) {
+      prevSelectedRef.current = selectedCommentIndex;
+      
+      if (adjustedPositions[selectedCommentIndex] !== undefined && sidebarRef.current) {
+        hasScrolledToSelectedRef.current = false;
         const targetPosition = adjustedPositions[selectedCommentIndex];
         sidebarRef.current.scrollTo({
           top: Math.max(0, targetPosition - 50),
           behavior: 'smooth'
         });
+        // Allow normal sync to resume after a short delay
+        setTimeout(() => {
+          hasScrolledToSelectedRef.current = true;
+        }, 500);
       }
+      // If no position found, don't block scroll sync
+    } else if (selectedCommentIndex === null) {
+      prevSelectedRef.current = null;
+      hasScrolledToSelectedRef.current = true;
     }
   }, [selectedCommentIndex, adjustedPositions]);
+
+  // Sync sidebar scroll with main document scroll
+  useEffect(() => {
+    if (sidebarRef.current && hasScrolledToSelectedRef.current) {
+      sidebarRef.current.scrollTop = scrollTop;
+    }
+  }, [scrollTop]);
 
   // Calculate total height - should match document height so sidebar scrolls all the way
   const totalHeight = useMemo(() => {
