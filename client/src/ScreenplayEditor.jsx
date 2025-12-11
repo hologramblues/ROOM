@@ -1417,6 +1417,7 @@ export default function ScreenplayEditor() {
   const [renameTo, setRenameTo] = useState('');
   const [focusMode, setFocusMode] = useState(false);
   const [sceneAssignments, setSceneAssignments] = useState({}); // { sceneId: { userId, userName, userColor } }
+  const [assignmentMenu, setAssignmentMenu] = useState(null); // { sceneId, x, y }
   const [knownUsers, setKnownUsers] = useState(() => {
     const saved = localStorage.getItem('rooms-known-users');
     return saved ? JSON.parse(saved) : [];
@@ -2177,6 +2178,21 @@ export default function ScreenplayEditor() {
       clearInterval(positionInterval);
     };
   }, [showComments, elements.length]);
+
+  // Get initials from a name (e.g. "Jeremie Goldstein" -> "JG", "RomainV" -> "RV")
+  const getInitials = (name) => {
+    if (!name) return '';
+    const parts = name.trim().split(/[\s]+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    // Single word - take first 2 chars or first letter if uppercase detected
+    const match = name.match(/[A-Z]/g);
+    if (match && match.length >= 2) {
+      return match.slice(0, 2).join('');
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
 
   const formatTime = (seconds) => {
     const h = Math.floor(seconds / 3600);
@@ -3018,44 +3034,19 @@ export default function ScreenplayEditor() {
                     >
                       {sceneStatus[scene.id] === 'final' ? '✓' : sceneStatus[scene.id] === 'review' ? '◐' : '○'}
                     </button>
-                    {/* User Assignment - cycles through known users */}
+                    {/* User Assignment - opens context menu */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Merge online users with known users (no duplicates)
-                        const allUsers = [...users];
-                        knownUsers.forEach(ku => {
-                          if (!allUsers.find(u => u.name === ku.name)) {
-                            allUsers.push(ku);
-                          }
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setAssignmentMenu({
+                          sceneId: scene.id,
+                          x: rect.left,
+                          y: rect.bottom + 4
                         });
-                        // Cycle through users (including "none")
-                        const allOptions = [null, ...allUsers];
-                        const currentAssignment = sceneAssignments[scene.id];
-                        const currentIdx = currentAssignment 
-                          ? allOptions.findIndex(u => u?.name === currentAssignment.userName)
-                          : 0;
-                        const nextIdx = (currentIdx + 1) % allOptions.length;
-                        const nextUser = allOptions[nextIdx];
-                        if (nextUser) {
-                          setSceneAssignments(prev => ({ 
-                            ...prev, 
-                            [scene.id]: { 
-                              odName: nextUser.name, 
-                              userName: nextUser.name, 
-                              userColor: nextUser.color 
-                            } 
-                          }));
-                        } else {
-                          setSceneAssignments(prev => {
-                            const newAssignments = { ...prev };
-                            delete newAssignments[scene.id];
-                            return newAssignments;
-                          });
-                        }
                       }}
                       style={{ 
-                        minWidth: 18,
+                        minWidth: 22,
                         height: 18, 
                         borderRadius: 4, 
                         border: sceneAssignments[scene.id] ? 'none' : `1px dashed #6b7280`, 
@@ -3071,7 +3062,8 @@ export default function ScreenplayEditor() {
                       }}
                       title={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner'}
                     >
-                      {sceneAssignments[scene.id]?.userName?.charAt(0).toUpperCase() || ''}
+                      {getInitials(sceneAssignments[scene.id]?.userName) || ''}
+                    </button>
                     </button>
                   </div>
                 </div>
@@ -3423,6 +3415,122 @@ export default function ScreenplayEditor() {
         />
       )}
       
+      {/* User Assignment Context Menu */}
+      {assignmentMenu && (
+        <div 
+          style={{ position: 'fixed', inset: 0, zIndex: 1000 }} 
+          onClick={() => setAssignmentMenu(null)}
+        >
+          <div 
+            onClick={e => e.stopPropagation()}
+            style={{ 
+              position: 'fixed',
+              left: assignmentMenu.x,
+              top: assignmentMenu.y,
+              background: darkMode ? '#1f2937' : 'white',
+              border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+              borderRadius: 8,
+              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+              minWidth: 180,
+              overflow: 'hidden'
+            }}
+          >
+            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', fontWeight: 500 }}>
+              Assigner à
+            </div>
+            {/* Remove assignment option */}
+            <button
+              onClick={() => {
+                setSceneAssignments(prev => {
+                  const newAssignments = { ...prev };
+                  delete newAssignments[assignmentMenu.sceneId];
+                  return newAssignments;
+                });
+                setAssignmentMenu(null);
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                color: '#6b7280',
+                fontSize: 12,
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{ width: 24, height: 24, borderRadius: 4, border: '1px dashed #6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>✕</span>
+              <span>Aucun</span>
+            </button>
+            {/* List all users */}
+            {(() => {
+              const allUsers = [...users];
+              knownUsers.forEach(ku => {
+                if (!allUsers.find(u => u.name === ku.name)) {
+                  allUsers.push(ku);
+                }
+              });
+              return allUsers.map(user => (
+                <button
+                  key={user.name}
+                  onClick={() => {
+                    setSceneAssignments(prev => ({
+                      ...prev,
+                      [assignmentMenu.sceneId]: {
+                        userName: user.name,
+                        userColor: user.color
+                      }
+                    }));
+                    setAssignmentMenu(null);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent',
+                    border: 'none',
+                    borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                    color: darkMode ? 'white' : 'black',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'}
+                  onMouseLeave={e => e.currentTarget.style.background = sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent'}
+                >
+                  <span style={{ 
+                    width: 24, 
+                    height: 24, 
+                    borderRadius: 4, 
+                    background: user.color, 
+                    color: 'white', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    fontWeight: 'bold'
+                  }}>
+                    {getInitials(user.name)}
+                  </span>
+                  <span>{user.name}</span>
+                  {users.find(u => u.name === user.name) && (
+                    <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} title="En ligne" />
+                  )}
+                </button>
+              ));
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* Shortcuts Panel */}
       {showShortcuts && (
         <ShortcutsPanel
