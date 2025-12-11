@@ -1204,6 +1204,15 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         >📝</div>
       )}
       
+      {/* Comment indicator - yellow square (clickable to open comments) */}
+      {commentCount > 0 && (
+        <div 
+          onClick={onOpenComments}
+          style={{ position: 'absolute', right: note ? -80 : -30, top: 2, width: 18, height: 18, background: '#fbbf24', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, cursor: 'pointer', boxShadow: '1px 1px 2px rgba(0,0,0,0.2)' }}
+          title="Voir les commentaires"
+        >💬</div>
+      )}
+      
       {/* Type label */}
       {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       
