@@ -3427,6 +3427,7 @@ export default function ScreenplayEditor() {
           canPush={!!token && !!docId && canComment}
           position={notePosition}
           onDragStart={(e) => {
+            e.preventDefault();
             if (e.target.tagName === 'BUTTON') return;
             setIsDraggingNote(true);
             dragOffsetRef.current = { x: e.clientX - notePosition.x, y: e.clientY - notePosition.y };
@@ -3593,7 +3594,13 @@ export default function ScreenplayEditor() {
       
       {/* Drag overlay - prevents blue selection during panel drag */}
       {isDraggingAny && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 199, cursor: 'grabbing' }} />
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          zIndex: 150, 
+          cursor: 'grabbing',
+          background: 'transparent'
+        }} />
       )}
       
       {/* Chat Panel - FLOATING */}
@@ -3630,6 +3637,7 @@ export default function ScreenplayEditor() {
               userSelect: 'none'
             }}
             onMouseDown={(e) => {
+              e.preventDefault();
               if (e.target.tagName === 'BUTTON') return;
               setIsDraggingChat(true);
               dragOffsetRef.current = { x: e.clientX - chatPosition.x, y: e.clientY - chatPosition.y };
