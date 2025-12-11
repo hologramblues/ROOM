@@ -2870,9 +2870,9 @@ export default function ScreenplayEditor() {
               }}
             >
               <option value="">Statut</option>
-              <option value="draft">Brouillon</option>
-              <option value="review">Révision</option>
-              <option value="final">Final</option>
+              <option value="progress">En cours</option>
+              <option value="done">Validé</option>
+              <option value="urgent">Urgent</option>
             </select>
             <select 
               value={outlineFilter.character} 
@@ -2923,7 +2923,7 @@ export default function ScreenplayEditor() {
                       background: darkMode ? '#374151' : '#f3f4f6', 
                       borderRadius: 8,
                       cursor: 'pointer',
-                      borderLeft: `3px solid ${sceneStatus[scene.id] === 'final' ? '#22c55e' : sceneStatus[scene.id] === 'review' ? '#f59e0b' : '#6b7280'}`
+                      borderLeft: `3px solid ${sceneStatus[scene.id] === 'done' ? '#22c55e' : sceneStatus[scene.id] === 'progress' ? '#f59e0b' : sceneStatus[scene.id] === 'urgent' ? '#ef4444' : '#6b7280'}`
                     }}
                   >
                     <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>
@@ -2956,8 +2956,9 @@ export default function ScreenplayEditor() {
                     gap: 8,
                     cursor: 'pointer',
                     borderLeft: sceneStatus[scene.id] ? `3px solid ${
-                      sceneStatus[scene.id] === 'final' ? '#22c55e' : 
-                      sceneStatus[scene.id] === 'review' ? '#f59e0b' : '#6b7280'
+                      sceneStatus[scene.id] === 'done' ? '#22c55e' : 
+                      sceneStatus[scene.id] === 'progress' ? '#f59e0b' : 
+                      sceneStatus[scene.id] === 'urgent' ? '#ef4444' : '#6b7280'
                     }` : '3px solid transparent',
                     boxSizing: 'border-box'
                   }}
@@ -3021,18 +3022,41 @@ export default function ScreenplayEditor() {
                     >
                       {lockedScenes.has(scene.id) ? '🔒' : '🔓'}
                     </button>
-                    {/* Status */}
+                    {/* Status - uniform squares */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        const statuses = ['', 'draft', 'review', 'final'];
+                        const statuses = ['', 'progress', 'done', 'urgent'];
                         const currentIdx = statuses.indexOf(sceneStatus[scene.id] || '');
                         setSceneStatus(prev => ({ ...prev, [scene.id]: statuses[(currentIdx + 1) % 4] }));
                       }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, padding: '2px', color: sceneStatus[scene.id] === 'final' ? '#22c55e' : sceneStatus[scene.id] === 'review' ? '#f59e0b' : '#6b7280' }}
-                      title="Statut"
+                      style={{ 
+                        minWidth: 22,
+                        height: 18, 
+                        borderRadius: 4, 
+                        border: !sceneStatus[scene.id] ? '1px dashed #6b7280' : 'none',
+                        background: sceneStatus[scene.id] === 'done' ? '#22c55e' 
+                          : sceneStatus[scene.id] === 'progress' ? '#f59e0b' 
+                          : sceneStatus[scene.id] === 'urgent' ? '#ef4444'
+                          : 'transparent',
+                        cursor: 'pointer', 
+                        padding: '0 4px',
+                        fontSize: 10,
+                        fontWeight: 'bold',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title={sceneStatus[scene.id] === 'done' ? 'Validé' 
+                        : sceneStatus[scene.id] === 'progress' ? 'En cours' 
+                        : sceneStatus[scene.id] === 'urgent' ? 'Urgent'
+                        : 'Pas commencé'}
                     >
-                      {sceneStatus[scene.id] === 'final' ? '✓' : sceneStatus[scene.id] === 'review' ? '◐' : '○'}
+                      {sceneStatus[scene.id] === 'done' ? '✓' 
+                        : sceneStatus[scene.id] === 'progress' ? '…' 
+                        : sceneStatus[scene.id] === 'urgent' ? '!'
+                        : ''}
                     </button>
                     {/* User Assignment - opens context menu */}
                     <button
