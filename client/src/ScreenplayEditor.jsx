@@ -250,12 +250,12 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, canComment, isR
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canComment, onClose, darkMode, onNavigateToElement }) => {
+const CommentsSidebar = ({ comments, elements, activeIndex, visibleIndex, token, docId, canComment, onClose, darkMode, onNavigateToElement }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
-  const activeCommentRef = useRef(null);
+  const visibleCommentRef = useRef(null);
 
   const addReply = async (commentId) => {
     if (!replyContent.trim()) return;
@@ -295,16 +295,26 @@ const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canCom
     return Object.keys(commentsByElementIndex).map(Number).sort((a, b) => a - b);
   }, [commentsByElementIndex]);
 
+  // Find the closest element with comments to the visible element
+  const closestCommentIndex = useMemo(() => {
+    if (sortedIndices.length === 0) return null;
+    // Find the first element with comments that is >= visibleIndex
+    const nextIdx = sortedIndices.find(idx => idx >= visibleIndex);
+    if (nextIdx !== undefined) return nextIdx;
+    // If none found, return the last one
+    return sortedIndices[sortedIndices.length - 1];
+  }, [sortedIndices, visibleIndex]);
+
   // Get current element
   const currentElement = elements[activeIndex];
   const unresolvedComments = comments.filter(c => !c.resolved);
 
-  // Scroll to active element's comments when activeIndex changes
+  // Scroll to visible element's comments when scroll changes
   useEffect(() => {
-    if (activeCommentRef.current) {
-      activeCommentRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (visibleCommentRef.current) {
+      visibleCommentRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  }, [activeIndex]);
+  }, [closestCommentIndex]);
 
   return (
     <div style={{ 
@@ -367,17 +377,18 @@ const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canCom
             const element = elements[idx];
             const elementComments = commentsByElementIndex[idx];
             const isActive = idx === activeIndex;
+            const isVisible = idx === closestCommentIndex;
             
             return (
               <div 
                 key={idx} 
-                ref={isActive ? activeCommentRef : null}
+                ref={isVisible ? visibleCommentRef : null}
                 style={{ 
                   marginBottom: 12, 
-                  background: isActive ? (darkMode ? '#374151' : '#eff6ff') : 'transparent',
+                  background: isVisible ? (darkMode ? '#374151' : '#eff6ff') : 'transparent',
                   borderRadius: 6,
                   padding: 8,
-                  border: isActive ? `1px solid ${darkMode ? '#4b5563' : '#3b82f6'}` : '1px solid transparent'
+                  border: isVisible ? `1px solid ${darkMode ? '#4b5563' : '#3b82f6'}` : '1px solid transparent'
                 }}
               >
                 {/* Element reference */}
@@ -1149,6 +1160,7 @@ export default function ScreenplayEditor() {
   const [redoStack, setRedoStack] = useState([]);
   const [draggedScene, setDraggedScene] = useState(null);
   const [sceneSynopsis, setSceneSynopsis] = useState({}); // { sceneId: 'synopsis text' }
+  const [visibleElementIndex, setVisibleElementIndex] = useState(0); // For scroll sync with comments
   const [writingGoal, setWritingGoal] = useState(() => {
     const saved = localStorage.getItem('rooms-writing-goal');
     return saved ? JSON.parse(saved) : { daily: 1000, todayWords: 0, lastDate: null };
@@ -1697,6 +1709,40 @@ export default function ScreenplayEditor() {
     setSessionWordCount(0);
     setSessionStartWords(0);
   };
+
+  // Scroll sync: track visible element for comments panel
+  useEffect(() => {
+    if (!showComments) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Find the most visible entry
+        let mostVisible = null;
+        let maxRatio = 0;
+        
+        entries.forEach(entry => {
+          if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+            maxRatio = entry.intersectionRatio;
+            mostVisible = entry;
+          }
+        });
+        
+        if (mostVisible) {
+          const index = parseInt(mostVisible.target.getAttribute('data-element-index'), 10);
+          if (!isNaN(index)) {
+            setVisibleElementIndex(index);
+          }
+        }
+      },
+      { threshold: [0, 0.25, 0.5, 0.75, 1], rootMargin: '-100px 0px -50% 0px' }
+    );
+    
+    // Observe all element containers
+    const elementDivs = document.querySelectorAll('[data-element-index]');
+    elementDivs.forEach(div => observer.observe(div));
+    
+    return () => observer.disconnect();
+  }, [showComments, elements.length]);
 
   const formatTime = (seconds) => {
     const h = Math.floor(seconds / 3600);
@@ -2433,7 +2479,7 @@ export default function ScreenplayEditor() {
                   Affichage ▾
                 </button>
                 {showViewMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 300, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                     <button onClick={() => { setShowOutline(!showOutline); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showOutline ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>📋 Outline</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘O</span>
                     </button>
@@ -2472,7 +2518,7 @@ export default function ScreenplayEditor() {
                   Outils ▾ {totalComments > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#f59e0b', color: 'black', fontSize: 9, padding: '1px 4px', borderRadius: 8 }}>{totalComments}</span>}
                 </button>
                 {showToolsMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 300, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                     <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>🔍 Rechercher</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
                     </button>
@@ -2499,7 +2545,7 @@ export default function ScreenplayEditor() {
                   Document ▾
                 </button>
                 {showDocMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 300, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                     <button onClick={() => { createSnapshot(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>💾 Snapshot</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘S</span>
                     </button>
@@ -2517,7 +2563,7 @@ export default function ScreenplayEditor() {
                   Import/Export ▾
                 </button>
                 {showImportExport && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 300, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                     <button onClick={() => { importFDX(); setShowImportExport(false); }} disabled={importing || !token} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !token ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !token ? 'default' : 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📥 Importer FDX
                     </button>
@@ -2603,7 +2649,8 @@ export default function ScreenplayEditor() {
         <CommentsSidebar 
           comments={comments} 
           elements={elements} 
-          activeIndex={activeIndex} 
+          activeIndex={activeIndex}
+          visibleIndex={visibleElementIndex}
           token={token} 
           docId={docId} 
           canComment={canComment}
