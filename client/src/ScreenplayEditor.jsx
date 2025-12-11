@@ -345,16 +345,26 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
   }, []);
   
   // Calculate positions avoiding overlaps using actual measured heights
+  // Reset offset if next comment is far away (more than ~2 pages)
   const adjustedPositions = useMemo(() => {
     const positions = {};
     const GAP = 15; // Gap between cards
+    const RESET_THRESHOLD = 2000; // ~2 pages - if gap is larger, reset positioning
     let lastBottom = 0;
     
     sortedIndices.forEach(idx => {
       const idealTop = elementPositions[idx] || (idx * 30);
-      // Ensure this comment doesn't overlap with previous
+      
+      // If this comment is far from the last one, reset the cascade
+      // This prevents a few close comments from pushing ALL subsequent comments down
+      if (idealTop - lastBottom > RESET_THRESHOLD) {
+        lastBottom = 0; // Reset - this comment starts fresh at its ideal position
+      }
+      
+      // Ensure this comment doesn't overlap with previous (within the same group)
       const actualTop = Math.max(idealTop, lastBottom);
       positions[idx] = actualTop;
+      
       // Use measured height or estimate
       const cardHeight = cardHeights[idx] || 150;
       lastBottom = actualTop + cardHeight + GAP;
@@ -1192,15 +1202,6 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           style={{ position: 'absolute', right: -55, top: 2, width: 20, height: 20, background: note.color || '#fbbf24', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, cursor: 'pointer', boxShadow: '1px 1px 3px rgba(0,0,0,0.2)' }}
           title={note.content}
         >📝</div>
-      )}
-      
-      {/* Comment badge - clickable to open comments */}
-      {commentCount > 0 && (
-        <div 
-          onClick={onOpenComments}
-          style={{ position: 'absolute', right: note ? -80 : -30, top: 2, width: 18, height: 18, background: '#fbbf24', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 'bold', color: '#78350f', boxShadow: '1px 1px 2px rgba(0,0,0,0.2)', cursor: 'pointer' }}
-          title="Voir les commentaires"
-        >{commentCount}</div>
       )}
       
       {/* Type label */}
