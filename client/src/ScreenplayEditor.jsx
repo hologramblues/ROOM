@@ -2096,6 +2096,34 @@ export default function ScreenplayEditor() {
     }
   }, [redoStack, elements, connected, canEdit]);
 
+  // Duplicate scene function (moved here for proper hoisting)
+  const duplicateScene = useCallback((sceneIndex) => {
+    pushToUndo(elements);
+    const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
+    const currentScenePos = sceneIndices.indexOf(sceneIndex);
+    const nextSceneIndex = currentScenePos < sceneIndices.length - 1 ? sceneIndices[currentScenePos + 1] : elements.length;
+    
+    // Get all elements in this scene
+    const sceneElements = elements.slice(sceneIndex, nextSceneIndex).map(el => ({
+      ...el,
+      id: generateId()
+    }));
+    
+    // Insert after the scene
+    const newElements = [
+      ...elements.slice(0, nextSceneIndex),
+      ...sceneElements,
+      ...elements.slice(nextSceneIndex)
+    ];
+    
+    setElements(newElements);
+    setLastSaved(new Date());
+    
+    if (socketRef.current && connected && canEdit) {
+      socketRef.current.emit('full-sync', { elements: newElements });
+    }
+  }, [elements, connected, canEdit, pushToUndo]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
@@ -2271,34 +2299,6 @@ export default function ScreenplayEditor() {
       });
     }
   }, [elements, connected, canEdit]);
-
-  // Duplicate a scene (scene + all elements until next scene)
-  const duplicateScene = useCallback((sceneIndex) => {
-    pushToUndo(elements);
-    const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
-    const currentScenePos = sceneIndices.indexOf(sceneIndex);
-    const nextSceneIndex = currentScenePos < sceneIndices.length - 1 ? sceneIndices[currentScenePos + 1] : elements.length;
-    
-    // Get all elements in this scene
-    const sceneElements = elements.slice(sceneIndex, nextSceneIndex).map(el => ({
-      ...el,
-      id: generateId()
-    }));
-    
-    // Insert after the scene
-    const newElements = [
-      ...elements.slice(0, nextSceneIndex),
-      ...sceneElements,
-      ...elements.slice(nextSceneIndex)
-    ];
-    
-    setElements(newElements);
-    setLastSaved(new Date());
-    
-    if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: newElements });
-    }
-  }, [elements, connected, canEdit, pushToUndo]);
 
   // Move scene (drag & drop)
   const moveScene = useCallback((fromSceneIndex, toSceneIndex) => {
