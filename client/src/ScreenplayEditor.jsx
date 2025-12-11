@@ -2397,7 +2397,7 @@ export default function ScreenplayEditor() {
       )}
       
       {/* HEADER */}
-      <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '8px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50 }}>
+      <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '8px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 200 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Logo darkMode={darkMode} />
           <div style={{ width: 1, height: 24, background: darkMode ? '#374151' : '#d1d5db' }} />
