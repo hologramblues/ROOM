@@ -298,24 +298,70 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
 
   const unresolvedComments = comments.filter(c => !c.resolved);
   
-  // Calculate positions avoiding overlaps
+  // Track measured heights of each comment card
+  const [cardHeights, setCardHeights] = useState({});
+  const observersRef = useRef({});
+  
+  // Measure card height when rendered and observe for changes
+  const measureCard = useCallback((idx, element) => {
+    // Clean up old observer
+    if (observersRef.current[idx]) {
+      observersRef.current[idx].disconnect();
+      delete observersRef.current[idx];
+    }
+    
+    if (element) {
+      // Initial measurement
+      const height = element.getBoundingClientRect().height;
+      setCardHeights(prev => {
+        if (prev[idx] !== height) {
+          return { ...prev, [idx]: height };
+        }
+        return prev;
+      });
+      
+      // Observe for size changes (e.g., when replies are added)
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const newHeight = entry.contentRect.height + 20; // Add padding
+          setCardHeights(prev => {
+            if (prev[idx] !== newHeight) {
+              return { ...prev, [idx]: newHeight };
+            }
+            return prev;
+          });
+        }
+      });
+      observer.observe(element);
+      observersRef.current[idx] = observer;
+    }
+  }, []);
+  
+  // Cleanup observers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(observersRef.current).forEach(obs => obs.disconnect());
+    };
+  }, []);
+  
+  // Calculate positions avoiding overlaps using actual measured heights
   const adjustedPositions = useMemo(() => {
     const positions = {};
-    const MIN_GAP = 120; // Minimum gap between comment cards
+    const GAP = 15; // Gap between cards
     let lastBottom = 0;
     
     sortedIndices.forEach(idx => {
       const idealTop = elementPositions[idx] || (idx * 30);
       // Ensure this comment doesn't overlap with previous
-      const actualTop = Math.max(idealTop, lastBottom + 10);
+      const actualTop = Math.max(idealTop, lastBottom);
       positions[idx] = actualTop;
-      // Estimate card height (will be refined with actual measurements)
-      const estimatedHeight = MIN_GAP;
-      lastBottom = actualTop + estimatedHeight;
+      // Use measured height or estimate
+      const cardHeight = cardHeights[idx] || 150;
+      lastBottom = actualTop + cardHeight + GAP;
     });
     
     return positions;
-  }, [sortedIndices, elementPositions]);
+  }, [sortedIndices, elementPositions, cardHeights]);
   
   // Sync sidebar scroll with main document scroll
   useEffect(() => {
@@ -434,6 +480,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
               return (
                 <div 
                   key={idx}
+                  ref={(el) => measureCard(idx, el)}
                   style={{ 
                     position: 'absolute',
                     top: topPosition,
