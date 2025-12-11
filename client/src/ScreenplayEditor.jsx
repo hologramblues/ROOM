@@ -256,6 +256,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
   const [newCommentFor, setNewCommentFor] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
   const sidebarRef = useRef(null);
+  const commentRefs = useRef({});
 
   const addReply = async (commentId) => {
     if (!replyContent.trim()) return;
@@ -297,6 +298,25 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
 
   const unresolvedComments = comments.filter(c => !c.resolved);
   
+  // Calculate positions avoiding overlaps
+  const adjustedPositions = useMemo(() => {
+    const positions = {};
+    const MIN_GAP = 120; // Minimum gap between comment cards
+    let lastBottom = 0;
+    
+    sortedIndices.forEach(idx => {
+      const idealTop = elementPositions[idx] || (idx * 30);
+      // Ensure this comment doesn't overlap with previous
+      const actualTop = Math.max(idealTop, lastBottom + 10);
+      positions[idx] = actualTop;
+      // Estimate card height (will be refined with actual measurements)
+      const estimatedHeight = MIN_GAP;
+      lastBottom = actualTop + estimatedHeight;
+    });
+    
+    return positions;
+  }, [sortedIndices, elementPositions]);
+  
   // Sync sidebar scroll with main document scroll
   useEffect(() => {
     if (sidebarRef.current) {
@@ -304,12 +324,32 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
     }
   }, [scrollTop]);
 
-  // Calculate total height based on last element position
+  // Calculate total height based on last adjusted position
   const totalHeight = useMemo(() => {
-    if (Object.keys(elementPositions).length === 0) return 2000;
-    const positions = Object.values(elementPositions);
-    return Math.max(...positions) + 500;
-  }, [elementPositions]);
+    if (sortedIndices.length === 0) return 2000;
+    const lastIdx = sortedIndices[sortedIndices.length - 1];
+    return (adjustedPositions[lastIdx] || 0) + 500;
+  }, [adjustedPositions, sortedIndices]);
+
+  // Navigation functions
+  const navigateToComment = (direction) => {
+    if (sortedIndices.length === 0) return;
+    
+    // Find current position in sortedIndices based on activeIndex
+    const currentPos = sortedIndices.findIndex(idx => idx >= activeIndex);
+    let targetPos;
+    
+    if (direction === 'next') {
+      targetPos = currentPos === -1 ? 0 : Math.min(currentPos + 1, sortedIndices.length - 1);
+    } else {
+      targetPos = currentPos <= 0 ? 0 : currentPos - 1;
+    }
+    
+    const targetIdx = sortedIndices[targetPos];
+    if (targetIdx !== undefined && onNavigateToElement) {
+      onNavigateToElement(targetIdx);
+    }
+  };
 
   return (
     <div style={{ 
@@ -325,10 +365,47 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
       flexDirection: 'column',
       boxShadow: '-4px 0 20px rgba(0,0,0,0.2)'
     }}>
-      {/* Header */}
+      {/* Header with navigation */}
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : 'black' }}>💬 Commentaires ({unresolvedComments.length})</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {/* Navigation arrows */}
+          <button 
+            onClick={() => navigateToComment('prev')}
+            disabled={sortedIndices.length === 0}
+            style={{ 
+              background: 'none', 
+              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+              borderRadius: 4,
+              color: sortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#374151'), 
+              cursor: sortedIndices.length === 0 ? 'not-allowed' : 'pointer', 
+              fontSize: 14, 
+              padding: '4px 8px',
+              lineHeight: 1
+            }}
+            title="Commentaire précédent"
+          >
+            ↑
+          </button>
+          <button 
+            onClick={() => navigateToComment('next')}
+            disabled={sortedIndices.length === 0}
+            style={{ 
+              background: 'none', 
+              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+              borderRadius: 4,
+              color: sortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#374151'), 
+              cursor: sortedIndices.length === 0 ? 'not-allowed' : 'pointer', 
+              fontSize: 14, 
+              padding: '4px 8px',
+              lineHeight: 1
+            }}
+            title="Commentaire suivant"
+          >
+            ↓
+          </button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1, marginLeft: 8 }}>✕</button>
+        </div>
       </div>
       
       {/* Scrollable area - synced with document */}
@@ -340,7 +417,6 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
           position: 'relative'
         }}
         onScroll={(e) => {
-          // Prevent sidebar scroll from affecting anything
           e.stopPropagation();
         }}
       >
@@ -349,12 +425,11 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
           {sortedIndices.length === 0 ? (
             <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire</p>
           ) : (
-            sortedIndices.map(idx => {
+            sortedIndices.map((idx, arrayIndex) => {
               const element = elements[idx];
               const elementComments = commentsByElementIndex[idx];
               const isActive = idx === activeIndex;
-              // Get position from elementPositions, default to calculated position
-              const topPosition = elementPositions[idx] || (idx * 30);
+              const topPosition = adjustedPositions[idx] || 0;
               
               return (
                 <div 
