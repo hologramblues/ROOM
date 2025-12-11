@@ -1388,17 +1388,7 @@ export default function ScreenplayEditor() {
   const [showImportExport, setShowImportExport] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [themeMode, setThemeMode] = useState('dark'); // 'dark', 'light', 'sepia'
-  const darkMode = themeMode === 'dark';
-  const sepiaMode = themeMode === 'sepia';
-  
-  // Theme colors
-  const themeColors = {
-    dark: { bg: '#111827', paper: '#1f2937', text: '#e5e7eb', border: '#374151' },
-    light: { bg: '#e5e7eb', paper: 'white', text: '#111827', border: '#d1d5db' },
-    sepia: { bg: '#f4e4c1', paper: '#fdf6e3', text: '#5b4636', border: '#d4c4a8' }
-  };
-  const theme = themeColors[themeMode];
+  const [darkMode, setDarkMode] = useState(true);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [replaceQuery, setReplaceQuery] = useState('');
@@ -2200,30 +2190,51 @@ export default function ScreenplayEditor() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, showWritingGoals, token, docId, title, elements, activeIndex, undo, redo, duplicateScene]);
 
-  // Typewriter sound effect
+  // Typewriter sound effect - realistic mechanical clack
   const audioContextRef = useRef(null);
+  const noiseBufferRef = useRef(null);
+  
   const playTypewriterSound = useCallback(() => {
     if (!typewriterSound) return;
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        // Create noise buffer once
+        const ctx = audioContextRef.current;
+        const bufferSize = ctx.sampleRate * 0.1; // 100ms of noise
+        noiseBufferRef.current = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = noiseBufferRef.current.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1;
+        }
       }
-      const ctx = audioContextRef.current;
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
       
-      oscillator.connect(gainNode);
+      const ctx = audioContextRef.current;
+      
+      // Create noise source
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = noiseBufferRef.current;
+      
+      // Filter for mechanical sound
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1000 + Math.random() * 500;
+      filter.Q.value = 1;
+      
+      // Envelope for sharp attack
+      const gainNode = ctx.createGain();
+      const now = ctx.currentTime;
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.linearRampToValueAtTime(0.3, now + 0.002); // Fast attack
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.04); // Quick decay
+      
+      // Connect
+      noiseSource.connect(filter);
+      filter.connect(gainNode);
       gainNode.connect(ctx.destination);
       
-      // Quick click sound
-      oscillator.frequency.setValueAtTime(800 + Math.random() * 400, ctx.currentTime);
-      oscillator.type = 'square';
-      
-      gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-      
-      oscillator.start(ctx.currentTime);
-      oscillator.stop(ctx.currentTime + 0.05);
+      noiseSource.start(now);
+      noiseSource.stop(now + 0.05);
     } catch (e) {
       // Audio not supported
     }
@@ -2365,6 +2376,8 @@ export default function ScreenplayEditor() {
   const handleKeyDown = useCallback((e, index) => {
     if (!canEdit) return;
     const el = elements[index];
+    const textarea = e.target;
+    
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (el.type === 'parenthetical' && el.content.trim()) { let c = el.content.trim(); if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } insertElement(index, getNextType(el.type)); }
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -2377,6 +2390,25 @@ export default function ScreenplayEditor() {
       else if (el.type === 'parenthetical' && !e.shiftKey) { if (el.content.trim()) { let c = el.content.trim(); if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } changeType(index, 'dialogue'); }
     }
     if (e.key === 'Backspace' && el.content === '' && elements.length > 1) { e.preventDefault(); deleteElement(index); }
+    
+    // Smart arrow navigation: move to next/prev element when at bounds
+    if (e.key === 'ArrowDown' && !e.metaKey && !e.ctrlKey) {
+      const cursorAtEnd = textarea.selectionStart === el.content.length && textarea.selectionEnd === el.content.length;
+      const isSingleLine = !el.content.includes('\n');
+      if ((cursorAtEnd || isSingleLine) && index < elements.length - 1) {
+        e.preventDefault();
+        setActiveIndex(index + 1);
+      }
+    }
+    if (e.key === 'ArrowUp' && !e.metaKey && !e.ctrlKey) {
+      const cursorAtStart = textarea.selectionStart === 0 && textarea.selectionEnd === 0;
+      const isSingleLine = !el.content.includes('\n');
+      if ((cursorAtStart || isSingleLine) && index > 0) {
+        e.preventDefault();
+        setActiveIndex(index - 1);
+      }
+    }
+    
     if (e.key === 'ArrowUp' && e.metaKey) { e.preventDefault(); setActiveIndex(Math.max(0, index - 1)); }
     if (e.key === 'ArrowDown' && e.metaKey) { e.preventDefault(); setActiveIndex(Math.min(elements.length - 1, index + 1)); }
     if ((e.metaKey || e.ctrlKey) && ['1','2','3','4','5','6'].includes(e.key)) { e.preventDefault(); changeType(index, ELEMENT_TYPES[parseInt(e.key) - 1].id); }
@@ -2608,7 +2640,7 @@ export default function ScreenplayEditor() {
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
 
   return (
-    <div className={focusMode ? 'focus-mode-active' : ''} style={{ minHeight: '100vh', background: theme.bg, color: theme.text, transition: 'background 0.3s, color 0.3s' }}>
+    <div className={focusMode ? 'focus-mode-active' : ''} style={{ minHeight: '100vh', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={createNewDocument} onClose={() => setShowDocsList(false)} />}
       {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} />}
@@ -2933,11 +2965,8 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       # Numéros de scènes
                     </button>
-                    <button onClick={() => { 
-                      setThemeMode(prev => prev === 'dark' ? 'light' : prev === 'light' ? 'sepia' : 'dark'); 
-                      setShowViewMenu(false); 
-                    }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : (sepiaMode ? '#5b4636' : 'black'), cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      {themeMode === 'dark' ? '☀️ Mode clair' : themeMode === 'light' ? '📜 Mode sépia' : '🌙 Mode sombre'}
+                    <button onClick={() => { setDarkMode(!darkMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
                     </button>
                     <button onClick={() => { setFocusMode(!focusMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: focusMode ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       🎯 Mode focus {focusMode && '✓'}
@@ -3043,8 +3072,8 @@ export default function ScreenplayEditor() {
             <div key={page.number} style={{ position: 'relative' }}>
               {/* Page content */}
               <div style={{ 
-                background: sepiaMode ? '#fdf6e3' : 'white', 
-                color: sepiaMode ? '#5b4636' : '#111', 
+                background: 'white', 
+                color: '#111', 
                 width: '210mm', 
                 minHeight: '297mm',
                 padding: '20mm 25mm 25mm 38mm', 
