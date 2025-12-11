@@ -1418,10 +1418,7 @@ export default function ScreenplayEditor() {
   const [focusMode, setFocusMode] = useState(false);
   const [sceneAssignments, setSceneAssignments] = useState({}); // { sceneId: { userId, userName, userColor } }
   const [assignmentMenu, setAssignmentMenu] = useState(null); // { sceneId, x, y }
-  const [knownUsers, setKnownUsers] = useState(() => {
-    const saved = localStorage.getItem('rooms-known-users');
-    return saved ? JSON.parse(saved) : [];
-  }); // All users who have ever accessed documents
+  const [collaborators, setCollaborators] = useState([]); // All users who have access to this document
   const [showTimer, setShowTimer] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -1623,26 +1620,13 @@ export default function ScreenplayEditor() {
     
     socket.on('connect', () => { setConnected(true); setMyId(socket.id); if (docId) socket.emit('join-document', { docId }); });
     socket.on('disconnect', () => setConnected(false));
-    socket.on('document-state', data => { setUsers(data.users || []); if (data.role) setMyRole(data.role); });
+    socket.on('document-state', data => { setUsers(data.users || []); if (data.role) setMyRole(data.role); if (data.collaborators) setCollaborators(data.collaborators); });
     socket.on('title-updated', ({ title }) => setTitle(title));
     socket.on('element-updated', ({ index, element }) => setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = element; return u; }));
     socket.on('element-type-updated', ({ index, type }) => setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = { ...u[index], type }; return u; }));
     socket.on('element-inserted', ({ afterIndex, element }) => setElements(p => { const u = [...p]; u.splice(afterIndex + 1, 0, element); return u; }));
     socket.on('element-deleted', ({ index }) => setElements(p => p.filter((_, i) => i !== index)));
-    socket.on('user-joined', ({ users }) => {
-      setUsers(users);
-      // Add new users to knownUsers list
-      setKnownUsers(prev => {
-        const newKnown = [...prev];
-        users.forEach(u => {
-          if (!newKnown.find(k => k.name === u.name)) {
-            newKnown.push({ name: u.name, color: u.color });
-          }
-        });
-        localStorage.setItem('rooms-known-users', JSON.stringify(newKnown));
-        return newKnown;
-      });
-    });
+    socket.on('user-joined', ({ users }) => setUsers(users));
     socket.on('user-left', ({ users }) => setUsers(users));
     socket.on('cursor-updated', ({ userId, cursor }) => setUsers(p => p.map(u => u.id === userId ? { ...u, cursor } : u)));
     socket.on('document-restored', ({ title, elements }) => { setTitle(title); setElements(elements); });
@@ -1668,15 +1652,6 @@ export default function ScreenplayEditor() {
     setCurrentUser(user); 
     setToken(newToken); 
     setShowAuthModal(false);
-    // Add self to knownUsers
-    setKnownUsers(prev => {
-      if (!prev.find(k => k.name === user.name)) {
-        const newList = [...prev, { name: user.name, color: user.color || '#3b82f6' }];
-        localStorage.setItem('rooms-known-users', JSON.stringify(newList));
-        return newList;
-      }
-      return prev;
-    });
   };
   const handleLogout = () => { localStorage.removeItem('screenplay-token'); localStorage.removeItem('screenplay-user'); setCurrentUser(null); setToken(null); };
 
@@ -3491,65 +3466,57 @@ export default function ScreenplayEditor() {
               <span style={{ width: 24, height: 24, borderRadius: 4, border: '1px dashed #6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>✕</span>
               <span>Aucun</span>
             </button>
-            {/* List all users */}
-            {(() => {
-              const allUsers = [...users];
-              knownUsers.forEach(ku => {
-                if (!allUsers.find(u => u.name === ku.name)) {
-                  allUsers.push(ku);
-                }
-              });
-              return allUsers.map(user => (
-                <button
-                  key={user.name}
-                  onClick={() => {
-                    setSceneAssignments(prev => ({
-                      ...prev,
-                      [assignmentMenu.sceneId]: {
-                        userName: user.name,
-                        userColor: user.color
-                      }
-                    }));
-                    setAssignmentMenu(null);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent',
-                    border: 'none',
-                    borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-                    color: darkMode ? 'white' : 'black',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'}
-                  onMouseLeave={e => e.currentTarget.style.background = sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent'}
-                >
-                  <span style={{ 
-                    width: 24, 
-                    height: 24, 
-                    borderRadius: 4, 
-                    background: user.color, 
-                    color: 'white', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    fontSize: 10,
-                    fontWeight: 'bold'
-                  }}>
-                    {getInitials(user.name)}
-                  </span>
-                  <span>{user.name}</span>
-                  {users.find(u => u.name === user.name) && (
-                    <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} title="En ligne" />
-                  )}
-                </button>
-              ));
-            })()}
+            {/* List all collaborators */}
+            {collaborators.map(user => (
+              <button
+                key={user.name}
+                onClick={() => {
+                  setSceneAssignments(prev => ({
+                    ...prev,
+                    [assignmentMenu.sceneId]: {
+                      userName: user.name,
+                      userColor: user.color
+                    }
+                  }));
+                  setAssignmentMenu(null);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent',
+                  border: 'none',
+                  borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                  color: darkMode ? 'white' : 'black',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'}
+                onMouseLeave={e => e.currentTarget.style.background = sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent'}
+              >
+                <span style={{ 
+                  width: 24, 
+                  height: 24, 
+                  borderRadius: 4, 
+                  background: user.color, 
+                  color: 'white', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  fontSize: 10,
+                  fontWeight: 'bold'
+                }}>
+                  {getInitials(user.name)}
+                </span>
+                <span>{user.name}{user.isOwner ? ' 👑' : ''}</span>
+                {users.find(u => u.name === user.name) && (
+                  <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} title="En ligne" />
+                )}
+              </button>
+            ))}
           </div>
         </div>
       )}
