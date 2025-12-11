@@ -250,12 +250,12 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, canComment, isR
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, elements, activeIndex, visibleIndex, token, docId, canComment, onClose, darkMode, onNavigateToElement }) => {
+const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
-  const visibleCommentRef = useRef(null);
+  const sidebarRef = useRef(null);
 
   const addReply = async (commentId) => {
     if (!replyContent.trim()) return;
@@ -295,26 +295,21 @@ const CommentsSidebar = ({ comments, elements, activeIndex, visibleIndex, token,
     return Object.keys(commentsByElementIndex).map(Number).sort((a, b) => a - b);
   }, [commentsByElementIndex]);
 
-  // Find the closest element with comments to the visible element
-  const closestCommentIndex = useMemo(() => {
-    if (sortedIndices.length === 0) return null;
-    // Find the first element with comments that is >= visibleIndex
-    const nextIdx = sortedIndices.find(idx => idx >= visibleIndex);
-    if (nextIdx !== undefined) return nextIdx;
-    // If none found, return the last one
-    return sortedIndices[sortedIndices.length - 1];
-  }, [sortedIndices, visibleIndex]);
-
-  // Get current element
-  const currentElement = elements[activeIndex];
   const unresolvedComments = comments.filter(c => !c.resolved);
-
-  // Scroll to visible element's comments when scroll changes
+  
+  // Sync sidebar scroll with main document scroll
   useEffect(() => {
-    if (visibleCommentRef.current) {
-      visibleCommentRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (sidebarRef.current) {
+      sidebarRef.current.scrollTop = scrollTop;
     }
-  }, [closestCommentIndex]);
+  }, [scrollTop]);
+
+  // Calculate total height based on last element position
+  const totalHeight = useMemo(() => {
+    if (Object.keys(elementPositions).length === 0) return 2000;
+    const positions = Object.values(elementPositions);
+    return Math.max(...positions) + 500;
+  }, [elementPositions]);
 
   return (
     <div style={{ 
@@ -330,109 +325,122 @@ const CommentsSidebar = ({ comments, elements, activeIndex, visibleIndex, token,
       flexDirection: 'column',
       boxShadow: '-4px 0 20px rgba(0,0,0,0.2)'
     }}>
-      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* Header */}
+      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : 'black' }}>💬 Commentaires ({unresolvedComments.length})</h3>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
       </div>
       
-      {/* Current element - add comment button */}
-      {currentElement && canComment && (
-        <div style={{ padding: 10, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, background: darkMode ? '#374151' : '#f9fafb' }}>
-          <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>Élément actuel :</div>
-          <div style={{ fontSize: 11, color: darkMode ? 'white' : 'black', marginBottom: 6, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            "{currentElement.content.slice(0, 40)}{currentElement.content.length > 40 ? '...' : ''}"
-          </div>
-          {newCommentFor === currentElement.id ? (
-            <div style={{ background: darkMode ? '#1f2937' : '#fef3c7', borderRadius: 4, padding: 8 }}>
-              <textarea 
-                autoFocus
-                value={newCommentText} 
-                onChange={e => setNewCommentText(e.target.value)} 
-                placeholder="Votre commentaire..." 
-                style={{ width: '100%', padding: 6, background: darkMode ? '#374151' : 'white', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? 'white' : '#78350f', fontSize: 11, resize: 'none', boxSizing: 'border-box' }} 
-                rows={2} 
-              />
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <button onClick={() => submitNewComment(currentElement.id)} style={{ padding: '5px 10px', background: '#f59e0b', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 10 }}>Ajouter</button>
-                <button onClick={() => { setNewCommentFor(null); setNewCommentText(''); }} style={{ padding: '5px 10px', background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? '#9ca3af' : '#92400e', cursor: 'pointer', fontSize: 10 }}>Annuler</button>
-              </div>
-            </div>
+      {/* Scrollable area - synced with document */}
+      <div 
+        ref={sidebarRef}
+        style={{ 
+          flex: 1, 
+          overflow: 'auto',
+          position: 'relative'
+        }}
+        onScroll={(e) => {
+          // Prevent sidebar scroll from affecting anything
+          e.stopPropagation();
+        }}
+      >
+        {/* Inner container with same height as document */}
+        <div style={{ position: 'relative', height: totalHeight, minHeight: '100%' }}>
+          {sortedIndices.length === 0 ? (
+            <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire</p>
           ) : (
-            <button 
-              onClick={() => setNewCommentFor(currentElement.id)} 
-              style={{ background: darkMode ? '#1f2937' : '#fef3c7', border: `1px dashed ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, padding: '6px 10px', color: darkMode ? '#fbbf24' : '#92400e', cursor: 'pointer', fontSize: 10, width: '100%' }}
-            >
-              + Ajouter un commentaire
-            </button>
-          )}
-        </div>
-      )}
-      
-      {/* All comments grouped by element */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
-        {sortedIndices.length === 0 ? (
-          <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire</p>
-        ) : (
-          sortedIndices.map(idx => {
-            const element = elements[idx];
-            const elementComments = commentsByElementIndex[idx];
-            const isActive = idx === activeIndex;
-            const isVisible = idx === closestCommentIndex;
-            
-            return (
-              <div 
-                key={idx} 
-                ref={isVisible ? visibleCommentRef : null}
-                style={{ 
-                  marginBottom: 12, 
-                  background: isVisible ? (darkMode ? '#374151' : '#eff6ff') : 'transparent',
-                  borderRadius: 6,
-                  padding: 8,
-                  border: isVisible ? `1px solid ${darkMode ? '#4b5563' : '#3b82f6'}` : '1px solid transparent'
-                }}
-              >
-                {/* Element reference */}
-                <button
-                  onClick={() => onNavigateToElement && onNavigateToElement(idx)}
+            sortedIndices.map(idx => {
+              const element = elements[idx];
+              const elementComments = commentsByElementIndex[idx];
+              const isActive = idx === activeIndex;
+              // Get position from elementPositions, default to calculated position
+              const topPosition = elementPositions[idx] || (idx * 30);
+              
+              return (
+                <div 
+                  key={idx}
                   style={{ 
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    background: 'none', 
-                    border: 'none', 
-                    padding: 0,
-                    marginBottom: 6,
-                    cursor: 'pointer'
+                    position: 'absolute',
+                    top: topPosition,
+                    left: 8,
+                    right: 8,
+                    background: isActive ? (darkMode ? '#374151' : '#eff6ff') : (darkMode ? '#2d3748' : '#f9fafb'),
+                    borderRadius: 8,
+                    padding: 10,
+                    border: isActive ? `2px solid ${darkMode ? '#60a5fa' : '#3b82f6'}` : `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
                   }}
                 >
-                  <span style={{ fontSize: 9, color: '#6b7280', display: 'block' }}>
-                    {element?.type === 'scene' ? '🎬' : '📝'} Élément {idx + 1}
-                  </span>
-                  <span style={{ fontSize: 10, color: darkMode ? '#d1d5db' : '#374151', fontStyle: 'italic', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    "{element?.content.slice(0, 35)}{element?.content.length > 35 ? '...' : ''}"
-                  </span>
-                </button>
-                
-                {/* Comments for this element */}
-                {elementComments.map(c => (
-                  <InlineComment 
-                    key={c.id} 
-                    comment={c} 
-                    onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
-                    onResolve={toggleResolve}
-                    canComment={canComment}
-                    isReplying={replyTo === c.id}
-                    replyContent={replyTo === c.id ? replyContent : ''}
-                    onReplyChange={setReplyContent}
-                    onSubmitReply={addReply}
-                    onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
-                    darkMode={darkMode}
-                  />
-                ))}
-              </div>
-            );
-          })
-        )}
+                  {/* Element reference */}
+                  <button
+                    onClick={() => onNavigateToElement && onNavigateToElement(idx)}
+                    style={{ 
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'left',
+                      background: 'none', 
+                      border: 'none', 
+                      padding: 0,
+                      marginBottom: 8,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span style={{ fontSize: 9, color: '#6b7280', display: 'block' }}>
+                      {element?.type === 'scene' ? '🎬' : '📝'} Élément {idx + 1}
+                    </span>
+                    <span style={{ fontSize: 10, color: darkMode ? '#d1d5db' : '#374151', fontStyle: 'italic', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      "{element?.content.slice(0, 30)}{element?.content.length > 30 ? '...' : ''}"
+                    </span>
+                  </button>
+                  
+                  {/* Comments for this element */}
+                  {elementComments.map(c => (
+                    <InlineComment 
+                      key={c.id} 
+                      comment={c} 
+                      onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
+                      onResolve={toggleResolve}
+                      canComment={canComment}
+                      isReplying={replyTo === c.id}
+                      replyContent={replyTo === c.id ? replyContent : ''}
+                      onReplyChange={setReplyContent}
+                      onSubmitReply={addReply}
+                      onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
+                      darkMode={darkMode}
+                    />
+                  ))}
+                  
+                  {/* Add comment to this element */}
+                  {canComment && (
+                    newCommentFor === element?.id ? (
+                      <div style={{ marginTop: 8, background: darkMode ? '#1f2937' : '#fef3c7', borderRadius: 4, padding: 8 }}>
+                        <textarea 
+                          autoFocus
+                          value={newCommentText} 
+                          onChange={e => setNewCommentText(e.target.value)} 
+                          placeholder="Votre commentaire..." 
+                          style={{ width: '100%', padding: 6, background: darkMode ? '#374151' : 'white', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? 'white' : '#78350f', fontSize: 11, resize: 'none', boxSizing: 'border-box' }} 
+                          rows={2} 
+                        />
+                        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                          <button onClick={() => submitNewComment(element.id)} style={{ padding: '4px 8px', background: '#f59e0b', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 10 }}>Ajouter</button>
+                          <button onClick={() => { setNewCommentFor(null); setNewCommentText(''); }} style={{ padding: '4px 8px', background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? '#9ca3af' : '#92400e', cursor: 'pointer', fontSize: 10 }}>Annuler</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={() => setNewCommentFor(element?.id)} 
+                        style={{ marginTop: 6, background: 'transparent', border: 'none', padding: '4px 0', color: '#6b7280', cursor: 'pointer', fontSize: 10, textAlign: 'left' }}
+                      >
+                        + Répondre
+                      </button>
+                    )
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
@@ -516,7 +524,7 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
         borderRadius: 12, 
         width: 380, 
         boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
-        zIndex: 300,
+        zIndex: 500,
         overflow: 'hidden'
       }}
     >
@@ -632,7 +640,7 @@ const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
   }, [elements]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
       <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 450, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 20, color: darkMode ? 'white' : 'black' }}>📊 Statistiques</h3>
@@ -727,7 +735,7 @@ const GoToSceneModal = ({ onClose, onGoTo, maxScene, darkMode }) => {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
       <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 300, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: darkMode ? 'white' : 'black' }}>🎬 Aller à la scène</h3>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -761,7 +769,7 @@ const WritingGoalsModal = ({ goal, onUpdate, onClose, currentWords, darkMode }) 
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
       <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black' }}>🎯 Objectif d'écriture</h3>
@@ -850,7 +858,7 @@ const ShortcutsPanel = ({ onClose, darkMode }) => {
   ];
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
       <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 500, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 20, color: darkMode ? 'white' : 'black' }}>⌨️ Raccourcis clavier</h3>
@@ -897,7 +905,7 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
   const charList = [...new Set(characters)].sort();
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
       <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black' }}>✏️ Renommer un personnage</h3>
@@ -1161,6 +1169,8 @@ export default function ScreenplayEditor() {
   const [draggedScene, setDraggedScene] = useState(null);
   const [sceneSynopsis, setSceneSynopsis] = useState({}); // { sceneId: 'synopsis text' }
   const [visibleElementIndex, setVisibleElementIndex] = useState(0); // For scroll sync with comments
+  const [elementPositions, setElementPositions] = useState({}); // { elementIndex: topPosition }
+  const [documentScrollTop, setDocumentScrollTop] = useState(0);
   const [writingGoal, setWritingGoal] = useState(() => {
     const saved = localStorage.getItem('rooms-writing-goal');
     return saved ? JSON.parse(saved) : { daily: 1000, todayWords: 0, lastDate: null };
@@ -1710,38 +1720,46 @@ export default function ScreenplayEditor() {
     setSessionStartWords(0);
   };
 
-  // Scroll sync: track visible element for comments panel
+  // Track element positions and scroll for comments sync (Google Docs style)
   useEffect(() => {
     if (!showComments) return;
     
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // Find the most visible entry
-        let mostVisible = null;
-        let maxRatio = 0;
-        
-        entries.forEach(entry => {
-          if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
-            maxRatio = entry.intersectionRatio;
-            mostVisible = entry;
-          }
-        });
-        
-        if (mostVisible) {
-          const index = parseInt(mostVisible.target.getAttribute('data-element-index'), 10);
-          if (!isNaN(index)) {
-            setVisibleElementIndex(index);
-          }
+    // Collect element positions
+    const updatePositions = () => {
+      const positions = {};
+      const elementDivs = document.querySelectorAll('[data-element-index]');
+      elementDivs.forEach(div => {
+        const index = parseInt(div.getAttribute('data-element-index'), 10);
+        if (!isNaN(index)) {
+          // Get position relative to document top
+          const rect = div.getBoundingClientRect();
+          positions[index] = rect.top + window.scrollY - 60; // Adjust for header
         }
-      },
-      { threshold: [0, 0.25, 0.5, 0.75, 1], rootMargin: '-100px 0px -50% 0px' }
-    );
+      });
+      setElementPositions(positions);
+    };
     
-    // Observe all element containers
-    const elementDivs = document.querySelectorAll('[data-element-index]');
-    elementDivs.forEach(div => observer.observe(div));
+    // Track scroll position
+    const handleScroll = () => {
+      setDocumentScrollTop(window.scrollY);
+    };
     
-    return () => observer.disconnect();
+    // Initial update
+    updatePositions();
+    handleScroll();
+    
+    // Update on scroll and resize
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', updatePositions);
+    
+    // Update positions periodically (elements might change height)
+    const positionInterval = setInterval(updatePositions, 1000);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', updatePositions);
+      clearInterval(positionInterval);
+    };
   }, [showComments, elements.length]);
 
   const formatTime = (seconds) => {
@@ -2479,7 +2497,7 @@ export default function ScreenplayEditor() {
                   Affichage ▾
                 </button>
                 {showViewMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 300, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                     <button onClick={() => { setShowOutline(!showOutline); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showOutline ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>📋 Outline</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘O</span>
                     </button>
@@ -2518,7 +2536,7 @@ export default function ScreenplayEditor() {
                   Outils ▾ {totalComments > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#f59e0b', color: 'black', fontSize: 9, padding: '1px 4px', borderRadius: 8 }}>{totalComments}</span>}
                 </button>
                 {showToolsMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 300, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                     <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>🔍 Rechercher</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
                     </button>
@@ -2545,7 +2563,7 @@ export default function ScreenplayEditor() {
                   Document ▾
                 </button>
                 {showDocMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 300, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                     <button onClick={() => { createSnapshot(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>💾 Snapshot</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘S</span>
                     </button>
@@ -2563,7 +2581,7 @@ export default function ScreenplayEditor() {
                   Import/Export ▾
                 </button>
                 {showImportExport && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 300, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                     <button onClick={() => { importFDX(); setShowImportExport(false); }} disabled={importing || !token} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !token ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !token ? 'default' : 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📥 Importer FDX
                     </button>
@@ -2650,7 +2668,8 @@ export default function ScreenplayEditor() {
           comments={comments} 
           elements={elements} 
           activeIndex={activeIndex}
-          visibleIndex={visibleElementIndex}
+          elementPositions={elementPositions}
+          scrollTop={documentScrollTop}
           token={token} 
           docId={docId} 
           canComment={canComment}
