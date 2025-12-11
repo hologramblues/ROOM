@@ -250,7 +250,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, canComment, isR
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment }) => {
+const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
@@ -375,17 +375,32 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
   
   // Sync sidebar scroll with main document scroll
   useEffect(() => {
-    if (sidebarRef.current) {
+    if (sidebarRef.current && selectedCommentIndex === null) {
       sidebarRef.current.scrollTop = scrollTop;
     }
-  }, [scrollTop]);
+  }, [scrollTop, selectedCommentIndex]);
 
-  // Calculate total height based on last adjusted position
+  // Scroll to selected comment when clicking the badge
+  useEffect(() => {
+    if (selectedCommentIndex !== null && adjustedPositions[selectedCommentIndex] !== undefined) {
+      if (sidebarRef.current) {
+        const targetPosition = adjustedPositions[selectedCommentIndex];
+        sidebarRef.current.scrollTo({
+          top: Math.max(0, targetPosition - 50),
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [selectedCommentIndex, adjustedPositions]);
+
+  // Calculate total height - should match document height so sidebar scrolls all the way
   const totalHeight = useMemo(() => {
-    if (sortedIndices.length === 0) return 2000;
-    const lastIdx = sortedIndices[sortedIndices.length - 1];
-    return (adjustedPositions[lastIdx] || 0) + 500;
-  }, [adjustedPositions, sortedIndices]);
+    // Get the maximum position from all elements (not just commented ones)
+    const allPositions = Object.values(elementPositions);
+    if (allPositions.length === 0) return 5000;
+    // Use the highest element position + extra space for window height
+    return Math.max(...allPositions) + 1500;
+  }, [elementPositions]);
 
   // Navigation functions
   const navigateToComment = (direction) => {
@@ -464,6 +479,94 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
         </div>
       </div>
       
+      {/* Add comment section - fixed, doesn't scroll */}
+      {canComment && activeIndex !== null && elements[activeIndex] && (
+        <div style={{ 
+          padding: '12px 16px', 
+          borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+          background: darkMode ? '#2d3748' : '#f9fafb',
+          flexShrink: 0
+        }}>
+          <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 6 }}>
+            Commenter sur : <span style={{ fontStyle: 'italic', color: darkMode ? '#d1d5db' : '#374151' }}>
+              "{elements[activeIndex].content.slice(0, 40)}{elements[activeIndex].content.length > 40 ? '...' : ''}"
+            </span>
+          </div>
+          {newCommentFor === 'header' ? (
+            <div>
+              <textarea
+                value={newCommentText}
+                onChange={(e) => setNewCommentText(e.target.value)}
+                placeholder="Écrire un commentaire..."
+                style={{
+                  width: '100%',
+                  padding: 8,
+                  border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                  borderRadius: 6,
+                  fontSize: 12,
+                  resize: 'vertical',
+                  minHeight: 60,
+                  background: darkMode ? '#1f2937' : 'white',
+                  color: darkMode ? 'white' : 'black'
+                }}
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button
+                  onClick={() => {
+                    if (newCommentText.trim() && elements[activeIndex]) {
+                      submitNewComment(elements[activeIndex].id);
+                    }
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 4,
+                    fontSize: 12,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Ajouter
+                </button>
+                <button
+                  onClick={() => { setNewCommentFor(null); setNewCommentText(''); }}
+                  style={{
+                    padding: '6px 12px',
+                    background: 'transparent',
+                    color: '#6b7280',
+                    border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                    borderRadius: 4,
+                    fontSize: 12,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setNewCommentFor('header')}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                background: darkMode ? '#374151' : 'white',
+                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                borderRadius: 6,
+                color: '#6b7280',
+                fontSize: 12,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+            >
+              + Ajouter un commentaire...
+            </button>
+          )}
+        </div>
+      )}
+      
       {/* Scrollable area - synced with document */}
       <div 
         ref={sidebarRef}
@@ -484,7 +587,8 @@ const CommentsSidebar = ({ comments, elements, activeIndex, elementPositions, sc
             sortedIndices.map((idx, arrayIndex) => {
               const element = elements[idx];
               const elementComments = commentsByElementIndex[idx];
-              const isActive = idx === activeIndex;
+              const isSelected = idx === selectedCommentIndex;
+              const isActive = idx === activeIndex || isSelected;
               const topPosition = adjustedPositions[idx] || 0;
               
               return (
@@ -1264,6 +1368,7 @@ export default function ScreenplayEditor() {
   const [showDocsList, setShowDocsList] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [selectedCommentIndex, setSelectedCommentIndex] = useState(null); // Index of element whose comment was clicked
   const [showImportExport, setShowImportExport] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -2784,7 +2889,7 @@ export default function ScreenplayEditor() {
                       showSceneNumbers={showSceneNumbers}
                       note={notes[element.id]}
                       onNoteClick={(id) => setShowNoteFor(id)}
-                      onOpenComments={() => setShowComments(true)}
+                      onOpenComments={() => { setShowComments(true); setSelectedCommentIndex(index); }}
                     />
                   </div>
                 ))}
@@ -2800,15 +2905,17 @@ export default function ScreenplayEditor() {
           comments={comments} 
           elements={elements} 
           activeIndex={activeIndex}
+          selectedCommentIndex={selectedCommentIndex}
           elementPositions={elementPositions}
           scrollTop={documentScrollTop}
           token={token} 
           docId={docId} 
           canComment={canComment}
-          onClose={() => setShowComments(false)}
+          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); }}
           darkMode={darkMode}
           onNavigateToElement={(idx) => {
             setActiveIndex(idx);
+            setSelectedCommentIndex(idx);
             setTimeout(() => {
               const el = document.querySelector(`[data-element-index="${idx}"]`);
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
