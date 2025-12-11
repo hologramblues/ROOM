@@ -250,11 +250,12 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, canComment, isR
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canComment, onClose, darkMode }) => {
+const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canComment, onClose, darkMode, onNavigateToElement }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
+  const activeCommentRef = useRef(null);
 
   const addReply = async (commentId) => {
     if (!replyContent.trim()) return;
@@ -276,20 +277,34 @@ const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canCom
     } catch (err) { console.error(err); }
   };
 
-  // Group comments by element
-  const commentsByElement = useMemo(() => {
+  // Group comments by element index (in document order)
+  const commentsByElementIndex = useMemo(() => {
     const map = {};
-    comments.forEach(c => {
-      if (!map[c.elementId]) map[c.elementId] = [];
-      map[c.elementId].push(c);
+    comments.filter(c => !c.resolved).forEach(c => {
+      const elementIndex = elements.findIndex(el => el.id === c.elementId);
+      if (elementIndex >= 0) {
+        if (!map[elementIndex]) map[elementIndex] = [];
+        map[elementIndex].push(c);
+      }
     });
     return map;
-  }, [comments]);
+  }, [comments, elements]);
 
-  // Get current element comments
+  // Get sorted element indices that have comments
+  const sortedIndices = useMemo(() => {
+    return Object.keys(commentsByElementIndex).map(Number).sort((a, b) => a - b);
+  }, [commentsByElementIndex]);
+
+  // Get current element
   const currentElement = elements[activeIndex];
-  const currentComments = currentElement ? (commentsByElement[currentElement.id] || []) : [];
   const unresolvedComments = comments.filter(c => !c.resolved);
+
+  // Scroll to active element's comments when activeIndex changes
+  useEffect(() => {
+    if (activeCommentRef.current) {
+      activeCommentRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [activeIndex]);
 
   return (
     <div style={{ 
@@ -310,32 +325,32 @@ const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canCom
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
       </div>
       
-      {/* Current element section */}
+      {/* Current element - add comment button */}
       {currentElement && canComment && (
-        <div style={{ padding: 12, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
-          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>Élément actuel :</div>
-          <div style={{ fontSize: 12, color: darkMode ? 'white' : 'black', marginBottom: 8, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            "{currentElement.content.slice(0, 50)}{currentElement.content.length > 50 ? '...' : ''}"
+        <div style={{ padding: 10, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, background: darkMode ? '#374151' : '#f9fafb' }}>
+          <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>Élément actuel :</div>
+          <div style={{ fontSize: 11, color: darkMode ? 'white' : 'black', marginBottom: 6, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            "{currentElement.content.slice(0, 40)}{currentElement.content.length > 40 ? '...' : ''}"
           </div>
           {newCommentFor === currentElement.id ? (
-            <div style={{ background: darkMode ? '#374151' : '#fef3c7', borderRadius: 4, padding: 10 }}>
+            <div style={{ background: darkMode ? '#1f2937' : '#fef3c7', borderRadius: 4, padding: 8 }}>
               <textarea 
                 autoFocus
                 value={newCommentText} 
                 onChange={e => setNewCommentText(e.target.value)} 
                 placeholder="Votre commentaire..." 
-                style={{ width: '100%', padding: 6, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? 'white' : '#78350f', fontSize: 11, resize: 'none', boxSizing: 'border-box' }} 
-                rows={3} 
+                style={{ width: '100%', padding: 6, background: darkMode ? '#374151' : 'white', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? 'white' : '#78350f', fontSize: 11, resize: 'none', boxSizing: 'border-box' }} 
+                rows={2} 
               />
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <button onClick={() => submitNewComment(currentElement.id)} style={{ padding: '6px 12px', background: '#f59e0b', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 11 }}>Ajouter</button>
-                <button onClick={() => { setNewCommentFor(null); setNewCommentText(''); }} style={{ padding: '6px 12px', background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? '#9ca3af' : '#92400e', cursor: 'pointer', fontSize: 11 }}>Annuler</button>
+                <button onClick={() => submitNewComment(currentElement.id)} style={{ padding: '5px 10px', background: '#f59e0b', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 10 }}>Ajouter</button>
+                <button onClick={() => { setNewCommentFor(null); setNewCommentText(''); }} style={{ padding: '5px 10px', background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? '#9ca3af' : '#92400e', cursor: 'pointer', fontSize: 10 }}>Annuler</button>
               </div>
             </div>
           ) : (
             <button 
               onClick={() => setNewCommentFor(currentElement.id)} 
-              style={{ background: darkMode ? '#374151' : '#fef3c7', border: `1px dashed ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, padding: '8px 12px', color: darkMode ? '#fbbf24' : '#92400e', cursor: 'pointer', fontSize: 11, width: '100%' }}
+              style={{ background: darkMode ? '#1f2937' : '#fef3c7', border: `1px dashed ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, padding: '6px 10px', color: darkMode ? '#fbbf24' : '#92400e', cursor: 'pointer', fontSize: 10, width: '100%' }}
             >
               + Ajouter un commentaire
             </button>
@@ -343,26 +358,69 @@ const CommentsSidebar = ({ comments, elements, activeIndex, token, docId, canCom
         </div>
       )}
       
-      {/* All comments */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
-        {unresolvedComments.length === 0 ? (
-          <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>Aucun commentaire</p>
+      {/* All comments grouped by element */}
+      <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
+        {sortedIndices.length === 0 ? (
+          <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire</p>
         ) : (
-          unresolvedComments.map(c => (
-            <InlineComment 
-              key={c.id} 
-              comment={c} 
-              onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
-              onResolve={toggleResolve}
-              canComment={canComment}
-              isReplying={replyTo === c.id}
-              replyContent={replyTo === c.id ? replyContent : ''}
-              onReplyChange={setReplyContent}
-              onSubmitReply={addReply}
-              onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
-              darkMode={darkMode}
-            />
-          ))
+          sortedIndices.map(idx => {
+            const element = elements[idx];
+            const elementComments = commentsByElementIndex[idx];
+            const isActive = idx === activeIndex;
+            
+            return (
+              <div 
+                key={idx} 
+                ref={isActive ? activeCommentRef : null}
+                style={{ 
+                  marginBottom: 12, 
+                  background: isActive ? (darkMode ? '#374151' : '#eff6ff') : 'transparent',
+                  borderRadius: 6,
+                  padding: 8,
+                  border: isActive ? `1px solid ${darkMode ? '#4b5563' : '#3b82f6'}` : '1px solid transparent'
+                }}
+              >
+                {/* Element reference */}
+                <button
+                  onClick={() => onNavigateToElement && onNavigateToElement(idx)}
+                  style={{ 
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    background: 'none', 
+                    border: 'none', 
+                    padding: 0,
+                    marginBottom: 6,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span style={{ fontSize: 9, color: '#6b7280', display: 'block' }}>
+                    {element?.type === 'scene' ? '🎬' : '📝'} Élément {idx + 1}
+                  </span>
+                  <span style={{ fontSize: 10, color: darkMode ? '#d1d5db' : '#374151', fontStyle: 'italic', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    "{element?.content.slice(0, 35)}{element?.content.length > 35 ? '...' : ''}"
+                  </span>
+                </button>
+                
+                {/* Comments for this element */}
+                {elementComments.map(c => (
+                  <InlineComment 
+                    key={c.id} 
+                    comment={c} 
+                    onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
+                    onResolve={toggleResolve}
+                    canComment={canComment}
+                    isReplying={replyTo === c.id}
+                    replyContent={replyTo === c.id ? replyContent : ''}
+                    onReplyChange={setReplyContent}
+                    onSubmitReply={addReply}
+                    onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
+                    darkMode={darkMode}
+                  />
+                ))}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
@@ -1078,7 +1136,7 @@ export default function ScreenplayEditor() {
   const [renameFrom, setRenameFrom] = useState('');
   const [renameTo, setRenameTo] = useState('');
   const [focusMode, setFocusMode] = useState(false);
-  const [sceneTags, setSceneTags] = useState({}); // { sceneId: 'color' }
+  const [sceneAssignments, setSceneAssignments] = useState({}); // { sceneId: { userId, userName, userColor } }
   const [showTimer, setShowTimer] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -2215,17 +2273,54 @@ export default function ScreenplayEditor() {
                     >
                       {sceneStatus[scene.id] === 'final' ? '✓' : sceneStatus[scene.id] === 'review' ? '◐' : '○'}
                     </button>
-                    {/* Color */}
+                    {/* User Assignment */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        const colors = ['', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6'];
-                        const currentIdx = colors.indexOf(sceneTags[scene.id] || '');
-                        setSceneTags(prev => ({ ...prev, [scene.id]: colors[(currentIdx + 1) % colors.length] }));
+                        // Cycle through users (including "none")
+                        const allUsers = [null, ...users];
+                        const currentAssignment = sceneAssignments[scene.id];
+                        const currentIdx = currentAssignment 
+                          ? allUsers.findIndex(u => u?.id === currentAssignment.userId)
+                          : 0;
+                        const nextIdx = (currentIdx + 1) % allUsers.length;
+                        const nextUser = allUsers[nextIdx];
+                        if (nextUser) {
+                          setSceneAssignments(prev => ({ 
+                            ...prev, 
+                            [scene.id]: { 
+                              userId: nextUser.id, 
+                              userName: nextUser.name, 
+                              userColor: nextUser.color 
+                            } 
+                          }));
+                        } else {
+                          setSceneAssignments(prev => {
+                            const newAssignments = { ...prev };
+                            delete newAssignments[scene.id];
+                            return newAssignments;
+                          });
+                        }
                       }}
-                      style={{ width: 12, height: 12, borderRadius: '50%', border: sceneTags[scene.id] ? 'none' : `1px dashed #6b7280`, background: sceneTags[scene.id] || 'transparent', cursor: 'pointer', padding: 0 }}
-                      title="Couleur"
-                    />
+                      style={{ 
+                        width: 16, 
+                        height: 16, 
+                        borderRadius: '50%', 
+                        border: sceneAssignments[scene.id] ? 'none' : `1px dashed #6b7280`, 
+                        background: sceneAssignments[scene.id]?.userColor || 'transparent', 
+                        cursor: 'pointer', 
+                        padding: 0,
+                        fontSize: 8,
+                        fontWeight: 'bold',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner un utilisateur'}
+                    >
+                      {sceneAssignments[scene.id]?.userName?.charAt(0).toUpperCase() || ''}
+                    </button>
                   </div>
                 </div>
               ))
@@ -2443,7 +2538,7 @@ export default function ScreenplayEditor() {
         </div>
       </div>
       
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 32, gap: 20, marginLeft: showOutline ? 300 : 0, transition: 'margin-left 0.2s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 32, gap: 20, marginLeft: showOutline ? 300 : 0, marginRight: showComments ? 320 : 0, transition: 'margin 0.2s ease' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {pages.map((page) => (
             <div key={page.number} style={{ position: 'relative' }}>
@@ -2514,6 +2609,13 @@ export default function ScreenplayEditor() {
           canComment={canComment}
           onClose={() => setShowComments(false)}
           darkMode={darkMode}
+          onNavigateToElement={(idx) => {
+            setActiveIndex(idx);
+            setTimeout(() => {
+              const el = document.querySelector(`[data-element-index="${idx}"]`);
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 50);
+          }}
         />
       )}
       
