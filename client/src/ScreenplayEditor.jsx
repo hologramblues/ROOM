@@ -1588,6 +1588,36 @@ export default function ScreenplayEditor() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  const emitTitle = useCallback(t => { setTitle(t); if (socketRef.current && connected && canEdit) socketRef.current.emit('title-change', { title: t }); }, [connected, canEdit]);
+  
+  // Save to undo stack before changes - MUST be before useEffect that uses undo/redo
+  const pushToUndo = useCallback((elementsSnapshot) => {
+    setUndoStack(prev => [...prev.slice(-50), elementsSnapshot]); // Keep last 50
+    setRedoStack([]); // Clear redo on new action
+  }, []);
+
+  const undo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const previous = undoStack[undoStack.length - 1];
+    setRedoStack(prev => [...prev, elements]);
+    setUndoStack(prev => prev.slice(0, -1));
+    setElements(previous);
+    if (socketRef.current && connected && canEdit) {
+      socketRef.current.emit('full-sync', { elements: previous });
+    }
+  }, [undoStack, elements, connected, canEdit]);
+
+  const redo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setUndoStack(prev => [...prev, elements]);
+    setRedoStack(prev => prev.slice(0, -1));
+    setElements(next);
+    if (socketRef.current && connected && canEdit) {
+      socketRef.current.emit('full-sync', { elements: next });
+    }
+  }, [redoStack, elements, connected, canEdit]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
@@ -1651,35 +1681,6 @@ export default function ScreenplayEditor() {
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, showWritingGoals, token, docId, title, elements, activeIndex, undo, redo]);
-
-  const emitTitle = useCallback(t => { setTitle(t); if (socketRef.current && connected && canEdit) socketRef.current.emit('title-change', { title: t }); }, [connected, canEdit]);
-  // Save to undo stack before changes
-  const pushToUndo = useCallback((elementsSnapshot) => {
-    setUndoStack(prev => [...prev.slice(-50), elementsSnapshot]); // Keep last 50
-    setRedoStack([]); // Clear redo on new action
-  }, []);
-
-  const undo = useCallback(() => {
-    if (undoStack.length === 0) return;
-    const previous = undoStack[undoStack.length - 1];
-    setRedoStack(prev => [...prev, elements]);
-    setUndoStack(prev => prev.slice(0, -1));
-    setElements(previous);
-    if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: previous });
-    }
-  }, [undoStack, elements, connected, canEdit]);
-
-  const redo = useCallback(() => {
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
-    setUndoStack(prev => [...prev, elements]);
-    setRedoStack(prev => prev.slice(0, -1));
-    setElements(next);
-    if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: next });
-    }
-  }, [redoStack, elements, connected, canEdit]);
 
   const updateElement = useCallback((i, el, skipUndo = false) => { 
     if (!skipUndo) pushToUndo(elements);
