@@ -264,9 +264,19 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   useEffect(() => {
     if (pendingInlineComment && inlineCommentInputRef.current) {
       setInlineCommentText('');
-      setTimeout(() => inlineCommentInputRef.current?.focus(), 100);
+      setTimeout(() => {
+        inlineCommentInputRef.current?.focus();
+        // Scroll sidebar to the pending comment position
+        if (sidebarRef.current) {
+          const targetPosition = elementPositions[pendingInlineComment.elementIndex] || (pendingInlineComment.elementIndex * 30);
+          sidebarRef.current.scrollTo({
+            top: Math.max(0, targetPosition - 50),
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
     }
-  }, [pendingInlineComment]);
+  }, [pendingInlineComment, elementPositions]);
 
   const addReply = async (commentId) => {
     if (!replyContent.trim()) return;
@@ -504,185 +514,6 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
         </div>
       </div>
       
-      {/* Pending inline comment form - shows when user selects text and clicks "Comment" */}
-      {pendingInlineComment && (
-        <div style={{ 
-          padding: '12px 16px', 
-          borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-          background: darkMode ? '#374151' : '#fef3c7',
-          flexShrink: 0
-        }}>
-          <div style={{ 
-            fontSize: 11, 
-            color: darkMode ? '#fbbf24' : '#92400e', 
-            marginBottom: 8,
-            padding: '6px 8px',
-            background: 'rgba(251, 191, 36, 0.3)',
-            borderRadius: 4,
-            borderLeft: '3px solid #f59e0b'
-          }}>
-            "{pendingInlineComment.text.slice(0, 60)}{pendingInlineComment.text.length > 60 ? '...' : ''}"
-          </div>
-          <textarea
-            ref={inlineCommentInputRef}
-            value={inlineCommentText}
-            onChange={(e) => setInlineCommentText(e.target.value)}
-            placeholder="Écrire votre commentaire..."
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && inlineCommentText.trim()) {
-                e.preventDefault();
-                onSubmitInlineComment(inlineCommentText);
-                setInlineCommentText('');
-              }
-              if (e.key === 'Escape') {
-                onCancelInlineComment();
-                setInlineCommentText('');
-              }
-            }}
-            style={{
-              width: '100%',
-              padding: 10,
-              border: `2px solid #f59e0b`,
-              borderRadius: 6,
-              fontSize: 12,
-              resize: 'vertical',
-              minHeight: 70,
-              background: darkMode ? '#1f2937' : 'white',
-              color: darkMode ? 'white' : 'black',
-              boxSizing: 'border-box'
-            }}
-          />
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button
-              onClick={() => {
-                if (inlineCommentText.trim()) {
-                  onSubmitInlineComment(inlineCommentText);
-                  setInlineCommentText('');
-                }
-              }}
-              disabled={!inlineCommentText.trim()}
-              style={{
-                padding: '8px 16px',
-                background: inlineCommentText.trim() ? '#f59e0b' : '#d1d5db',
-                color: 'white',
-                border: 'none',
-                borderRadius: 4,
-                fontSize: 12,
-                cursor: inlineCommentText.trim() ? 'pointer' : 'not-allowed',
-                fontWeight: 500
-              }}
-            >
-              Commenter
-            </button>
-            <button
-              onClick={() => {
-                onCancelInlineComment();
-                setInlineCommentText('');
-              }}
-              style={{
-                padding: '8px 16px',
-                background: 'transparent',
-                color: darkMode ? '#9ca3af' : '#6b7280',
-                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
-                borderRadius: 4,
-                fontSize: 12,
-                cursor: 'pointer'
-              }}
-            >
-              Annuler
-            </button>
-          </div>
-        </div>
-      )}
-      
-      {/* Add comment section - fixed, doesn't scroll */}
-      {canComment && activeIndex !== null && elements[activeIndex] && !pendingInlineComment && (
-        <div style={{ 
-          padding: '12px 16px', 
-          borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-          background: 'white',
-          flexShrink: 0
-        }}>
-          <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 6 }}>
-            Commenter sur : <span style={{ fontStyle: 'italic', color: '#374151' }}>
-              "{elements[activeIndex].content.slice(0, 40)}{elements[activeIndex].content.length > 40 ? '...' : ''}"
-            </span>
-          </div>
-          {newCommentFor === 'header' ? (
-            <div>
-              <textarea
-                value={newCommentText}
-                onChange={(e) => setNewCommentText(e.target.value)}
-                placeholder="Écrire un commentaire..."
-                style={{
-                  width: '100%',
-                  padding: 8,
-                  border: '1px solid #d1d5db',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  resize: 'vertical',
-                  minHeight: 60,
-                  background: 'white',
-                  color: 'black'
-                }}
-                autoFocus
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button
-                  onClick={() => {
-                    if (newCommentText.trim() && elements[activeIndex]) {
-                      submitNewComment(elements[activeIndex].id);
-                    }
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    background: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 4,
-                    fontSize: 12,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Ajouter
-                </button>
-                <button
-                  onClick={() => { setNewCommentFor(null); setNewCommentText(''); }}
-                  style={{
-                    padding: '6px 12px',
-                    background: 'transparent',
-                    color: '#6b7280',
-                    border: '1px solid #d1d5db',
-                    borderRadius: 4,
-                    fontSize: 12,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Annuler
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setNewCommentFor('header')}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                background: '#f9fafb',
-                border: '1px solid #d1d5db',
-                borderRadius: 6,
-                color: '#374151',
-                fontSize: 12,
-                cursor: 'pointer',
-                textAlign: 'left'
-              }}
-            >
-              + Ajouter un commentaire...
-            </button>
-          )}
-        </div>
-      )}
-      
       {/* Scrollable area - synced with document */}
       <div 
         ref={sidebarRef}
@@ -697,9 +528,107 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
       >
         {/* Inner container with same height as document */}
         <div style={{ position: 'relative', height: totalHeight, minHeight: '100%' }}>
-          {sortedIndices.length === 0 ? (
+          
+          {/* Pending inline comment form - positioned at the element's level */}
+          {pendingInlineComment && (
+            <div style={{ 
+              position: 'absolute',
+              top: elementPositions[pendingInlineComment.elementIndex] || (pendingInlineComment.elementIndex * 30),
+              left: 8,
+              right: 8,
+              padding: '10px',
+              background: darkMode ? '#374151' : '#fef3c7',
+              borderRadius: 8,
+              border: `2px solid #f59e0b`,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+              zIndex: 10
+            }}>
+              <div style={{ 
+                fontSize: 11, 
+                color: darkMode ? '#fbbf24' : '#92400e', 
+                marginBottom: 8,
+                padding: '4px 8px',
+                background: 'rgba(251, 191, 36, 0.3)',
+                borderRadius: 4,
+                borderLeft: '3px solid #f59e0b'
+              }}>
+                "{pendingInlineComment.text.slice(0, 50)}{pendingInlineComment.text.length > 50 ? '...' : ''}"
+              </div>
+              <textarea
+                ref={inlineCommentInputRef}
+                value={inlineCommentText}
+                onChange={(e) => setInlineCommentText(e.target.value)}
+                placeholder="Écrire votre commentaire..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && inlineCommentText.trim()) {
+                    e.preventDefault();
+                    onSubmitInlineComment(inlineCommentText);
+                    setInlineCommentText('');
+                  }
+                  if (e.key === 'Escape') {
+                    onCancelInlineComment();
+                    setInlineCommentText('');
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: 8,
+                  border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`,
+                  borderRadius: 4,
+                  fontSize: 12,
+                  resize: 'none',
+                  minHeight: 50,
+                  background: darkMode ? '#1f2937' : 'white',
+                  color: darkMode ? 'white' : 'black',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <button
+                  onClick={() => {
+                    if (inlineCommentText.trim()) {
+                      onSubmitInlineComment(inlineCommentText);
+                      setInlineCommentText('');
+                    }
+                  }}
+                  disabled={!inlineCommentText.trim()}
+                  style={{
+                    padding: '6px 12px',
+                    background: inlineCommentText.trim() ? '#f59e0b' : '#d1d5db',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 4,
+                    fontSize: 11,
+                    cursor: inlineCommentText.trim() ? 'pointer' : 'not-allowed',
+                    fontWeight: 500
+                  }}
+                >
+                  Commenter
+                </button>
+                <button
+                  onClick={() => {
+                    onCancelInlineComment();
+                    setInlineCommentText('');
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    background: 'transparent',
+                    color: darkMode ? '#9ca3af' : '#6b7280',
+                    border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                    borderRadius: 4,
+                    fontSize: 11,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {sortedIndices.length === 0 && !pendingInlineComment ? (
             <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire</p>
-          ) : (
+          ) : sortedIndices.length > 0 ? (
             sortedIndices.map((idx, arrayIndex) => {
               const element = elements[idx];
               const elementComments = commentsByElementIndex[idx];
@@ -720,31 +649,11 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                     borderRadius: 8,
                     padding: 10,
                     border: isActive ? `2px solid ${darkMode ? '#60a5fa' : '#3b82f6'}` : `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    cursor: 'pointer'
                   }}
+                  onClick={() => onNavigateToElement && onNavigateToElement(idx)}
                 >
-                  {/* Element reference */}
-                  <button
-                    onClick={() => onNavigateToElement && onNavigateToElement(idx)}
-                    style={{ 
-                      display: 'block',
-                      width: '100%',
-                      textAlign: 'left',
-                      background: 'none', 
-                      border: 'none', 
-                      padding: 0,
-                      marginBottom: 8,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <span style={{ fontSize: 9, color: '#6b7280', display: 'block' }}>
-                      {element?.type === 'scene' ? '🎬' : '📝'} Élément {idx + 1}
-                    </span>
-                    <span style={{ fontSize: 10, color: darkMode ? '#d1d5db' : '#374151', fontStyle: 'italic', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      "{element?.content.slice(0, 30)}{element?.content.length > 30 ? '...' : ''}"
-                    </span>
-                  </button>
-                  
                   {/* Comments for this element */}
                   {elementComments.map(c => (
                     <div key={c.id} data-comment-id={c.id}>
@@ -777,37 +686,10 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                       />
                     </div>
                   ))}
-                  
-                  {/* Add comment to this element */}
-                  {canComment && (
-                    newCommentFor === element?.id ? (
-                      <div style={{ marginTop: 8, background: darkMode ? '#1f2937' : '#fef3c7', borderRadius: 4, padding: 8 }}>
-                        <textarea 
-                          autoFocus
-                          value={newCommentText} 
-                          onChange={e => setNewCommentText(e.target.value)} 
-                          placeholder="Votre commentaire..." 
-                          style={{ width: '100%', padding: 6, background: darkMode ? '#374151' : 'white', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? 'white' : '#78350f', fontSize: 11, resize: 'none', boxSizing: 'border-box' }} 
-                          rows={2} 
-                        />
-                        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                          <button onClick={() => submitNewComment(element.id)} style={{ padding: '4px 8px', background: '#f59e0b', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 10 }}>Ajouter</button>
-                          <button onClick={() => { setNewCommentFor(null); setNewCommentText(''); }} style={{ padding: '4px 8px', background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? '#9ca3af' : '#92400e', cursor: 'pointer', fontSize: 10 }}>Annuler</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => setNewCommentFor(element?.id)} 
-                        style={{ marginTop: 6, background: 'transparent', border: 'none', padding: '4px 0', color: '#6b7280', cursor: 'pointer', fontSize: 10, textAlign: 'left' }}
-                      >
-                        + Répondre
-                      </button>
-                    )
-                  )}
                 </div>
               );
             })
-          )}
+          ) : null}
         </div>
       </div>
     </div>
@@ -4279,70 +4161,53 @@ export default function ScreenplayEditor() {
         />
       )}
       
-      {/* Text Selection Comment Popup */}
+      {/* Text Selection Comment Button - Google Docs style side button */}
       {textSelection && canComment && textSelection.rect && (
-        <div 
+        <button 
           className="text-selection-popup"
+          onClick={() => {
+            // Open comments panel with pending inline comment
+            setPendingInlineComment({
+              elementId: textSelection.elementId,
+              elementIndex: textSelection.elementIndex,
+              text: textSelection.text,
+              startOffset: textSelection.startOffset,
+              endOffset: textSelection.endOffset
+            });
+            setShowComments(true);
+            setTextSelection(null);
+          }}
           style={{
             position: 'fixed',
-            left: Math.min(Math.max(10, (textSelection.rect.left || 0) + (textSelection.rect.width || 200) / 2 - 60), window.innerWidth - 140),
-            top: (textSelection.rect.top || 100) < 50 ? (textSelection.rect.bottom || 100) + 10 : (textSelection.rect.top || 100) - 45,
-            background: darkMode ? '#1f2937' : 'white',
-            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
-            borderRadius: 8,
-            padding: '6px 10px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            right: showComments ? 340 : 20,
+            top: textSelection.rect.top || 100,
+            width: 32,
+            height: 32,
+            background: '#f59e0b',
+            border: 'none',
+            borderRadius: '50%',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
             zIndex: 1000,
             display: 'flex',
-            gap: 6,
-            alignItems: 'center'
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: 16,
+            color: 'white',
+            transition: 'transform 0.15s ease, box-shadow 0.15s ease'
           }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.4)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+          }}
+          title="Ajouter un commentaire"
         >
-          <button
-            onClick={() => {
-              // Open comments panel with pending inline comment
-              setPendingInlineComment({
-                elementId: textSelection.elementId,
-                elementIndex: textSelection.elementIndex,
-                text: textSelection.text,
-                startOffset: textSelection.startOffset,
-                endOffset: textSelection.endOffset
-              });
-              setShowComments(true);
-              setTextSelection(null);
-            }}
-            style={{
-              background: '#f59e0b',
-              border: 'none',
-              borderRadius: 6,
-              padding: '6px 12px',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4
-            }}
-          >
-            💬 Commenter
-          </button>
-          <button
-            onClick={() => {
-              setTextSelection(null);
-            }}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#6b7280',
-              cursor: 'pointer',
-              fontSize: 14,
-              padding: '4px 6px'
-            }}
-          >
-            ✕
-          </button>
-        </div>
+          💬
+        </button>
       )}
 
       {/* Drag overlay - prevents blue selection during panel drag */}
