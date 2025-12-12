@@ -1068,21 +1068,6 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                           }
                         }}
                       >
-                        {/* Show highlighted text if inline comment */}
-                        {c.highlight && isThisCommentSelected && (
-                          <div style={{ 
-                            background: 'rgba(251, 191, 36, 0.3)', 
-                            padding: '4px 8px', 
-                            borderRadius: '4px 4px 0 0', 
-                            fontSize: 11, 
-                            color: darkMode ? '#fbbf24' : '#92400e',
-                            fontStyle: 'italic',
-                            borderLeft: '3px solid #f59e0b',
-                            marginBottom: -6
-                          }}>
-                            "{c.highlight.text.slice(0, 50)}{c.highlight.text.length > 50 ? '...' : ''}"
-                          </div>
-                        )}
                         <InlineComment 
                           comment={{...c, id: cId}} 
                           onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
