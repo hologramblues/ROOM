@@ -261,22 +261,18 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   const commentRefs = useRef({});
 
   // Focus on inline comment input when pending comment appears
+  const pendingCommentInitRef = useRef(null);
   useEffect(() => {
-    if (pendingInlineComment && inlineCommentInputRef.current) {
+    if (pendingInlineComment && pendingInlineComment !== pendingCommentInitRef.current) {
+      pendingCommentInitRef.current = pendingInlineComment;
       setInlineCommentText('');
       setTimeout(() => {
         inlineCommentInputRef.current?.focus();
-        // Scroll sidebar to the pending comment position
-        if (sidebarRef.current) {
-          const targetPosition = elementPositions[pendingInlineComment.elementIndex] || (pendingInlineComment.elementIndex * 30);
-          sidebarRef.current.scrollTo({
-            top: Math.max(0, targetPosition - 50),
-            behavior: 'smooth'
-          });
-        }
       }, 100);
+    } else if (!pendingInlineComment) {
+      pendingCommentInitRef.current = null;
     }
-  }, [pendingInlineComment, elementPositions]);
+  }, [pendingInlineComment]);
 
   const addReply = async (commentId) => {
     if (!replyContent.trim()) return;
@@ -392,50 +388,6 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
     
     return positions;
   }, [sortedIndices, elementPositions, cardHeights]);
-  
-  // Track if we just selected a comment (to do one-time scroll)
-  const hasScrolledToSelectedRef = useRef(true);
-  const prevSelectedRef = useRef(null);
-  
-  // Scroll to selected comment when clicking the badge (one-time)
-  useEffect(() => {
-    if (selectedCommentIndex !== null && selectedCommentIndex !== prevSelectedRef.current) {
-      prevSelectedRef.current = selectedCommentIndex;
-      
-      if (adjustedPositions[selectedCommentIndex] !== undefined && sidebarRef.current) {
-        hasScrolledToSelectedRef.current = false;
-        const targetPosition = adjustedPositions[selectedCommentIndex];
-        sidebarRef.current.scrollTo({
-          top: Math.max(0, targetPosition - 50),
-          behavior: 'smooth'
-        });
-        // Allow normal sync to resume after a short delay
-        setTimeout(() => {
-          hasScrolledToSelectedRef.current = true;
-        }, 500);
-      }
-      // If no position found, don't block scroll sync
-    } else if (selectedCommentIndex === null) {
-      prevSelectedRef.current = null;
-      hasScrolledToSelectedRef.current = true;
-    }
-  }, [selectedCommentIndex, adjustedPositions]);
-
-  // Sync sidebar scroll with main document scroll
-  useEffect(() => {
-    if (sidebarRef.current && hasScrolledToSelectedRef.current) {
-      sidebarRef.current.scrollTop = scrollTop;
-    }
-  }, [scrollTop]);
-
-  // Calculate total height - should match document height so sidebar scrolls all the way
-  const totalHeight = useMemo(() => {
-    // Get the maximum position from all elements (not just commented ones)
-    const allPositions = Object.values(elementPositions);
-    if (allPositions.length === 0) return 5000;
-    // Use the highest element position + extra space for window height
-    return Math.max(...allPositions) + 1500;
-  }, [elementPositions]);
 
   // Navigation functions
   const navigateToComment = (direction) => {
@@ -514,35 +466,54 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
         </div>
       </div>
       
-      {/* Scrollable area - synced with document */}
+      {/* Content area - synced with document scroll (no manual scroll) */}
       <div 
         ref={sidebarRef}
         style={{ 
           flex: 1, 
-          overflow: 'auto',
+          overflow: 'hidden',
           position: 'relative'
         }}
-        onScroll={(e) => {
-          e.stopPropagation();
-        }}
       >
-        {/* Inner container with same height as document */}
-        <div style={{ position: 'relative', height: totalHeight, minHeight: '100%' }}>
+        {/* Inner container - moves with document scroll */}
+        <div style={{ 
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          transform: `translateY(${-scrollTop}px)`
+        }}>
           
-          {/* Pending inline comment form - positioned at the element's level */}
-          {pendingInlineComment && (
-            <div style={{ 
-              position: 'absolute',
-              top: elementPositions[pendingInlineComment.elementIndex] || (pendingInlineComment.elementIndex * 30),
-              left: 8,
-              right: 8,
-              padding: '10px',
-              background: darkMode ? '#374151' : '#fef3c7',
-              borderRadius: 8,
-              border: `2px solid #f59e0b`,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-              zIndex: 10
-            }}>
+          {/* Pending inline comment form - positioned after existing comments for this element */}
+          {pendingInlineComment && (() => {
+            const pendingIdx = pendingInlineComment.elementIndex;
+            // Find if there are existing comments for this element
+            const existingCommentsForElement = sortedIndices.includes(pendingIdx);
+            let pendingTop;
+            
+            if (existingCommentsForElement) {
+              // Position after the existing comment card
+              const cardTop = adjustedPositions[pendingIdx] || elementPositions[pendingIdx] || (pendingIdx * 30);
+              const cardHeight = cardHeights[pendingIdx] || 100;
+              pendingTop = cardTop + cardHeight + 10;
+            } else {
+              // No existing comments - position at element level
+              pendingTop = elementPositions[pendingIdx] || (pendingIdx * 30);
+            }
+            
+            return (
+              <div style={{ 
+                position: 'absolute',
+                top: pendingTop,
+                left: 8,
+                right: 8,
+                padding: '10px',
+                background: darkMode ? '#374151' : '#fef3c7',
+                borderRadius: 8,
+                border: `2px solid #f59e0b`,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                zIndex: 10
+              }}>
               <div style={{ 
                 fontSize: 11, 
                 color: darkMode ? '#fbbf24' : '#92400e', 
@@ -624,7 +595,8 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                 </button>
               </div>
             </div>
-          )}
+            );
+          })()}
           
           {sortedIndices.length === 0 && !pendingInlineComment ? (
             <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire</p>
