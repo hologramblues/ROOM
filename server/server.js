@@ -93,11 +93,57 @@ app.post('/api/documents/:shortId/comments', authMiddleware, async (req, res) =>
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc || !checkDocumentAccess(doc, req.user, 'commenter')) return res.status(403).json({ error: 'Acces refuse' });
-    const comment = { id: uuidv4(), elementId: req.body.elementId, userId: req.user._id, userName: req.user.name, userColor: req.user.color, content: req.body.content, createdAt: new Date(), replies: [] };
+    const comment = { 
+      id: uuidv4(), 
+      elementId: req.body.elementId, 
+      elementIndex: req.body.elementIndex,
+      highlight: req.body.highlight || null,
+      userId: req.user._id, 
+      userName: req.user.name, 
+      userColor: req.user.color, 
+      content: req.body.content, 
+      createdAt: new Date(), 
+      replies: [],
+      resolved: false
+    };
     doc.comments.push(comment); await doc.save();
     io.to(req.params.shortId).emit('comment-added', { comment });
     res.json({ comment });
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
+});
+
+app.post('/api/documents/:shortId/comments/:commentId/replies', authMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId });
+    if (!doc || !checkDocumentAccess(doc, req.user, 'commenter')) return res.status(403).json({ error: 'Acces refuse' });
+    const comment = doc.comments.find(c => c.id === req.params.commentId);
+    if (!comment) return res.status(404).json({ error: 'Commentaire non trouve' });
+    const reply = { 
+      id: uuidv4(), 
+      userId: req.user._id, 
+      userName: req.user.name, 
+      userColor: req.user.color, 
+      content: req.body.content, 
+      createdAt: new Date() 
+    };
+    comment.replies.push(reply); 
+    await doc.save();
+    io.to(req.params.shortId).emit('comment-reply-added', { commentId: req.params.commentId, reply });
+    res.json({ reply });
+  } catch (error) { console.error(error); res.status(500).json({ error: 'Erreur' }); }
+});
+
+app.delete('/api/documents/:shortId/comments/:commentId', authMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId });
+    if (!doc || !checkDocumentAccess(doc, req.user, 'editor')) return res.status(403).json({ error: 'Acces refuse' });
+    const commentIndex = doc.comments.findIndex(c => c.id === req.params.commentId);
+    if (commentIndex === -1) return res.status(404).json({ error: 'Commentaire non trouve' });
+    doc.comments.splice(commentIndex, 1);
+    await doc.save();
+    io.to(req.params.shortId).emit('comment-deleted', { commentId: req.params.commentId });
+    res.json({ success: true });
+  } catch (error) { console.error(error); res.status(500).json({ error: 'Erreur' }); }
 });
 
 app.put('/api/documents/:shortId/comments/:commentId/resolve', authMiddleware, async (req, res) => {
@@ -126,64 +172,12 @@ io.on('connection', (socket) => {
       let role = 'viewer';
       if (socket.user) { if (doc.ownerId.equals(socket.user._id)) role = 'editor'; else { const c = doc.collaborators.find(c => c.userId.equals(socket.user._id)); if (c) role = c.role; } }
       if (doc.publicAccess.enabled && doc.publicAccess.role === 'editor') role = 'editor';
-      
-      // Add user to collaborators if authenticated and not already in list
-      if (socket.user && !doc.collaborators.find(c => c.userId.equals(socket.user._id)) && !doc.ownerId.equals(socket.user._id)) {
-        doc.collaborators.push({ userId: socket.user._id, role: role });
-        doc.markModified('collaborators');
-        await doc.save();
-        console.log('Added collaborator:', socket.user.name);
-      }
-      
-      // Build full collaborators list (owner + collaborators) for client
-      const owner = await User.findById(doc.ownerId).select('name color');
-      const allCollaborators = [];
-      if (owner) {
-        allCollaborators.push({ name: owner.name, color: owner.color || '#3b82f6', isOwner: true });
-      }
-      for (const collab of doc.collaborators) {
-        try {
-          const user = await User.findById(collab.userId).select('name color');
-          if (user && !allCollaborators.find(c => c.name === user.name)) {
-            allCollaborators.push({ name: user.name, color: user.color || '#6b7280' });
-          }
-        } catch (e) { console.error('Error fetching collaborator:', e); }
-      }
-      console.log('Sending collaborators:', allCollaborators);
-      
       currentDocId = docId; socket.join(docId);
       if (!activeRooms.has(docId)) activeRooms.set(docId, new Map());
-      
-      const userName = socket.user?.name || 'Anonyme-' + socket.id.slice(0,4);
-      const userKey = socket.user?._id?.toString() || socket.id; // Use real user ID if logged in
-      
-      // Check if user already connected (another tab)
-      const existingUser = Array.from(activeRooms.get(docId).values()).find(u => u.odName === userName);
-      
-      const userInfo = { 
-        id: socket.id, 
-        odName: userName, // odName = original user identifier
-        name: userName, 
-        color: socket.user?.color || getRandomColor(), 
-        role, 
-        cursor: null,
-        sockets: existingUser ? [...(existingUser.sockets || [existingUser.id]), socket.id] : [socket.id]
-      };
-      
-      // Remove old entry for same user if exists
-      for (const [key, val] of activeRooms.get(docId).entries()) {
-        if (val.odName === userName) {
-          activeRooms.get(docId).delete(key);
-        }
-      }
-      
-      activeRooms.get(docId).set(userKey, userInfo);
-      
-      // Build unique users list (no duplicates)
-      const uniqueUsers = Array.from(activeRooms.get(docId).values());
-      
-      socket.emit('document-state', { id: doc.shortId, title: doc.title, elements: doc.elements, characters: doc.characters, locations: doc.locations, comments: doc.comments, users: uniqueUsers, role, collaborators: allCollaborators });
-      socket.to(docId).emit('user-joined', { user: userInfo, users: uniqueUsers });
+      const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: socket.user?.color || getRandomColor(), role, cursor: null };
+      activeRooms.get(docId).set(socket.id, userInfo);
+      socket.emit('document-state', { id: doc.shortId, title: doc.title, elements: doc.elements, characters: doc.characters, locations: doc.locations, comments: doc.comments, users: Array.from(activeRooms.get(docId).values()), role });
+      socket.to(docId).emit('user-joined', { user: userInfo, users: Array.from(activeRooms.get(docId).values()) });
     } catch (error) { console.error('Join error:', error); }
   });
 
@@ -253,29 +247,7 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     if (currentDocId) {
       const room = activeRooms.get(currentDocId);
-      if (room) {
-        // Find user by socket.id in their sockets array
-        for (const [key, user] of room.entries()) {
-          if (user.sockets && user.sockets.includes(socket.id)) {
-            // Remove this socket from user's sockets
-            user.sockets = user.sockets.filter(s => s !== socket.id);
-            // If no more sockets, remove user entirely
-            if (user.sockets.length === 0) {
-              room.delete(key);
-            }
-            break;
-          } else if (user.id === socket.id) {
-            // Fallback for old format
-            room.delete(key);
-            break;
-          }
-        }
-        if (room.size === 0) {
-          activeRooms.delete(currentDocId);
-        } else {
-          socket.to(currentDocId).emit('user-left', { id: socket.id, users: Array.from(room.values()) });
-        }
-      }
+      if (room) { room.delete(socket.id); if (room.size === 0) activeRooms.delete(currentDocId); else socket.to(currentDocId).emit('user-left', { id: socket.id, users: Array.from(room.values()) }); }
     }
   });
 });
