@@ -213,10 +213,14 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
 };
 
 // ============ INLINE COMMENT (Google Docs style) ============
-const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode, isSelected }) => {
+const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdit, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode, isSelected }) => {
   const replyInputRef = useRef(null);
+  const editInputRef = useRef(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.content);
   useEffect(() => { if (isReplying && replyInputRef.current) replyInputRef.current.focus(); }, [isReplying]);
+  useEffect(() => { if (isEditing && editInputRef.current) editInputRef.current.focus(); }, [isEditing]);
   
   // Close menu when clicking outside
   useEffect(() => {
@@ -341,7 +345,24 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, canCo
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 14
+                fontSize: 14,
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                if (!comment.resolved) {
+                  e.currentTarget.style.background = '#10b981';
+                  e.currentTarget.style.color = 'white';
+                } else {
+                  e.currentTarget.style.background = '#059669';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!comment.resolved) {
+                  e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6';
+                  e.currentTarget.style.color = darkMode ? '#9ca3af' : '#6b7280';
+                } else {
+                  e.currentTarget.style.background = '#10b981';
+                }
               }}
             >
               ✓
@@ -378,11 +399,34 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, canCo
                     borderRadius: 8,
                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                     zIndex: 100,
-                    minWidth: 120,
+                    minWidth: 140,
                     overflow: 'hidden'
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
+                  <button
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setShowMenu(false);
+                      setIsEditing(true);
+                      setEditText(comment.content);
+                    }}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '10px 14px',
+                      background: 'none',
+                      border: 'none',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      color: darkMode ? '#e5e7eb' : '#374151',
+                      fontSize: 13
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                  >
+                    ✏️ Modifier
+                  </button>
                   <button
                     onClick={(e) => { 
                       e.stopPropagation(); 
@@ -398,8 +442,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, canCo
                       textAlign: 'left',
                       cursor: 'pointer',
                       color: '#ef4444',
-                      fontSize: 13,
-                      fontWeight: 500
+                      fontSize: 13
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
@@ -413,15 +456,88 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, canCo
         )}
       </div>
       
-      {/* Comment content */}
-      <p style={{ 
-        color: darkMode ? '#e5e7eb' : '#374151', 
-        margin: '0 0 10px 0', 
-        fontSize: 13, 
-        lineHeight: 1.5
-      }}>
-        {comment.content}
-      </p>
+      {/* Comment content - or edit form if editing */}
+      {isEditing ? (
+        <div style={{ marginBottom: 10 }}>
+          <textarea
+            ref={editInputRef}
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && editText.trim()) {
+                e.preventDefault();
+                onEdit && onEdit(comment.id, editText);
+                setIsEditing(false);
+              }
+              if (e.key === 'Escape') {
+                setIsEditing(false);
+                setEditText(comment.content);
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: 10,
+              border: `2px solid #1a73e8`,
+              borderRadius: 6,
+              fontSize: 13,
+              resize: 'none',
+              minHeight: 60,
+              background: darkMode ? '#1f2937' : 'white',
+              color: darkMode ? 'white' : '#374151',
+              boxSizing: 'border-box'
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => {
+                setIsEditing(false);
+                setEditText(comment.content);
+              }}
+              style={{
+                padding: '6px 14px',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 4,
+                color: darkMode ? '#9ca3af' : '#5f6368',
+                cursor: 'pointer',
+                fontSize: 12
+              }}
+            >
+              Annuler
+            </button>
+            <button
+              onClick={() => {
+                if (editText.trim()) {
+                  onEdit && onEdit(comment.id, editText);
+                  setIsEditing(false);
+                }
+              }}
+              disabled={!editText.trim()}
+              style={{
+                padding: '6px 14px',
+                background: editText.trim() ? '#1a73e8' : '#d1d5db',
+                border: 'none',
+                borderRadius: 4,
+                color: 'white',
+                cursor: editText.trim() ? 'pointer' : 'not-allowed',
+                fontSize: 12,
+                fontWeight: 500
+              }}
+            >
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p style={{ 
+          color: darkMode ? '#e5e7eb' : '#374151', 
+          margin: '0 0 10px 0', 
+          fontSize: 13, 
+          lineHeight: 1.5
+        }}>
+          {comment.content}
+        </p>
+      )}
       
       {/* Replies */}
       {comment.replies?.map(reply => (
@@ -586,6 +702,16 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   const deleteComment = async (commentId) => {
     try { 
       await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }); 
+    } catch (err) { console.error(err); }
+  };
+
+  const editComment = async (commentId, newContent) => {
+    try { 
+      await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId, { 
+        method: 'PUT', 
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ content: newContent })
+      }); 
     } catch (err) { console.error(err); }
   };
 
@@ -962,6 +1088,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                           onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
                           onResolve={toggleResolve}
                           onDelete={deleteComment}
+                          onEdit={editComment}
                           canComment={canComment}
                           isReplying={replyTo === cId}
                           replyContent={replyTo === cId ? replyContent : ''}
@@ -2239,6 +2366,7 @@ export default function ScreenplayEditor() {
     socket.on('comment-reply-added', ({ commentId, reply }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, replies: [...(c.replies || []), reply] } : c)));
     socket.on('comment-resolved', ({ commentId, resolved }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, resolved } : c)));
     socket.on('comment-deleted', ({ commentId }) => setComments(p => p.filter(c => c.id !== commentId && c._id !== commentId)));
+    socket.on('comment-updated', ({ commentId, content }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, content } : c)));
     
     // Chat messages
     socket.on('chat-message', (message) => {

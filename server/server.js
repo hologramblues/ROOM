@@ -146,6 +146,20 @@ app.delete('/api/documents/:shortId/comments/:commentId', authMiddleware, async 
   } catch (error) { console.error(error); res.status(500).json({ error: 'Erreur' }); }
 });
 
+app.put('/api/documents/:shortId/comments/:commentId', authMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId });
+    if (!doc || !checkDocumentAccess(doc, req.user, 'commenter')) return res.status(403).json({ error: 'Acces refuse' });
+    const comment = doc.comments.find(c => c.id === req.params.commentId);
+    if (!comment) return res.status(404).json({ error: 'Commentaire non trouve' });
+    comment.content = req.body.content;
+    comment.editedAt = new Date();
+    await doc.save();
+    io.to(req.params.shortId).emit('comment-updated', { commentId: req.params.commentId, content: req.body.content });
+    res.json({ success: true });
+  } catch (error) { console.error(error); res.status(500).json({ error: 'Erreur' }); }
+});
+
 app.put('/api/documents/:shortId/comments/:commentId/resolve', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
