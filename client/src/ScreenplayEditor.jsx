@@ -250,13 +250,23 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, canComment, isR
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment }) => {
+const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
+  const [inlineCommentText, setInlineCommentText] = useState('');
+  const inlineCommentInputRef = useRef(null);
   const sidebarRef = useRef(null);
   const commentRefs = useRef({});
+
+  // Focus on inline comment input when pending comment appears
+  useEffect(() => {
+    if (pendingInlineComment && inlineCommentInputRef.current) {
+      setInlineCommentText('');
+      setTimeout(() => inlineCommentInputRef.current?.focus(), 100);
+    }
+  }, [pendingInlineComment]);
 
   const addReply = async (commentId) => {
     if (!replyContent.trim()) return;
@@ -494,8 +504,99 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
         </div>
       </div>
       
+      {/* Pending inline comment form - shows when user selects text and clicks "Comment" */}
+      {pendingInlineComment && (
+        <div style={{ 
+          padding: '12px 16px', 
+          borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+          background: darkMode ? '#374151' : '#fef3c7',
+          flexShrink: 0
+        }}>
+          <div style={{ 
+            fontSize: 11, 
+            color: darkMode ? '#fbbf24' : '#92400e', 
+            marginBottom: 8,
+            padding: '6px 8px',
+            background: 'rgba(251, 191, 36, 0.3)',
+            borderRadius: 4,
+            borderLeft: '3px solid #f59e0b'
+          }}>
+            "{pendingInlineComment.text.slice(0, 60)}{pendingInlineComment.text.length > 60 ? '...' : ''}"
+          </div>
+          <textarea
+            ref={inlineCommentInputRef}
+            value={inlineCommentText}
+            onChange={(e) => setInlineCommentText(e.target.value)}
+            placeholder="Écrire votre commentaire..."
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && inlineCommentText.trim()) {
+                e.preventDefault();
+                onSubmitInlineComment(inlineCommentText);
+                setInlineCommentText('');
+              }
+              if (e.key === 'Escape') {
+                onCancelInlineComment();
+                setInlineCommentText('');
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: 10,
+              border: `2px solid #f59e0b`,
+              borderRadius: 6,
+              fontSize: 12,
+              resize: 'vertical',
+              minHeight: 70,
+              background: darkMode ? '#1f2937' : 'white',
+              color: darkMode ? 'white' : 'black',
+              boxSizing: 'border-box'
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button
+              onClick={() => {
+                if (inlineCommentText.trim()) {
+                  onSubmitInlineComment(inlineCommentText);
+                  setInlineCommentText('');
+                }
+              }}
+              disabled={!inlineCommentText.trim()}
+              style={{
+                padding: '8px 16px',
+                background: inlineCommentText.trim() ? '#f59e0b' : '#d1d5db',
+                color: 'white',
+                border: 'none',
+                borderRadius: 4,
+                fontSize: 12,
+                cursor: inlineCommentText.trim() ? 'pointer' : 'not-allowed',
+                fontWeight: 500
+              }}
+            >
+              Commenter
+            </button>
+            <button
+              onClick={() => {
+                onCancelInlineComment();
+                setInlineCommentText('');
+              }}
+              style={{
+                padding: '8px 16px',
+                background: 'transparent',
+                color: darkMode ? '#9ca3af' : '#6b7280',
+                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                borderRadius: 4,
+                fontSize: 12,
+                cursor: 'pointer'
+              }}
+            >
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Add comment section - fixed, doesn't scroll */}
-      {canComment && activeIndex !== null && elements[activeIndex] && (
+      {canComment && activeIndex !== null && elements[activeIndex] && !pendingInlineComment && (
         <div style={{ 
           padding: '12px 16px', 
           borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
@@ -1702,6 +1803,7 @@ export default function ScreenplayEditor() {
   const [characters, setCharacters] = useState([]);
   const [comments, setComments] = useState([]);
   const [textSelection, setTextSelection] = useState(null); // { elementId, elementIndex, text, startOffset, endOffset, rect }
+  const [pendingInlineComment, setPendingInlineComment] = useState(null); // { elementId, elementIndex, text, startOffset, endOffset }
   const [connected, setConnected] = useState(false);
   const [users, setUsers] = useState([]);
   const [myId, setMyId] = useState(null);
@@ -2618,19 +2720,19 @@ export default function ScreenplayEditor() {
         return (
           <span
             key={idx}
-            onClick={(e) => {
-              e.stopPropagation();
-              // Scroll to comment in panel
-              const commentEl = document.querySelector(`[data-comment-id="${seg.commentId}"]`);
-              if (commentEl) {
-                setShowComments(true);
-                setTimeout(() => commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
-              }
+            onClick={() => {
+              // Don't stopPropagation - let the click through to activate the element
+              // Just open the comments panel and scroll to this comment
+              setShowComments(true);
+              setTimeout(() => {
+                const commentEl = document.querySelector(`[data-comment-id="${seg.commentId}"]`);
+                if (commentEl) commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 100);
             }}
             style={{
               background: 'rgba(251, 191, 36, 0.4)',
               borderBottom: `2px solid ${seg.userColor || '#f59e0b'}`,
-              cursor: 'pointer',
+              cursor: 'text',
               borderRadius: 2,
               padding: '0 1px'
             }}
@@ -3940,7 +4042,7 @@ export default function ScreenplayEditor() {
           token={token} 
           docId={docId} 
           canComment={canComment}
-          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); }}
+          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setPendingInlineComment(null); }}
           darkMode={darkMode}
           onNavigateToElement={(idx) => {
             setActiveIndex(idx);
@@ -3950,6 +4052,37 @@ export default function ScreenplayEditor() {
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 50);
           }}
+          pendingInlineComment={pendingInlineComment}
+          onSubmitInlineComment={(commentText) => {
+            if (pendingInlineComment && commentText.trim()) {
+              const newComment = {
+                id: 'comment-' + Date.now(),
+                elementId: pendingInlineComment.elementId,
+                elementIndex: pendingInlineComment.elementIndex,
+                highlight: {
+                  text: pendingInlineComment.text,
+                  startOffset: pendingInlineComment.startOffset,
+                  endOffset: pendingInlineComment.endOffset
+                },
+                content: commentText.trim(),
+                userName: currentUser?.name || 'Anonyme',
+                userColor: currentUser?.color || '#6b7280',
+                createdAt: new Date().toISOString(),
+                resolved: false,
+                replies: []
+              };
+              
+              setComments(prev => [...prev, newComment]);
+              
+              // Sync to server
+              if (socketRef.current) {
+                socketRef.current.emit('comment-add', { comment: newComment });
+              }
+              
+              setPendingInlineComment(null);
+            }
+          }}
+          onCancelInlineComment={() => setPendingInlineComment(null)}
         />
       )}
       
@@ -4167,35 +4300,16 @@ export default function ScreenplayEditor() {
         >
           <button
             onClick={() => {
-              // Create inline comment
-              const commentText = prompt('Votre commentaire sur "' + textSelection.text.slice(0, 30) + (textSelection.text.length > 30 ? '...' : '') + '"');
-              if (commentText && commentText.trim()) {
-                const newComment = {
-                  id: 'comment-' + Date.now(),
-                  elementId: textSelection.elementId,
-                  elementIndex: textSelection.elementIndex,
-                  highlight: {
-                    text: textSelection.text,
-                    startOffset: textSelection.startOffset,
-                    endOffset: textSelection.endOffset
-                  },
-                  content: commentText.trim(),
-                  userName: currentUser?.name || 'Anonyme',
-                  userColor: currentUser?.color || '#6b7280',
-                  createdAt: new Date().toISOString(),
-                  resolved: false,
-                  replies: []
-                };
-                
-                setComments(prev => [...prev, newComment]);
-                
-                // Sync to server
-                if (socketRef.current) {
-                  socketRef.current.emit('comment-add', { comment: newComment });
-                }
-              }
+              // Open comments panel with pending inline comment
+              setPendingInlineComment({
+                elementId: textSelection.elementId,
+                elementIndex: textSelection.elementIndex,
+                text: textSelection.text,
+                startOffset: textSelection.startOffset,
+                endOffset: textSelection.endOffset
+              });
+              setShowComments(true);
               setTextSelection(null);
-              window.getSelection()?.removeAllRanges();
             }}
             style={{
               background: '#f59e0b',
@@ -4216,7 +4330,6 @@ export default function ScreenplayEditor() {
           <button
             onClick={() => {
               setTextSelection(null);
-              window.getSelection()?.removeAllRanges();
             }}
             style={{
               background: 'none',
