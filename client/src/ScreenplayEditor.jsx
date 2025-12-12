@@ -1403,6 +1403,7 @@ export default function ScreenplayEditor() {
   const [searchResults, setSearchResults] = useState([]);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const [showOutline, setShowOutline] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(false);
   const [showSceneNumbers, setShowSceneNumbers] = useState(false);
   const [notes, setNotes] = useState({}); // { elementId: { content, color } }
   const [showNoteFor, setShowNoteFor] = useState(null);
@@ -1460,6 +1461,7 @@ export default function ScreenplayEditor() {
   const [isDraggingNote, setIsDraggingNote] = useState(false);
   const [isDraggingTimer, setIsDraggingTimer] = useState(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const minimapRef = useRef(null);
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
   const chatEndRef = useRef(null);
@@ -1718,6 +1720,16 @@ export default function ScreenplayEditor() {
       }
     }
   }, [docId]); // eslint-disable-line
+
+  // Auto-scroll minimap to keep active element visible
+  useEffect(() => {
+    if (showMinimap && minimapRef.current) {
+      const activeEl = minimapRef.current.querySelector(`[data-minimap-idx="${activeIndex}"]`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [activeIndex, showMinimap]);
 
   // Drag handlers for floating panels
   useEffect(() => {
@@ -3210,6 +3222,9 @@ export default function ScreenplayEditor() {
                     <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       # Numéros de scènes
                     </button>
+                    <button onClick={() => { setShowMinimap(!showMinimap); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showMinimap ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                      🗺️ Minimap {showMinimap && '✓'}
+                    </button>
                     <button onClick={() => { setDarkMode(!darkMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
                     </button>
@@ -3925,6 +3940,120 @@ export default function ScreenplayEditor() {
         </div>
       )}
       
+      {/* Minimap - quick navigation */}
+      {showMinimap && (
+        <div 
+          style={{
+            position: 'fixed',
+            right: showComments ? 340 : 20,
+            top: 70,
+            bottom: 20,
+            width: 90,
+            background: darkMode ? '#1f2937' : 'white',
+            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+            borderRadius: 8,
+            overflow: 'hidden',
+            zIndex: 150,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          <div style={{ 
+            padding: '6px 8px', 
+            borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+            fontSize: 9,
+            color: '#6b7280',
+            textAlign: 'center',
+            fontWeight: 500,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>🗺️</span>
+            <span>{activeIndex + 1}/{elements.length}</span>
+            <button 
+              onClick={() => setShowMinimap(false)}
+              style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 10, padding: 0 }}
+            >✕</button>
+          </div>
+          <div 
+            ref={minimapRef}
+            style={{ 
+              flex: 1, 
+              overflow: 'auto', 
+              position: 'relative',
+              cursor: 'pointer'
+            }}
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const scrollTop = e.currentTarget.scrollTop;
+              const clickY = e.clientY - rect.top + scrollTop;
+              const totalHeight = e.currentTarget.scrollHeight;
+              const percentage = clickY / totalHeight;
+              const targetIndex = Math.floor(percentage * elements.length);
+              const clampedIndex = Math.max(0, Math.min(elements.length - 1, targetIndex));
+              setActiveIndex(clampedIndex);
+              const targetEl = document.querySelector(`[data-element-index="${clampedIndex}"]`);
+              if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
+          >
+            {/* Elements representation */}
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: 1,
+              padding: '4px'
+            }}>
+              {elements.map((el, idx) => {
+                const colors = {
+                  scene: '#f59e0b',
+                  action: darkMode ? '#4b5563' : '#9ca3af',
+                  character: '#3b82f6',
+                  dialogue: '#6366f1',
+                  parenthetical: '#8b5cf6',
+                  transition: '#ef4444'
+                };
+                const isActive = idx === activeIndex;
+                const contentLength = el.content?.length || 0;
+                const height = el.type === 'scene' ? 6 : Math.max(2, Math.min(6, contentLength / 100 * 4 + 2));
+                
+                return (
+                  <div
+                    key={el.id}
+                    data-minimap-idx={idx}
+                    style={{
+                      width: el.type === 'scene' ? '100%' : el.type === 'character' ? '55%' : el.type === 'dialogue' ? '70%' : el.type === 'parenthetical' ? '45%' : el.type === 'transition' ? '35%' : '85%',
+                      marginLeft: el.type === 'character' ? '22%' : el.type === 'dialogue' ? '18%' : el.type === 'parenthetical' ? '27%' : el.type === 'transition' ? 'auto' : 0,
+                      height: height,
+                      background: isActive ? '#22c55e' : colors[el.type] || '#6b7280',
+                      borderRadius: 1,
+                      opacity: isActive ? 1 : 0.5,
+                      transition: 'all 0.1s ease',
+                      flexShrink: 0
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* Scene legend */}
+          <div style={{
+            padding: '6px 8px',
+            borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 4,
+            justifyContent: 'center'
+          }}>
+            <span style={{ fontSize: 7, color: '#f59e0b' }}>■ SCN</span>
+            <span style={{ fontSize: 7, color: '#3b82f6' }}>■ CHAR</span>
+            <span style={{ fontSize: 7, color: '#6366f1' }}>■ DIAL</span>
+          </div>
+        </div>
+      )}
+
       {/* Focus Mode Overlay - dims everything except current element */}
       {focusMode && (
         <style>{`
