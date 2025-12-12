@@ -1273,7 +1273,7 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, onOpenComments, highlightedContent }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, onOpenComments, highlightedContent, onTextSelect }) => {
   const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
@@ -1379,7 +1379,54 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           {highlightedContent}
         </div>
       ) : (
-        <textarea ref={textareaRef} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.7, background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }} rows={1} readOnly={!canEdit} />
+        <textarea 
+          ref={textareaRef} 
+          value={element.content} 
+          placeholder={isActive ? getPlaceholder(element.type) : ''} 
+          onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} 
+          onFocus={() => onFocus(index)} 
+          onKeyDown={handleKey} 
+          onSelect={e => {
+            onCursorMove(index, e.target.selectionStart);
+            // Handle text selection for inline comments
+            const { selectionStart, selectionEnd, value } = e.target;
+            if (selectionStart !== selectionEnd && onTextSelect) {
+              const selectedText = value.substring(selectionStart, selectionEnd);
+              if (selectedText.trim()) {
+                const rect = e.target.getBoundingClientRect();
+                onTextSelect({
+                  elementId: element.id,
+                  elementIndex: index,
+                  text: selectedText,
+                  startOffset: selectionStart,
+                  endOffset: selectionEnd,
+                  rect
+                });
+              }
+            }
+          }}
+          onMouseUp={e => {
+            // Also check on mouseup for selection
+            const { selectionStart, selectionEnd, value } = e.target;
+            if (selectionStart !== selectionEnd && onTextSelect) {
+              const selectedText = value.substring(selectionStart, selectionEnd);
+              if (selectedText.trim()) {
+                const rect = e.target.getBoundingClientRect();
+                onTextSelect({
+                  elementId: element.id,
+                  elementIndex: index,
+                  text: selectedText,
+                  startOffset: selectionStart,
+                  endOffset: selectionEnd,
+                  rect
+                });
+              }
+            }
+          }}
+          style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.7, background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }} 
+          rows={1} 
+          readOnly={!canEdit} 
+        />
       )}
       
       {/* Character autocomplete */}
@@ -2034,75 +2081,11 @@ export default function ScreenplayEditor() {
     }
   }, [elements.length]); // eslint-disable-line
 
-  // Handle text selection for inline comments
-  useEffect(() => {
-    const handleSelectionChange = () => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed || selection.toString().trim() === '') {
-        // Don't clear immediately to allow clicking the comment button
-        return;
-      }
-      
-      const range = selection.getRangeAt(0);
-      const container = range.commonAncestorContainer;
-      
-      // Find the element container
-      let elementNode = container.nodeType === Node.TEXT_NODE ? container.parentNode : container;
-      while (elementNode && !elementNode.dataset?.elementIndex) {
-        elementNode = elementNode.parentNode;
-      }
-      
-      if (!elementNode || !elementNode.dataset?.elementIndex) {
-        return;
-      }
-      
-      const elementIndex = parseInt(elementNode.dataset.elementIndex);
-      const element = elements[elementIndex];
-      if (!element) return;
-      
-      // Get the selected text and offsets
-      const selectedText = selection.toString();
-      const rect = range.getBoundingClientRect();
-      
-      // Calculate offsets within the element content
-      // This is simplified - in a real app you'd need more robust offset calculation
-      const textContent = element.content || '';
-      const startOffset = textContent.indexOf(selectedText);
-      const endOffset = startOffset + selectedText.length;
-      
-      if (startOffset >= 0) {
-        setTextSelection({
-          elementId: element.id,
-          elementIndex,
-          text: selectedText,
-          startOffset,
-          endOffset,
-          rect: {
-            top: rect.top,
-            left: rect.left,
-            right: rect.right,
-            bottom: rect.bottom,
-            width: rect.width
-          }
-        });
-      }
-    };
-    
-    document.addEventListener('mouseup', handleSelectionChange);
-    return () => document.removeEventListener('mouseup', handleSelectionChange);
-  }, [elements]);
-
   // Clear text selection when clicking elsewhere
   useEffect(() => {
     const handleClick = (e) => {
-      if (textSelection && !e.target.closest('.text-selection-popup')) {
-        // Small delay to allow button click to register
-        setTimeout(() => {
-          const selection = window.getSelection();
-          if (!selection || selection.isCollapsed) {
-            setTextSelection(null);
-          }
-        }, 100);
+      if (textSelection && !e.target.closest('.text-selection-popup') && !e.target.closest('textarea')) {
+        setTextSelection(null);
       }
     };
     
@@ -3927,6 +3910,11 @@ export default function ScreenplayEditor() {
                       onNoteClick={(id) => setShowNoteFor(id)}
                       onOpenComments={() => { setShowComments(true); setSelectedCommentIndex(index); }}
                       highlightedContent={renderTextWithHighlights(element.content, element.id)}
+                      onTextSelect={(selection) => {
+                        if (canComment) {
+                          setTextSelection(selection);
+                        }
+                      }}
                     />
                   </div>
                 ))}
@@ -4155,13 +4143,13 @@ export default function ScreenplayEditor() {
       )}
       
       {/* Text Selection Comment Popup */}
-      {textSelection && canComment && (
+      {textSelection && canComment && textSelection.rect && (
         <div 
           className="text-selection-popup"
           style={{
             position: 'fixed',
-            left: Math.min(Math.max(10, textSelection.rect.left + textSelection.rect.width / 2 - 60), window.innerWidth - 140),
-            top: textSelection.rect.top < 50 ? textSelection.rect.bottom + 10 : textSelection.rect.top - 45,
+            left: Math.min(Math.max(10, (textSelection.rect.left || 0) + (textSelection.rect.width || 200) / 2 - 60), window.innerWidth - 140),
+            top: (textSelection.rect.top || 100) < 50 ? (textSelection.rect.bottom || 100) + 10 : (textSelection.rect.top || 100) - 45,
             background: darkMode ? '#1f2937' : 'white',
             border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
             borderRadius: 8,
