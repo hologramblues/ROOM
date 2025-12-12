@@ -146,6 +146,21 @@ app.delete('/api/documents/:shortId/comments/:commentId', authMiddleware, async 
   } catch (error) { console.error(error); res.status(500).json({ error: 'Erreur' }); }
 });
 
+// IMPORTANT: /resolve route MUST come BEFORE the generic PUT /comments/:commentId route
+app.put('/api/documents/:shortId/comments/:commentId/resolve', authMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId });
+    if (!doc) return res.status(404).json({ error: 'Non trouve' });
+    const comment = doc.comments.find(c => c.id === req.params.commentId);
+    if (comment) { 
+      comment.resolved = !comment.resolved; 
+      await doc.save(); 
+      io.to(req.params.shortId).emit('comment-resolved', { commentId: req.params.commentId, resolved: comment.resolved }); 
+    }
+    res.json({ success: true });
+  } catch (error) { console.error(error); res.status(500).json({ error: 'Erreur' }); }
+});
+
 app.put('/api/documents/:shortId/comments/:commentId', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
@@ -158,16 +173,6 @@ app.put('/api/documents/:shortId/comments/:commentId', authMiddleware, async (re
     io.to(req.params.shortId).emit('comment-updated', { commentId: req.params.commentId, content: req.body.content });
     res.json({ success: true });
   } catch (error) { console.error(error); res.status(500).json({ error: 'Erreur' }); }
-});
-
-app.put('/api/documents/:shortId/comments/:commentId/resolve', authMiddleware, async (req, res) => {
-  try {
-    const doc = await Document.findOne({ shortId: req.params.shortId });
-    if (!doc) return res.status(404).json({ error: 'Non trouve' });
-    const comment = doc.comments.find(c => c.id === req.params.commentId);
-    if (comment) { comment.resolved = !comment.resolved; await doc.save(); io.to(req.params.shortId).emit('comment-resolved', { commentId: req.params.commentId, resolved: comment.resolved }); }
-    res.json({ success: true });
-  } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
 const activeRooms = new Map();
