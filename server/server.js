@@ -116,7 +116,7 @@ app.post('/api/documents/:shortId/comments/:commentId/replies', authMiddleware, 
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc || !checkDocumentAccess(doc, req.user, 'commenter')) return res.status(403).json({ error: 'Acces refuse' });
-    const comment = doc.comments.find(c => c.id === req.params.commentId);
+    const comment = doc.comments.find(c => c.id === req.params.commentId || c._id?.toString() === req.params.commentId);
     if (!comment) return res.status(404).json({ error: 'Commentaire non trouve' });
     const reply = { 
       id: uuidv4(), 
@@ -137,7 +137,7 @@ app.delete('/api/documents/:shortId/comments/:commentId', authMiddleware, async 
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc || !checkDocumentAccess(doc, req.user, 'editor')) return res.status(403).json({ error: 'Acces refuse' });
-    const commentIndex = doc.comments.findIndex(c => c.id === req.params.commentId);
+    const commentIndex = doc.comments.findIndex(c => c.id === req.params.commentId || c._id?.toString() === req.params.commentId);
     if (commentIndex === -1) return res.status(404).json({ error: 'Commentaire non trouve' });
     doc.comments.splice(commentIndex, 1);
     await doc.save();
@@ -151,7 +151,7 @@ app.put('/api/documents/:shortId/comments/:commentId/resolve', authMiddleware, a
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc) return res.status(404).json({ error: 'Non trouve' });
-    const comment = doc.comments.find(c => c.id === req.params.commentId);
+    const comment = doc.comments.find(c => c.id === req.params.commentId || c._id?.toString() === req.params.commentId);
     if (comment) { 
       comment.resolved = !comment.resolved; 
       await doc.save(); 
@@ -165,7 +165,7 @@ app.put('/api/documents/:shortId/comments/:commentId', authMiddleware, async (re
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc || !checkDocumentAccess(doc, req.user, 'commenter')) return res.status(403).json({ error: 'Acces refuse' });
-    const comment = doc.comments.find(c => c.id === req.params.commentId);
+    const comment = doc.comments.find(c => c.id === req.params.commentId || c._id?.toString() === req.params.commentId);
     if (!comment) return res.status(404).json({ error: 'Commentaire non trouve' });
     comment.content = req.body.content;
     comment.editedAt = new Date();
