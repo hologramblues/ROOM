@@ -1373,6 +1373,236 @@ const Logo = ({ darkMode }) => {
 
 const UserAvatar = ({ user, isYou }) => <div style={{ width: 32, height: 32, borderRadius: '50%', background: user.color || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 'bold', color: 'white', border: isYou ? '3px solid white' : 'none', boxSizing: 'border-box' }} title={user.name}>{user.name?.charAt(0).toUpperCase() || '?'}</div>;
 
+// Script templates
+const SCRIPT_TEMPLATES = {
+  empty: {
+    name: 'Document vide',
+    icon: '📄',
+    description: 'Commencer de zéro',
+    elements: [
+      { type: 'scene', content: 'INT. LIEU - JOUR' },
+      { type: 'action', content: '' }
+    ]
+  },
+  threeActs: {
+    name: 'Structure 3 Actes',
+    icon: '🎭',
+    description: 'Setup, Confrontation, Résolution',
+    elements: [
+      { type: 'scene', content: '=== ACTE 1 - SETUP ===' },
+      { type: 'action', content: '[Le monde ordinaire du protagoniste. Présentation des personnages et de l\'univers.]' },
+      { type: 'scene', content: 'INT. LIEU DE VIE DU HÉROS - JOUR' },
+      { type: 'action', content: '[Introduction du protagoniste dans son quotidien]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '[L\'incident déclencheur qui bouleverse l\'équilibre]' },
+      { type: 'scene', content: '=== ACTE 2 - CONFRONTATION ===' },
+      { type: 'action', content: '[Le protagoniste fait face aux obstacles. Montée des enjeux.]' },
+      { type: 'scene', content: 'INT./EXT. NOUVEAU MONDE - JOUR' },
+      { type: 'action', content: '[Le héros entre dans un nouveau monde / nouvelle situation]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '[Tests, alliés, ennemis. Le héros apprend les règles.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '[MIDPOINT - Fausse victoire ou fausse défaite]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '[Les enjeux augmentent. Le héros perd tout espoir.]' },
+      { type: 'scene', content: '=== ACTE 3 - RÉSOLUTION ===' },
+      { type: 'action', content: '[Le climax et la résolution finale.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU DU CLIMAX - JOUR/NUIT' },
+      { type: 'action', content: '[Confrontation finale. Le héros utilise tout ce qu\'il a appris.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '[Résolution. Le nouveau monde ordinaire du héros.]' }
+    ]
+  },
+  fiveActs: {
+    name: 'Structure 5 Actes',
+    icon: '🎪',
+    description: 'Shakespeare / Tragédie classique',
+    elements: [
+      { type: 'scene', content: '=== ACTE 1 - EXPOSITION ===' },
+      { type: 'action', content: '[Présentation du monde, des personnages et du conflit latent]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== ACTE 2 - MONTÉE DE L\'ACTION ===' },
+      { type: 'action', content: '[L\'événement déclencheur. Les complications commencent.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== ACTE 3 - CLIMAX ===' },
+      { type: 'action', content: '[Le point de non-retour. La crise atteint son paroxysme.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== ACTE 4 - CHUTE ===' },
+      { type: 'action', content: '[Les conséquences du climax. Tout s\'effondre ou se reconstruit.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== ACTE 5 - DÉNOUEMENT ===' },
+      { type: 'action', content: '[La résolution finale. Catharsis.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' }
+    ]
+  },
+  herosJourney: {
+    name: 'Le Voyage du Héros',
+    icon: '🗡️',
+    description: 'Joseph Campbell - 12 étapes',
+    elements: [
+      { type: 'scene', content: '=== 1. LE MONDE ORDINAIRE ===' },
+      { type: 'action', content: '[Le héros dans son environnement quotidien avant l\'aventure]' },
+      { type: 'scene', content: 'INT. MAISON DU HÉROS - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 2. L\'APPEL DE L\'AVENTURE ===' },
+      { type: 'action', content: '[Un problème ou un défi se présente au héros]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 3. LE REFUS DE L\'APPEL ===' },
+      { type: 'action', content: '[Le héros hésite, a peur de l\'inconnu]' },
+      { type: 'scene', content: 'INT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 4. LA RENCONTRE AVEC LE MENTOR ===' },
+      { type: 'action', content: '[Un guide apparaît pour aider le héros]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 5. LE PASSAGE DU SEUIL ===' },
+      { type: 'action', content: '[Le héros s\'engage dans l\'aventure, quitte le monde ordinaire]' },
+      { type: 'scene', content: 'EXT. FRONTIÈRE/SEUIL - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 6. ÉPREUVES, ALLIÉS, ENNEMIS ===' },
+      { type: 'action', content: '[Le héros fait face à des tests, rencontre des alliés et des ennemis]' },
+      { type: 'scene', content: 'INT./EXT. MONDE SPÉCIAL - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 7. L\'APPROCHE DE LA CAVERNE ===' },
+      { type: 'action', content: '[Préparation pour le défi majeur]' },
+      { type: 'scene', content: 'INT./EXT. APPROCHE DU DANGER - NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 8. L\'ÉPREUVE SUPRÊME ===' },
+      { type: 'action', content: '[Le héros affronte sa plus grande peur, mort symbolique]' },
+      { type: 'scene', content: 'INT. CAVERNE/LIEU DU DANGER - NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 9. LA RÉCOMPENSE ===' },
+      { type: 'action', content: '[Le héros s\'empare du trésor/élixir après l\'épreuve]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 10. LE CHEMIN DU RETOUR ===' },
+      { type: 'action', content: '[Le héros doit rentrer avec ce qu\'il a gagné]' },
+      { type: 'scene', content: 'EXT. CHEMIN DU RETOUR - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 11. LA RÉSURRECTION ===' },
+      { type: 'action', content: '[Ultime épreuve, transformation finale du héros]' },
+      { type: 'scene', content: 'INT./EXT. LIEU DU CLIMAX - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 12. LE RETOUR AVEC L\'ÉLIXIR ===' },
+      { type: 'action', content: '[Le héros revient transformé avec le pouvoir de changer son monde]' },
+      { type: 'scene', content: 'INT. MONDE ORDINAIRE - JOUR' },
+      { type: 'action', content: '' }
+    ]
+  },
+  saveTheCat: {
+    name: 'Save the Cat',
+    icon: '🐱',
+    description: 'Blake Snyder - 15 beats',
+    elements: [
+      { type: 'scene', content: '=== 1. IMAGE D\'OUVERTURE (p.1) ===' },
+      { type: 'action', content: '[L\'image qui donne le ton. Miroir de l\'image finale.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 2. THÈME ÉNONCÉ (p.5) ===' },
+      { type: 'action', content: '[Quelqu\'un dit au héros ce que sera sa leçon de vie]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 3. SET-UP (p.1-10) ===' },
+      { type: 'action', content: '[Le monde "avant". Tout ce qui doit être fixé. Les 6 choses qui doivent être améliorées.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 4. CATALYSEUR (p.12) ===' },
+      { type: 'action', content: '[L\'événement qui change tout. Télégramme, rencontre, découverte...]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 5. DÉBAT (p.12-25) ===' },
+      { type: 'action', content: '[Le héros doute. Dernière chance de refuser l\'aventure.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 6. PASSAGE À L\'ACTE 2 (p.25) ===' },
+      { type: 'action', content: '[Le héros choisit d\'agir. Il entre dans un monde inversé.]' },
+      { type: 'scene', content: 'INT./EXT. NOUVEAU MONDE - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 7. HISTOIRE B (p.30) ===' },
+      { type: 'action', content: '[L\'histoire d\'amour ou l\'histoire du thème. Nouveaux personnages.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 8. FUN AND GAMES (p.30-55) ===' },
+      { type: 'action', content: '[La promesse du concept. Ce pourquoi le public est venu.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 9. MIDPOINT (p.55) ===' },
+      { type: 'action', content: '[Fausse victoire ou fausse défaite. Les enjeux montent. Horloge activée.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 10. LES MÉCHANTS SE RAPPROCHENT (p.55-75) ===' },
+      { type: 'action', content: '[Les forces antagonistes se regroupent. L\'équipe du héros se désagrège.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 11. TOUT EST PERDU (p.75) ===' },
+      { type: 'action', content: '[L\'opposé du Midpoint. Mort du mentor. Tout semble fini.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 12. LA NUIT NOIRE DE L\'ÂME (p.75-85) ===' },
+      { type: 'action', content: '[Le héros est au plus bas. Moment de réflexion profonde.]' },
+      { type: 'scene', content: 'INT. LIEU ISOLÉ - NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 13. PASSAGE À L\'ACTE 3 (p.85) ===' },
+      { type: 'action', content: '[Eureka! La solution vient de l\'histoire B et du thème.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - AUBE' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 14. FINALE (p.85-110) ===' },
+      { type: 'action', content: '[Le héros applique sa leçon. Confrontation finale. Nouveau monde créé.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU DU CLIMAX - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== 15. IMAGE FINALE (p.110) ===' },
+      { type: 'action', content: '[L\'opposé de l\'image d\'ouverture. Preuve que le changement a eu lieu.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' }
+    ]
+  },
+  sequence: {
+    name: 'Approche Séquentielle',
+    icon: '🎬',
+    description: '8 séquences de 12-15 pages',
+    elements: [
+      { type: 'scene', content: '=== SÉQUENCE 1 - STATUS QUO & INCIDENT (p.1-12) ===' },
+      { type: 'action', content: '[Le monde du protagoniste. L\'incident déclencheur arrive à la fin.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== SÉQUENCE 2 - PRÉDICAMENT (p.12-25) ===' },
+      { type: 'action', content: '[Le héros réagit à l\'incident. Il formule son but.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== SÉQUENCE 3 - PREMIÈRE TENTATIVE (p.25-37) ===' },
+      { type: 'action', content: '[Première vraie tentative pour résoudre le problème.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== SÉQUENCE 4 - PLUS GRAND OBSTACLE (p.37-50) ===' },
+      { type: 'action', content: '[Les enjeux augmentent. Échec de la première approche.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== SÉQUENCE 5 - PREMIER CLIMAX (p.50-62) ===' },
+      { type: 'action', content: '[Point central. Le héros semble réussir ou échouer spectaculairement.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== SÉQUENCE 6 - NOUVELLES COMPLICATIONS (p.62-75) ===' },
+      { type: 'action', content: '[Les conséquences du midpoint créent de nouveaux problèmes.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR/NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== SÉQUENCE 7 - SECOND CLIMAX (p.75-87) ===' },
+      { type: 'action', content: '[Tout est perdu. Le héros touche le fond.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - NUIT' },
+      { type: 'action', content: '' },
+      { type: 'scene', content: '=== SÉQUENCE 8 - RÉSOLUTION (p.87-110) ===' },
+      { type: 'action', content: '[Climax final et résolution. Le héros triomphe ou échoue définitivement.]' },
+      { type: 'scene', content: 'INT./EXT. LIEU - JOUR' },
+      { type: 'action', content: '' }
+    ]
+  }
+};
+
 // ============ MAIN EDITOR ============
 export default function ScreenplayEditor() {
   const getDocId = () => { const hash = window.location.hash; return hash.startsWith('#') ? hash.slice(1) : null; };
@@ -1389,6 +1619,7 @@ export default function ScreenplayEditor() {
   const [currentUser, setCurrentUser] = useState(() => { const s = localStorage.getItem('screenplay-user'); return s ? JSON.parse(s) : null; });
   const [token, setToken] = useState(() => localStorage.getItem('screenplay-token'));
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showDocsList, setShowDocsList] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
@@ -1731,6 +1962,41 @@ export default function ScreenplayEditor() {
     }
   }, [activeIndex, showMinimap]);
 
+  // Apply pending template after document loads
+  useEffect(() => {
+    const pendingTemplate = localStorage.getItem('pendingTemplate');
+    if (pendingTemplate && socketRef.current && elements.length <= 2) {
+      const template = SCRIPT_TEMPLATES[pendingTemplate];
+      if (template) {
+        // Clear the pending template
+        localStorage.removeItem('pendingTemplate');
+        
+        // Apply template elements
+        const templateElements = template.elements.map(el => ({
+          id: 'el-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+          type: el.type,
+          content: el.content
+        }));
+        
+        setElements(templateElements);
+        
+        // Sync to server
+        templateElements.forEach((el, idx) => {
+          if (idx === 0) {
+            socketRef.current.emit('element-change', { index: 0, element: el });
+          } else {
+            socketRef.current.emit('element-insert', { afterIndex: idx - 1, element: el });
+          }
+        });
+        
+        // Set title based on template
+        const newTitle = `Nouveau script - ${template.name}`;
+        setTitle(newTitle);
+        socketRef.current.emit('title-change', { title: newTitle });
+      }
+    }
+  }, [elements.length]); // eslint-disable-line
+
   // Drag handlers for floating panels
   useEffect(() => {
     const handleMouseMove = (e) => {
@@ -1778,14 +2044,21 @@ export default function ScreenplayEditor() {
   // Check if any panel is being dragged (for overlay)
   const isDraggingAny = isDraggingChat || isDraggingNote || isDraggingTimer;
 
-  const createNewDocument = async () => {
+  const createNewDocument = async (templateKey = null) => {
     if (!token) { setShowAuthModal(true); return; }
     try {
       const res = await fetch(SERVER_URL + '/api/documents', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
       const data = await res.json();
       loadedDocRef.current = null;
+      
+      // If template selected, store it for after the document loads
+      if (templateKey && SCRIPT_TEMPLATES[templateKey]) {
+        localStorage.setItem('pendingTemplate', templateKey);
+      }
+      
       window.location.hash = data.id;
       setShowDocsList(false);
+      setShowTemplateModal(false);
     } catch (err) { console.error(err); }
   };
 
@@ -2799,7 +3072,86 @@ export default function ScreenplayEditor() {
   return (
     <div className={focusMode ? 'focus-mode-active' : ''} style={{ minHeight: '100vh', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
-      {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={createNewDocument} onClose={() => setShowDocsList(false)} />}
+      
+      {/* Template Selector Modal */}
+      {showTemplateModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowTemplateModal(false)}>
+          <div 
+            style={{ 
+              background: darkMode ? '#1f2937' : 'white', 
+              borderRadius: 16, 
+              width: '90%',
+              maxWidth: 800,
+              maxHeight: '85vh',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px rgba(0,0,0,0.5)'
+            }} 
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ 
+              padding: '20px 24px', 
+              borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 20, color: darkMode ? 'white' : 'black' }}>🎬 Nouveau scénario</h2>
+                <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#6b7280' }}>Choisissez une structure ou commencez de zéro</p>
+              </div>
+              <button onClick={() => setShowTemplateModal(false)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 20 }}>✕</button>
+            </div>
+            
+            <div style={{ padding: 24, overflowY: 'auto', maxHeight: 'calc(85vh - 80px)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+                {Object.entries(SCRIPT_TEMPLATES).map(([key, template]) => (
+                  <button
+                    key={key}
+                    onClick={() => createNewDocument(key)}
+                    style={{
+                      padding: 20,
+                      background: darkMode ? '#374151' : '#f9fafb',
+                      border: `2px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = '#3b82f6';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 8px 20px rgba(59, 130, 246, 0.2)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <div style={{ fontSize: 32, marginBottom: 12 }}>{template.icon}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: darkMode ? 'white' : 'black', marginBottom: 6 }}>{template.name}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.4 }}>{template.description}</div>
+                    {key !== 'empty' && (
+                      <div style={{ marginTop: 12, fontSize: 11, color: '#9ca3af' }}>
+                        {template.elements.filter(e => e.type === 'scene' && e.content.startsWith('===')).length} sections
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+              
+              <div style={{ marginTop: 24, padding: 16, background: darkMode ? '#1f2937' : '#f3f4f6', borderRadius: 8, border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: 13, color: darkMode ? 'white' : 'black' }}>💡 Conseil</h4>
+                <p style={{ margin: 0, fontSize: 12, color: '#6b7280', lineHeight: 1.5 }}>
+                  Les structures sont des guides, pas des règles absolues. Adaptez-les à votre histoire ! 
+                  Les scènes marquées === sont des repères de structure que vous pouvez supprimer une fois votre plan établi.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={() => { setShowDocsList(false); setShowTemplateModal(true); }} onClose={() => setShowDocsList(false)} />}
       {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} />}
       
       {/* Search Panel */}
@@ -3200,7 +3552,7 @@ export default function ScreenplayEditor() {
           {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }} title="Mes documents">📁</button>}
           
           {!docId ? (
-            <button onClick={createNewDocument} style={{ padding: '5px 12px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 12 }}>+ Nouveau</button>
+            <button onClick={() => { if (!token) { setShowAuthModal(true); } else { setShowTemplateModal(true); } }} style={{ padding: '5px 12px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 12 }}>+ Nouveau</button>
           ) : (
             <>
               {/* VIEW MENU */}
