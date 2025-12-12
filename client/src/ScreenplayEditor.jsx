@@ -672,6 +672,16 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   const inlineCommentInputRef = useRef(null);
   const sidebarRef = useRef(null);
   const commentRefs = useRef({});
+  const prevActiveIndexRef = useRef(activeIndex);
+
+  // Deselect comment when clicking elsewhere in the script (activeIndex changes)
+  useEffect(() => {
+    if (activeIndex !== prevActiveIndexRef.current) {
+      setSelectedCommentId(null);
+      setReplyTo(null);
+      prevActiveIndexRef.current = activeIndex;
+    }
+  }, [activeIndex]);
 
   // Focus on inline comment input when pending comment appears
   const pendingCommentInitRef = useRef(null);
