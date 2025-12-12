@@ -215,7 +215,17 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
 // ============ INLINE COMMENT (Google Docs style) ============
 const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode, isSelected }) => {
   const replyInputRef = useRef(null);
+  const [showMenu, setShowMenu] = useState(false);
   useEffect(() => { if (isReplying && replyInputRef.current) replyInputRef.current.focus(); }, [isReplying]);
+  
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (showMenu) {
+      const handleClick = () => setShowMenu(false);
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [showMenu]);
 
   // Compact view when not selected
   if (!isSelected) {
@@ -337,7 +347,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, canCo
               ✓
             </button>
             <button 
-              onClick={(e) => { e.stopPropagation(); }}
+              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
               title="Plus d'options"
               style={{ 
                 width: 28, 
@@ -350,10 +360,54 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, canCo
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 16
+                fontSize: 16,
+                position: 'relative'
               }}
             >
               ⋮
+              {/* Dropdown menu */}
+              {showMenu && (
+                <div 
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: 4,
+                    background: darkMode ? '#374151' : 'white',
+                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    borderRadius: 8,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    zIndex: 100,
+                    minWidth: 120,
+                    overflow: 'hidden'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setShowMenu(false);
+                      onDelete && onDelete(comment.id); 
+                    }}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '10px 14px',
+                      background: 'none',
+                      border: 'none',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      color: '#ef4444',
+                      fontSize: 13,
+                      fontWeight: 500
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                  >
+                    🗑️ Supprimer
+                  </button>
+                </div>
+              )}
             </button>
           </div>
         )}
@@ -527,6 +581,14 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
 
   const toggleResolve = async (commentId) => {
     try { await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId + '/resolve', { method: 'PUT', headers: { Authorization: 'Bearer ' + token } }); } catch (err) { console.error(err); }
+  };
+
+  const deleteComment = async (commentId) => {
+    // Optimistic update - remove locally first
+    setComments(p => p.filter(c => c.id !== commentId && c._id !== commentId));
+    try { 
+      await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }); 
+    } catch (err) { console.error(err); }
   };
 
   const submitNewComment = async (elementId) => {
@@ -868,14 +930,15 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                 >
                   {/* Comments for this element */}
                   {elementComments.map(c => {
-                    const isThisCommentSelected = selectedCommentId === c.id || (selectedCommentIndex === idx && elementComments.length === 1);
+                    const cId = c.id || c._id;
+                    const isThisCommentSelected = selectedCommentId === cId || (selectedCommentIndex === idx && elementComments.length === 1);
                     return (
                       <div 
-                        key={c.id} 
-                        data-comment-id={c.id}
+                        key={cId} 
+                        data-comment-id={cId}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedCommentId(isThisCommentSelected ? null : c.id);
+                          setSelectedCommentId(isThisCommentSelected ? null : cId);
                           if (!isThisCommentSelected) {
                             onNavigateToElement && onNavigateToElement(idx);
                           }
@@ -897,12 +960,13 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                           </div>
                         )}
                         <InlineComment 
-                          comment={c} 
+                          comment={{...c, id: cId}} 
                           onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
                           onResolve={toggleResolve}
+                          onDelete={deleteComment}
                           canComment={canComment}
-                          isReplying={replyTo === c.id}
-                          replyContent={replyTo === c.id ? replyContent : ''}
+                          isReplying={replyTo === cId}
+                          replyContent={replyTo === cId ? replyContent : ''}
                           onReplyChange={setReplyContent}
                           onSubmitReply={addReply}
                           onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
@@ -2174,8 +2238,9 @@ export default function ScreenplayEditor() {
     socket.on('cursor-updated', ({ userId, cursor }) => setUsers(p => p.map(u => u.id === userId ? { ...u, cursor } : u)));
     socket.on('document-restored', ({ title, elements }) => { setTitle(title); setElements(elements); });
     socket.on('comment-added', ({ comment }) => setComments(p => [...p, comment]));
-    socket.on('comment-reply-added', ({ commentId, reply }) => setComments(p => p.map(c => c.id === commentId ? { ...c, replies: [...(c.replies || []), reply] } : c)));
-    socket.on('comment-resolved', ({ commentId, resolved }) => setComments(p => p.map(c => c.id === commentId ? { ...c, resolved } : c)));
+    socket.on('comment-reply-added', ({ commentId, reply }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, replies: [...(c.replies || []), reply] } : c)));
+    socket.on('comment-resolved', ({ commentId, resolved }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, resolved } : c)));
+    socket.on('comment-deleted', ({ commentId }) => setComments(p => p.filter(c => c.id !== commentId && c._id !== commentId)));
     
     // Chat messages
     socket.on('chat-message', (message) => {
