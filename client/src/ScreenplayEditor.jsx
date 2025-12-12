@@ -646,19 +646,35 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                   
                   {/* Comments for this element */}
                   {elementComments.map(c => (
-                    <InlineComment 
-                      key={c.id} 
-                      comment={c} 
-                      onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
-                      onResolve={toggleResolve}
-                      canComment={canComment}
-                      isReplying={replyTo === c.id}
-                      replyContent={replyTo === c.id ? replyContent : ''}
-                      onReplyChange={setReplyContent}
-                      onSubmitReply={addReply}
-                      onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
-                      darkMode={darkMode}
-                    />
+                    <div key={c.id} data-comment-id={c.id}>
+                      {/* Show highlighted text if inline comment */}
+                      {c.highlight && (
+                        <div style={{ 
+                          background: 'rgba(251, 191, 36, 0.3)', 
+                          padding: '4px 8px', 
+                          borderRadius: '4px 4px 0 0', 
+                          fontSize: 11, 
+                          color: darkMode ? '#fbbf24' : '#92400e',
+                          fontStyle: 'italic',
+                          borderLeft: '3px solid #f59e0b',
+                          marginBottom: -8
+                        }}>
+                          "{c.highlight.text.slice(0, 50)}{c.highlight.text.length > 50 ? '...' : ''}"
+                        </div>
+                      )}
+                      <InlineComment 
+                        comment={c} 
+                        onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
+                        onResolve={toggleResolve}
+                        canComment={canComment}
+                        isReplying={replyTo === c.id}
+                        replyContent={replyTo === c.id ? replyContent : ''}
+                        onReplyChange={setReplyContent}
+                        onSubmitReply={addReply}
+                        onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
+                        darkMode={darkMode}
+                      />
+                    </div>
                   ))}
                   
                   {/* Add comment to this element */}
@@ -1257,7 +1273,7 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, onOpenComments }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, onOpenComments, highlightedContent }) => {
   const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
@@ -1303,6 +1319,9 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     }
     onKeyDown(e, index);
   };
+  
+  // Check if content has highlights
+  const hasHighlights = highlightedContent && typeof highlightedContent !== 'string' && Array.isArray(highlightedContent);
 
   return (
     <div style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
@@ -1344,7 +1363,24 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       {/* Type label */}
       {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       
-      <textarea ref={textareaRef} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.7, background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }} rows={1} readOnly={!canEdit} />
+      {/* Show highlighted content when not active and has highlights */}
+      {!isActive && hasHighlights ? (
+        <div 
+          onClick={() => onFocus(index)}
+          style={{ 
+            ...getElementStyle(element.type), 
+            cursor: 'text',
+            opacity: canEdit ? 1 : 0.7, 
+            background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+            whiteSpace: 'pre-wrap',
+            minHeight: '1.5em'
+          }}
+        >
+          {highlightedContent}
+        </div>
+      ) : (
+        <textarea ref={textareaRef} value={element.content} placeholder={isActive ? getPlaceholder(element.type) : ''} onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} onFocus={() => onFocus(index)} onKeyDown={handleKey} onSelect={e => onCursorMove(index, e.target.selectionStart)} style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.7, background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }} rows={1} readOnly={!canEdit} />
+      )}
       
       {/* Character autocomplete */}
       {autoType === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
@@ -1612,6 +1648,7 @@ export default function ScreenplayEditor() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [characters, setCharacters] = useState([]);
   const [comments, setComments] = useState([]);
+  const [textSelection, setTextSelection] = useState(null); // { elementId, elementIndex, text, startOffset, endOffset, rect }
   const [connected, setConnected] = useState(false);
   const [users, setUsers] = useState([]);
   const [myId, setMyId] = useState(null);
@@ -1996,6 +2033,82 @@ export default function ScreenplayEditor() {
       }
     }
   }, [elements.length]); // eslint-disable-line
+
+  // Handle text selection for inline comments
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.toString().trim() === '') {
+        // Don't clear immediately to allow clicking the comment button
+        return;
+      }
+      
+      const range = selection.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      
+      // Find the element container
+      let elementNode = container.nodeType === Node.TEXT_NODE ? container.parentNode : container;
+      while (elementNode && !elementNode.dataset?.elementIndex) {
+        elementNode = elementNode.parentNode;
+      }
+      
+      if (!elementNode || !elementNode.dataset?.elementIndex) {
+        return;
+      }
+      
+      const elementIndex = parseInt(elementNode.dataset.elementIndex);
+      const element = elements[elementIndex];
+      if (!element) return;
+      
+      // Get the selected text and offsets
+      const selectedText = selection.toString();
+      const rect = range.getBoundingClientRect();
+      
+      // Calculate offsets within the element content
+      // This is simplified - in a real app you'd need more robust offset calculation
+      const textContent = element.content || '';
+      const startOffset = textContent.indexOf(selectedText);
+      const endOffset = startOffset + selectedText.length;
+      
+      if (startOffset >= 0) {
+        setTextSelection({
+          elementId: element.id,
+          elementIndex,
+          text: selectedText,
+          startOffset,
+          endOffset,
+          rect: {
+            top: rect.top,
+            left: rect.left,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width
+          }
+        });
+      }
+    };
+    
+    document.addEventListener('mouseup', handleSelectionChange);
+    return () => document.removeEventListener('mouseup', handleSelectionChange);
+  }, [elements]);
+
+  // Clear text selection when clicking elsewhere
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (textSelection && !e.target.closest('.text-selection-popup')) {
+        // Small delay to allow button click to register
+        setTimeout(() => {
+          const selection = window.getSelection();
+          if (!selection || selection.isCollapsed) {
+            setTextSelection(null);
+          }
+        }, 100);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [textSelection]);
 
   // Drag handlers for floating panels
   useEffect(() => {
@@ -2461,6 +2574,87 @@ export default function ScreenplayEditor() {
   }, [showComments, elements.length]);
 
   // Get initials from a name (e.g. "Jeremie Goldstein" -> "JG", "RomainV" -> "RV")
+  // Render text content with highlighted comments
+  const renderTextWithHighlights = (content, elementId) => {
+    if (!content) return '';
+    
+    // Find all highlights for this element
+    const elementHighlights = comments
+      .filter(c => c.elementId === elementId && c.highlight && !c.resolved)
+      .map(c => ({
+        ...c.highlight,
+        commentId: c.id,
+        userColor: c.userColor
+      }))
+      .sort((a, b) => a.startOffset - b.startOffset);
+    
+    if (elementHighlights.length === 0) {
+      return content;
+    }
+    
+    // Build segments with highlights
+    const segments = [];
+    let lastIndex = 0;
+    
+    elementHighlights.forEach((highlight, idx) => {
+      // Add text before this highlight
+      if (highlight.startOffset > lastIndex) {
+        segments.push({
+          type: 'text',
+          content: content.slice(lastIndex, highlight.startOffset)
+        });
+      }
+      
+      // Add highlighted text
+      segments.push({
+        type: 'highlight',
+        content: content.slice(highlight.startOffset, highlight.endOffset),
+        commentId: highlight.commentId,
+        userColor: highlight.userColor
+      });
+      
+      lastIndex = highlight.endOffset;
+    });
+    
+    // Add remaining text
+    if (lastIndex < content.length) {
+      segments.push({
+        type: 'text',
+        content: content.slice(lastIndex)
+      });
+    }
+    
+    return segments.map((seg, idx) => {
+      if (seg.type === 'highlight') {
+        return (
+          <span
+            key={idx}
+            onClick={(e) => {
+              e.stopPropagation();
+              // Scroll to comment in panel
+              const commentEl = document.querySelector(`[data-comment-id="${seg.commentId}"]`);
+              if (commentEl) {
+                setShowComments(true);
+                setTimeout(() => commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+              }
+            }}
+            style={{
+              background: 'rgba(251, 191, 36, 0.4)',
+              borderBottom: `2px solid ${seg.userColor || '#f59e0b'}`,
+              cursor: 'pointer',
+              borderRadius: 2,
+              padding: '0 1px'
+            }}
+            title="Cliquer pour voir le commentaire"
+          >
+            {seg.content}
+          </span>
+        );
+      }
+      return <span key={idx}>{seg.content}</span>;
+    });
+  };
+
   const getInitials = (name) => {
     if (!name) return '';
     const parts = name.trim().split(/[\s]+/);
@@ -3732,6 +3926,7 @@ export default function ScreenplayEditor() {
                       note={notes[element.id]}
                       onNoteClick={(id) => setShowNoteFor(id)}
                       onOpenComments={() => { setShowComments(true); setSelectedCommentIndex(index); }}
+                      highlightedContent={renderTextWithHighlights(element.content, element.id)}
                     />
                   </div>
                 ))}
@@ -3959,6 +4154,92 @@ export default function ScreenplayEditor() {
         />
       )}
       
+      {/* Text Selection Comment Popup */}
+      {textSelection && canComment && (
+        <div 
+          className="text-selection-popup"
+          style={{
+            position: 'fixed',
+            left: Math.min(Math.max(10, textSelection.rect.left + textSelection.rect.width / 2 - 60), window.innerWidth - 140),
+            top: textSelection.rect.top < 50 ? textSelection.rect.bottom + 10 : textSelection.rect.top - 45,
+            background: darkMode ? '#1f2937' : 'white',
+            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+            borderRadius: 8,
+            padding: '6px 10px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            zIndex: 1000,
+            display: 'flex',
+            gap: 6,
+            alignItems: 'center'
+          }}
+        >
+          <button
+            onClick={() => {
+              // Create inline comment
+              const commentText = prompt('Votre commentaire sur "' + textSelection.text.slice(0, 30) + (textSelection.text.length > 30 ? '...' : '') + '"');
+              if (commentText && commentText.trim()) {
+                const newComment = {
+                  id: 'comment-' + Date.now(),
+                  elementId: textSelection.elementId,
+                  elementIndex: textSelection.elementIndex,
+                  highlight: {
+                    text: textSelection.text,
+                    startOffset: textSelection.startOffset,
+                    endOffset: textSelection.endOffset
+                  },
+                  content: commentText.trim(),
+                  userName: currentUser?.name || 'Anonyme',
+                  userColor: currentUser?.color || '#6b7280',
+                  createdAt: new Date().toISOString(),
+                  resolved: false,
+                  replies: []
+                };
+                
+                setComments(prev => [...prev, newComment]);
+                
+                // Sync to server
+                if (socketRef.current) {
+                  socketRef.current.emit('comment-add', { comment: newComment });
+                }
+              }
+              setTextSelection(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            style={{
+              background: '#f59e0b',
+              border: 'none',
+              borderRadius: 6,
+              padding: '6px 12px',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4
+            }}
+          >
+            💬 Commenter
+          </button>
+          <button
+            onClick={() => {
+              setTextSelection(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6b7280',
+              cursor: 'pointer',
+              fontSize: 14,
+              padding: '4px 6px'
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Drag overlay - prevents blue selection during panel drag */}
       {isDraggingAny && (
         <div style={{ 
