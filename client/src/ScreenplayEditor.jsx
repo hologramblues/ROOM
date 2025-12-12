@@ -1273,7 +1273,7 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, commentCount, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, onOpenComments, highlightedContent, onTextSelect }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlightedContent, onTextSelect }) => {
   const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
@@ -1282,7 +1282,22 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
 
   useEffect(() => { if (isActive && textareaRef.current) textareaRef.current.focus(); }, [isActive]);
-  useEffect(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'; } }, [element.content]);
+  
+  // Auto-resize textarea - use setTimeout to ensure DOM is ready when switching from div to textarea
+  useEffect(() => { 
+    const adjustHeight = () => {
+      if (textareaRef.current) { 
+        textareaRef.current.style.height = 'auto'; 
+        textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'; 
+      }
+    };
+    adjustHeight();
+    // Also adjust after a small delay to handle the div->textarea switch
+    if (isActive) {
+      const timer = setTimeout(adjustHeight, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [element.content, isActive]);
   
   // Character autocomplete
   useEffect(() => {
@@ -1349,15 +1364,6 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           style={{ position: 'absolute', right: -55, top: 2, width: 20, height: 20, background: note.color || '#fbbf24', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, cursor: 'pointer', boxShadow: '1px 1px 3px rgba(0,0,0,0.2)' }}
           title={note.content}
         >📝</div>
-      )}
-      
-      {/* Comment indicator - yellow square (clickable to open comments) */}
-      {commentCount > 0 && (
-        <div 
-          onClick={onOpenComments}
-          style={{ position: 'absolute', right: note ? -80 : -30, top: 2, width: 18, height: 18, background: '#fbbf24', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, cursor: 'pointer', boxShadow: '1px 1px 2px rgba(0,0,0,0.2)' }}
-          title="Voir les commentaires"
-        >💬</div>
       )}
       
       {/* Type label */}
@@ -2227,7 +2233,7 @@ export default function ScreenplayEditor() {
     
     return false;
   }, [elements, lockedScenes, sceneAssignments, myId]);
-  const commentCounts = useMemo(() => { const counts = {}; comments.filter(c => !c.resolved).forEach(c => { counts[c.elementId] = (counts[c.elementId] || 0) + 1; }); return counts; }, [comments]);
+
   const totalComments = comments.filter(c => !c.resolved).length;
 
   // Outline - list of scenes with their index
@@ -3901,14 +3907,12 @@ export default function ScreenplayEditor() {
                       onSelectLocation={handleSelectLocation}
                       remoteCursors={remoteCursors} 
                       onCursorMove={handleCursor} 
-                      commentCount={commentCounts[element.id] || 0} 
                       canEdit={canEdit && !isElementLocked(index)}
                       isLocked={isElementLocked(index)}
                       sceneNumber={sceneNumbersMap[element.id]}
                       showSceneNumbers={showSceneNumbers}
                       note={notes[element.id]}
                       onNoteClick={(id) => setShowNoteFor(id)}
-                      onOpenComments={() => { setShowComments(true); setSelectedCommentIndex(index); }}
                       highlightedContent={renderTextWithHighlights(element.content, element.id)}
                       onTextSelect={(selection) => {
                         if (canComment) {
