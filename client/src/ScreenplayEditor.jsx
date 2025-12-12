@@ -584,8 +584,6 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   };
 
   const deleteComment = async (commentId) => {
-    // Optimistic update - remove locally first
-    setComments(p => p.filter(c => c.id !== commentId && c._id !== commentId));
     try { 
       await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }); 
     } catch (err) { console.error(err); }
