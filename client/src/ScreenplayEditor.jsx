@@ -212,38 +212,280 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
   );
 };
 
-// ============ INLINE COMMENT (post-it style next to element) ============
-const InlineComment = React.memo(({ comment, onReply, onResolve, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode }) => {
+// ============ INLINE COMMENT (Google Docs style) ============
+const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode, isSelected }) => {
   const replyInputRef = useRef(null);
   useEffect(() => { if (isReplying && replyInputRef.current) replyInputRef.current.focus(); }, [isReplying]);
 
-  return (
-    <div style={{ background: darkMode ? '#374151' : '#fef3c7', borderRadius: 6, padding: 10, marginBottom: 8, borderLeft: '3px solid #f59e0b' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <div style={{ width: 20, height: 20, borderRadius: '50%', background: comment.userColor || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: 9 }}>{comment.userName?.charAt(0).toUpperCase()}</div>
-        <span style={{ color: darkMode ? 'white' : '#78350f', fontWeight: 'bold', fontSize: 11 }}>{comment.userName}</span>
-        <span style={{ color: '#9ca3af', fontSize: 10 }}>{new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
-        {comment.resolved && <span style={{ fontSize: 9, background: '#10b981', color: 'white', padding: '1px 4px', borderRadius: 3 }}>Résolu</span>}
-      </div>
-      <p style={{ color: darkMode ? '#e5e7eb' : '#78350f', margin: '0 0 6px 0', fontSize: 12, lineHeight: 1.4 }}>{comment.content}</p>
-      {comment.replies?.map(reply => (
-        <div key={reply.id} style={{ marginLeft: 12, paddingLeft: 8, borderLeft: `2px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, marginTop: 6 }}>
-          <span style={{ color: darkMode ? '#9ca3af' : '#92400e', fontWeight: 'bold', fontSize: 10 }}>{reply.userName}</span>
-          <p style={{ color: darkMode ? '#d1d5db' : '#78350f', margin: '2px 0 0 0', fontSize: 11 }}>{reply.content}</p>
-        </div>
-      ))}
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        {canComment && <button onClick={() => onReply(comment.id)} style={{ background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer', fontSize: 10, padding: 0 }}>Répondre</button>}
-        {canComment && <button onClick={() => onResolve(comment.id)} style={{ background: 'none', border: 'none', color: comment.resolved ? '#10b981' : '#6b7280', cursor: 'pointer', fontSize: 10, padding: 0 }}>{comment.resolved ? 'Rouvrir' : 'Résoudre'}</button>}
-      </div>
-      {isReplying && (
-        <div style={{ marginTop: 8 }}>
-          <textarea ref={replyInputRef} value={replyContent} onChange={e => onReplyChange(e.target.value)} placeholder="Réponse..." style={{ width: '100%', padding: 6, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 4, color: darkMode ? 'white' : '#78350f', fontSize: 11, resize: 'none', boxSizing: 'border-box' }} rows={2} />
-          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-            <button onClick={() => onSubmitReply(comment.id)} style={{ padding: '4px 8px', background: '#f59e0b', border: 'none', borderRadius: 3, color: 'white', cursor: 'pointer', fontSize: 10 }}>Envoyer</button>
-            <button onClick={onCancelReply} style={{ padding: '4px 8px', background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`, borderRadius: 3, color: darkMode ? '#9ca3af' : '#92400e', cursor: 'pointer', fontSize: 10 }}>Annuler</button>
+  // Compact view when not selected
+  if (!isSelected) {
+    return (
+      <div style={{ 
+        background: darkMode ? '#2d3748' : 'white', 
+        borderRadius: 8, 
+        padding: '10px 12px',
+        marginBottom: 6,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        cursor: 'pointer'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <div style={{ 
+            width: 28, 
+            height: 28, 
+            borderRadius: '50%', 
+            background: comment.userColor || '#666', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            color: 'white', 
+            fontWeight: 'bold', 
+            fontSize: 12,
+            flexShrink: 0
+          }}>
+            {comment.userName?.charAt(0).toUpperCase()}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 13 }}>{comment.userName}</span>
+              <span style={{ color: '#9ca3af', fontSize: 11 }}>
+                {new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+              </span>
+              {comment.resolved && <span style={{ fontSize: 9, background: '#10b981', color: 'white', padding: '1px 6px', borderRadius: 10 }}>✓</span>}
+            </div>
+            <p style={{ 
+              color: darkMode ? '#e5e7eb' : '#374151', 
+              margin: 0, 
+              fontSize: 13, 
+              lineHeight: 1.4,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical'
+            }}>
+              {comment.content}
+            </p>
+            {comment.replies?.length > 0 && (
+              <span style={{ color: '#6b7280', fontSize: 11, marginTop: 4, display: 'block' }}>
+                {comment.replies.length} réponse{comment.replies.length > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Expanded view when selected
+  return (
+    <div style={{ 
+      background: darkMode ? '#374151' : 'white', 
+      borderRadius: 8, 
+      padding: '12px 14px',
+      marginBottom: 6,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+      border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`
+    }}>
+      {/* Header with avatar, name, date, and action icons */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+        <div style={{ 
+          width: 32, 
+          height: 32, 
+          borderRadius: '50%', 
+          background: comment.userColor || '#666', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          color: 'white', 
+          fontWeight: 'bold', 
+          fontSize: 13,
+          flexShrink: 0
+        }}>
+          {comment.userName?.charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 13 }}>{comment.userName}</span>
+            <span style={{ color: '#9ca3af', fontSize: 11 }}>
+              {new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+              {' '}
+              {new Date(comment.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          {comment.resolved && <span style={{ fontSize: 10, color: '#10b981', marginTop: 2, display: 'block' }}>Résolu</span>}
+        </div>
+        {/* Action icons - Google Docs style */}
+        {canComment && (
+          <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onResolve(comment.id); }}
+              title={comment.resolved ? 'Rouvrir' : 'Marquer comme résolu'}
+              style={{ 
+                width: 28, 
+                height: 28, 
+                borderRadius: '50%', 
+                border: 'none', 
+                background: comment.resolved ? '#10b981' : (darkMode ? '#4b5563' : '#f3f4f6'),
+                color: comment.resolved ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'),
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 14
+              }}
+            >
+              ✓
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); }}
+              title="Plus d'options"
+              style={{ 
+                width: 28, 
+                height: 28, 
+                borderRadius: '50%', 
+                border: 'none', 
+                background: darkMode ? '#4b5563' : '#f3f4f6',
+                color: darkMode ? '#9ca3af' : '#6b7280',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 16
+              }}
+            >
+              ⋮
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {/* Comment content */}
+      <p style={{ 
+        color: darkMode ? '#e5e7eb' : '#374151', 
+        margin: '0 0 10px 0', 
+        fontSize: 13, 
+        lineHeight: 1.5
+      }}>
+        {comment.content}
+      </p>
+      
+      {/* Replies */}
+      {comment.replies?.map(reply => (
+        <div key={reply.id} style={{ 
+          marginTop: 10, 
+          paddingTop: 10, 
+          borderTop: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` 
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ 
+              width: 24, 
+              height: 24, 
+              borderRadius: '50%', 
+              background: reply.userColor || '#888', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              color: 'white', 
+              fontWeight: 'bold', 
+              fontSize: 10,
+              flexShrink: 0
+            }}>
+              {reply.userName?.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 12 }}>{reply.userName}</span>
+                <span style={{ color: '#9ca3af', fontSize: 10 }}>
+                  {new Date(reply.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                </span>
+              </div>
+              <p style={{ color: darkMode ? '#d1d5db' : '#374151', margin: '2px 0 0 0', fontSize: 12, lineHeight: 1.4 }}>{reply.content}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+      
+      {/* Reply input - Google Docs style */}
+      {canComment && (
+        isReplying ? (
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` }}>
+            <textarea 
+              ref={replyInputRef} 
+              value={replyContent} 
+              onChange={e => onReplyChange(e.target.value)} 
+              placeholder="Répondre..." 
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && replyContent.trim()) {
+                  e.preventDefault();
+                  onSubmitReply(comment.id);
+                }
+                if (e.key === 'Escape') {
+                  onCancelReply();
+                }
+              }}
+              style={{ 
+                width: '100%', 
+                padding: 10, 
+                background: darkMode ? '#1f2937' : '#f9fafb', 
+                border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, 
+                borderRadius: 6, 
+                color: darkMode ? 'white' : '#374151', 
+                fontSize: 12, 
+                resize: 'none', 
+                boxSizing: 'border-box' 
+              }} 
+              rows={2} 
+            />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button 
+                onClick={() => onSubmitReply(comment.id)} 
+                disabled={!replyContent.trim()}
+                style={{ 
+                  padding: '6px 14px', 
+                  background: replyContent.trim() ? '#1a73e8' : '#d1d5db', 
+                  border: 'none', 
+                  borderRadius: 4, 
+                  color: 'white', 
+                  cursor: replyContent.trim() ? 'pointer' : 'not-allowed', 
+                  fontSize: 12,
+                  fontWeight: 500
+                }}
+              >
+                Répondre
+              </button>
+              <button 
+                onClick={onCancelReply} 
+                style={{ 
+                  padding: '6px 14px', 
+                  background: 'transparent', 
+                  border: 'none', 
+                  borderRadius: 4, 
+                  color: darkMode ? '#9ca3af' : '#5f6368', 
+                  cursor: 'pointer', 
+                  fontSize: 12 
+                }}
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div 
+            onClick={(e) => { e.stopPropagation(); onReply(comment.id); }}
+            style={{ 
+              marginTop: 12, 
+              padding: '10px 12px', 
+              background: darkMode ? '#1f2937' : '#f9fafb', 
+              border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, 
+              borderRadius: 20,
+              color: '#9ca3af',
+              fontSize: 12,
+              cursor: 'text'
+            }}
+          >
+            Répondez ou ajoutez d'autres personnes avec @
+          </div>
+        )
       )}
     </div>
   );
@@ -256,6 +498,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   const [newCommentFor, setNewCommentFor] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
   const [inlineCommentText, setInlineCommentText] = useState('');
+  const [selectedCommentId, setSelectedCommentId] = useState(null);
   const inlineCommentInputRef = useRef(null);
   const sidebarRef = useRef(null);
   const commentRefs = useRef({});
@@ -410,22 +653,25 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   };
 
   return (
-    <div style={{ 
-      position: 'fixed', 
-      right: 0, 
-      top: 60, 
-      bottom: 0, 
-      width: 320, 
-      background: darkMode ? '#1f2937' : 'white', 
-      borderLeft: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
-      zIndex: 100, 
-      display: 'flex', 
-      flexDirection: 'column',
-      boxShadow: '-4px 0 20px rgba(0,0,0,0.2)'
-    }}>
+    <div 
+      style={{ 
+        position: 'fixed', 
+        right: 0, 
+        top: 60, 
+        bottom: 0, 
+        width: 320, 
+        background: darkMode ? '#1f2937' : '#f8f9fa', 
+        borderLeft: `1px solid ${darkMode ? '#374151' : '#dadce0'}`, 
+        zIndex: 100, 
+        display: 'flex', 
+        flexDirection: 'column',
+        boxShadow: '-2px 0 8px rgba(0,0,0,0.1)'
+      }}
+      onClick={() => setSelectedCommentId(null)}
+    >
       {/* Header with navigation */}
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : 'black' }}>💬 Commentaires ({unresolvedComments.length})</h3>
+        <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : '#202124' }}>💬 Commentaires ({unresolvedComments.length})</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {/* Navigation arrows */}
           <button 
@@ -484,7 +730,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
           transform: `translateY(${-scrollTop}px)`
         }}>
           
-          {/* Pending inline comment form - positioned after existing comments for this element */}
+          {/* Pending inline comment form - Google Docs style */}
           {pendingInlineComment && (() => {
             const pendingIdx = pendingInlineComment.elementIndex;
             // Find if there are existing comments for this element
@@ -507,94 +753,97 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                 top: pendingTop,
                 left: 8,
                 right: 8,
-                padding: '10px',
-                background: darkMode ? '#374151' : '#fef3c7',
+                background: darkMode ? '#374151' : 'white',
                 borderRadius: 8,
-                border: `2px solid #f59e0b`,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                zIndex: 10
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                zIndex: 10,
+                overflow: 'hidden'
               }}>
-              <div style={{ 
-                fontSize: 11, 
-                color: darkMode ? '#fbbf24' : '#92400e', 
-                marginBottom: 8,
-                padding: '4px 8px',
-                background: 'rgba(251, 191, 36, 0.3)',
-                borderRadius: 4,
-                borderLeft: '3px solid #f59e0b'
-              }}>
-                "{pendingInlineComment.text.slice(0, 50)}{pendingInlineComment.text.length > 50 ? '...' : ''}"
-              </div>
-              <textarea
-                ref={inlineCommentInputRef}
-                value={inlineCommentText}
-                onChange={(e) => setInlineCommentText(e.target.value)}
-                placeholder="Écrire votre commentaire..."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && inlineCommentText.trim()) {
-                    e.preventDefault();
-                    onSubmitInlineComment(inlineCommentText);
-                    setInlineCommentText('');
-                  }
-                  if (e.key === 'Escape') {
-                    onCancelInlineComment();
-                    setInlineCommentText('');
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  padding: 8,
-                  border: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`,
-                  borderRadius: 4,
+                {/* Highlighted text banner */}
+                <div style={{ 
+                  background: 'rgba(251, 191, 36, 0.2)', 
+                  padding: '8px 12px',
+                  borderBottom: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`,
                   fontSize: 12,
-                  resize: 'none',
-                  minHeight: 50,
-                  background: darkMode ? '#1f2937' : 'white',
-                  color: darkMode ? 'white' : 'black',
-                  boxSizing: 'border-box'
-                }}
-              />
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <button
-                  onClick={() => {
-                    if (inlineCommentText.trim()) {
-                      onSubmitInlineComment(inlineCommentText);
-                      setInlineCommentText('');
-                    }
-                  }}
-                  disabled={!inlineCommentText.trim()}
-                  style={{
-                    padding: '6px 12px',
-                    background: inlineCommentText.trim() ? '#f59e0b' : '#d1d5db',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 4,
-                    fontSize: 11,
-                    cursor: inlineCommentText.trim() ? 'pointer' : 'not-allowed',
-                    fontWeight: 500
-                  }}
-                >
-                  Commenter
-                </button>
-                <button
-                  onClick={() => {
-                    onCancelInlineComment();
-                    setInlineCommentText('');
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    background: 'transparent',
-                    color: darkMode ? '#9ca3af' : '#6b7280',
-                    border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
-                    borderRadius: 4,
-                    fontSize: 11,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Annuler
-                </button>
+                  color: darkMode ? '#fbbf24' : '#92400e',
+                  fontStyle: 'italic'
+                }}>
+                  "{pendingInlineComment.text.slice(0, 60)}{pendingInlineComment.text.length > 60 ? '...' : ''}"
+                </div>
+                
+                <div style={{ padding: 12 }}>
+                  <textarea
+                    ref={inlineCommentInputRef}
+                    value={inlineCommentText}
+                    onChange={(e) => setInlineCommentText(e.target.value)}
+                    placeholder="Ajouter un commentaire..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && inlineCommentText.trim()) {
+                        e.preventDefault();
+                        onSubmitInlineComment(inlineCommentText);
+                        setInlineCommentText('');
+                      }
+                      if (e.key === 'Escape') {
+                        onCancelInlineComment();
+                        setInlineCommentText('');
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: 10,
+                      border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                      borderRadius: 6,
+                      fontSize: 13,
+                      resize: 'none',
+                      minHeight: 60,
+                      background: darkMode ? '#1f2937' : '#f9fafb',
+                      color: darkMode ? 'white' : '#374151',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => {
+                        onCancelInlineComment();
+                        setInlineCommentText('');
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        background: 'transparent',
+                        color: darkMode ? '#9ca3af' : '#5f6368',
+                        border: 'none',
+                        borderRadius: 4,
+                        fontSize: 13,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (inlineCommentText.trim()) {
+                          onSubmitInlineComment(inlineCommentText);
+                          setInlineCommentText('');
+                        }
+                      }}
+                      disabled={!inlineCommentText.trim()}
+                      style={{
+                        padding: '8px 16px',
+                        background: inlineCommentText.trim() ? '#1a73e8' : '#d1d5db',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 4,
+                        fontSize: 13,
+                        cursor: inlineCommentText.trim() ? 'pointer' : 'not-allowed',
+                        fontWeight: 500
+                      }}
+                    >
+                      Commenter
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
             );
           })()}
           
@@ -604,8 +853,6 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
             sortedIndices.map((idx, arrayIndex) => {
               const element = elements[idx];
               const elementComments = commentsByElementIndex[idx];
-              const isSelected = idx === selectedCommentIndex;
-              const isActive = idx === activeIndex || isSelected;
               const topPosition = adjustedPositions[idx] || 0;
               
               return (
@@ -616,48 +863,55 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                     position: 'absolute',
                     top: topPosition,
                     left: 8,
-                    right: 8,
-                    background: isActive ? (darkMode ? '#374151' : '#eff6ff') : (darkMode ? '#2d3748' : '#f9fafb'),
-                    borderRadius: 8,
-                    padding: 10,
-                    border: isActive ? `2px solid ${darkMode ? '#60a5fa' : '#3b82f6'}` : `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                    cursor: 'pointer'
+                    right: 8
                   }}
-                  onClick={() => onNavigateToElement && onNavigateToElement(idx)}
                 >
                   {/* Comments for this element */}
-                  {elementComments.map(c => (
-                    <div key={c.id} data-comment-id={c.id}>
-                      {/* Show highlighted text if inline comment */}
-                      {c.highlight && (
-                        <div style={{ 
-                          background: 'rgba(251, 191, 36, 0.3)', 
-                          padding: '4px 8px', 
-                          borderRadius: '4px 4px 0 0', 
-                          fontSize: 11, 
-                          color: darkMode ? '#fbbf24' : '#92400e',
-                          fontStyle: 'italic',
-                          borderLeft: '3px solid #f59e0b',
-                          marginBottom: -8
-                        }}>
-                          "{c.highlight.text.slice(0, 50)}{c.highlight.text.length > 50 ? '...' : ''}"
-                        </div>
-                      )}
-                      <InlineComment 
-                        comment={c} 
-                        onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
-                        onResolve={toggleResolve}
-                        canComment={canComment}
-                        isReplying={replyTo === c.id}
-                        replyContent={replyTo === c.id ? replyContent : ''}
-                        onReplyChange={setReplyContent}
-                        onSubmitReply={addReply}
-                        onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
-                        darkMode={darkMode}
-                      />
-                    </div>
-                  ))}
+                  {elementComments.map(c => {
+                    const isThisCommentSelected = selectedCommentId === c.id || (selectedCommentIndex === idx && elementComments.length === 1);
+                    return (
+                      <div 
+                        key={c.id} 
+                        data-comment-id={c.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCommentId(isThisCommentSelected ? null : c.id);
+                          if (!isThisCommentSelected) {
+                            onNavigateToElement && onNavigateToElement(idx);
+                          }
+                        }}
+                      >
+                        {/* Show highlighted text if inline comment */}
+                        {c.highlight && isThisCommentSelected && (
+                          <div style={{ 
+                            background: 'rgba(251, 191, 36, 0.3)', 
+                            padding: '4px 8px', 
+                            borderRadius: '4px 4px 0 0', 
+                            fontSize: 11, 
+                            color: darkMode ? '#fbbf24' : '#92400e',
+                            fontStyle: 'italic',
+                            borderLeft: '3px solid #f59e0b',
+                            marginBottom: -6
+                          }}>
+                            "{c.highlight.text.slice(0, 50)}{c.highlight.text.length > 50 ? '...' : ''}"
+                          </div>
+                        )}
+                        <InlineComment 
+                          comment={c} 
+                          onReply={id => { setReplyTo(replyTo === id ? null : id); setReplyContent(''); }}
+                          onResolve={toggleResolve}
+                          canComment={canComment}
+                          isReplying={replyTo === c.id}
+                          replyContent={replyTo === c.id ? replyContent : ''}
+                          onReplyChange={setReplyContent}
+                          onSubmitReply={addReply}
+                          onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
+                          darkMode={darkMode}
+                          isSelected={isThisCommentSelected}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })
