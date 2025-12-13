@@ -662,13 +662,12 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment }) => {
+const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, selectedCommentId, onSelectComment }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
   const [inlineCommentText, setInlineCommentText] = useState('');
-  const [selectedCommentId, setSelectedCommentId] = useState(null);
   const inlineCommentInputRef = useRef(null);
   const sidebarRef = useRef(null);
   const commentRefs = useRef({});
@@ -677,11 +676,11 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   // Deselect comment when clicking elsewhere in the script (activeIndex changes)
   useEffect(() => {
     if (activeIndex !== prevActiveIndexRef.current) {
-      setSelectedCommentId(null);
+      onSelectComment && onSelectComment(null);
       setReplyTo(null);
       prevActiveIndexRef.current = activeIndex;
     }
-  }, [activeIndex]);
+  }, [activeIndex, onSelectComment]);
 
   // Focus on inline comment input when pending comment appears
   const pendingCommentInitRef = useRef(null);
@@ -698,21 +697,29 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   }, [pendingInlineComment]);
 
   const addReply = async (commentId) => {
+    console.log('addReply called:', commentId, replyContent);
     if (!replyContent.trim()) return;
     try {
-      await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId + '/replies', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ content: replyContent }) });
+      const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId + '/replies', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ content: replyContent }) });
+      console.log('addReply response:', res.status);
       setReplyTo(null); setReplyContent('');
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error('addReply error:', err); }
   };
 
   const toggleResolve = async (commentId) => {
-    try { await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId + '/resolve', { method: 'PUT', headers: { Authorization: 'Bearer ' + token } }); } catch (err) { console.error(err); }
+    console.log('toggleResolve called:', commentId);
+    try { 
+      const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId + '/resolve', { method: 'PUT', headers: { Authorization: 'Bearer ' + token } }); 
+      console.log('toggleResolve response:', res.status);
+    } catch (err) { console.error('toggleResolve error:', err); }
   };
 
   const deleteComment = async (commentId) => {
+    console.log('deleteComment called:', commentId);
     try { 
-      await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }); 
-    } catch (err) { console.error(err); }
+      const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/comments/' + commentId, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }); 
+      console.log('deleteComment response:', res.status);
+    } catch (err) { console.error('deleteComment error:', err); }
   };
 
   const editComment = async (commentId, newContent) => {
@@ -863,7 +870,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
         flexDirection: 'column',
         boxShadow: '-2px 0 8px rgba(0,0,0,0.1)'
       }}
-      onClick={() => setSelectedCommentId(null)}
+      onClick={() => onSelectComment && onSelectComment(null)}
     >
       {/* Header with navigation */}
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -1072,7 +1079,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                         data-comment-id={cId}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedCommentId(isThisCommentSelected ? null : cId);
+                          onSelectComment && onSelectComment(isThisCommentSelected ? null : cId);
                           if (!isThisCommentSelected) {
                             onNavigateToElement && onNavigateToElement(idx);
                           }
@@ -2108,6 +2115,7 @@ export default function ScreenplayEditor() {
   const [showHistory, setShowHistory] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [selectedCommentIndex, setSelectedCommentIndex] = useState(null); // Index of element whose comment was clicked
+  const [selectedCommentId, setSelectedCommentId] = useState(null); // ID of selected comment (for expanding)
   const [showImportExport, setShowImportExport] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -3014,10 +3022,11 @@ export default function ScreenplayEditor() {
         return (
           <span
             key={idx}
-            onClick={() => {
-              // Don't stopPropagation - let the click through to activate the element
-              // Just open the comments panel and scroll to this comment
+            onClick={(e) => {
+              e.stopPropagation();
+              // Open comments panel and select this comment
               setShowComments(true);
+              setSelectedCommentId(seg.commentId);
               setTimeout(() => {
                 const commentEl = document.querySelector(`[data-comment-id="${seg.commentId}"]`);
                 if (commentEl) commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -3026,7 +3035,7 @@ export default function ScreenplayEditor() {
             style={{
               background: 'rgba(251, 191, 36, 0.4)',
               borderBottom: `2px solid ${seg.userColor || '#f59e0b'}`,
-              cursor: 'text',
+              cursor: 'pointer',
               borderRadius: 2,
               padding: '0 1px'
             }}
@@ -4331,12 +4340,14 @@ export default function ScreenplayEditor() {
           elements={elements} 
           activeIndex={activeIndex}
           selectedCommentIndex={selectedCommentIndex}
+          selectedCommentId={selectedCommentId}
+          onSelectComment={setSelectedCommentId}
           elementPositions={elementPositions}
           scrollTop={documentScrollTop}
           token={token} 
           docId={docId} 
           canComment={canComment}
-          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setPendingInlineComment(null); }}
+          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setSelectedCommentId(null); setPendingInlineComment(null); }}
           darkMode={darkMode}
           onNavigateToElement={(idx) => {
             setActiveIndex(idx);
