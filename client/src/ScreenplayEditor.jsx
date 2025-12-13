@@ -283,32 +283,66 @@ const TipTapSceneLine = React.memo(({
     }
   }, [editor, element.content]);
 
-  // Apply highlights
+  // Apply highlights only when element becomes INACTIVE
   useEffect(() => {
     if (!editor) return;
     
-    // Remove all existing highlights first
-    editor.commands.unsetMark('commentHighlight');
-    editor.commands.unsetMark('suggestionHighlight');
+    if (isActive) {
+      // When active, remove all highlights to avoid cursor issues
+      editor.chain()
+        .selectAll()
+        .unsetMark('commentHighlight')
+        .unsetMark('suggestionHighlight')
+        .setTextSelection(editor.state.doc.content.size)
+        .run();
+      return;
+    }
     
-    // Apply comment highlights
+    // When inactive, apply highlights
+    const ranges = [];
+    
     elementComments.forEach(comment => {
       if (comment.highlight) {
-        const { startOffset, endOffset } = comment.highlight;
-        editor.commands.setTextSelection({ from: startOffset + 1, to: endOffset + 1 });
-        editor.commands.setMark('commentHighlight', { commentId: comment.id });
+        ranges.push({
+          from: comment.highlight.startOffset,
+          to: comment.highlight.endOffset,
+          mark: 'commentHighlight',
+          attrs: { commentId: comment.id }
+        });
       }
     });
     
-    // Apply suggestion highlights
     elementSuggestions.forEach(suggestion => {
-      editor.commands.setTextSelection({ from: suggestion.startOffset + 1, to: suggestion.endOffset + 1 });
-      editor.commands.setMark('suggestionHighlight', { suggestionId: suggestion.id });
+      ranges.push({
+        from: suggestion.startOffset,
+        to: suggestion.endOffset,
+        mark: 'suggestionHighlight',
+        attrs: { suggestionId: suggestion.id }
+      });
     });
     
-    // Reset selection
-    editor.commands.setTextSelection(editor.state.selection.to);
-  }, [editor, elementComments, elementSuggestions]);
+    if (ranges.length > 0) {
+      // Clear existing highlights first
+      editor.chain()
+        .selectAll()
+        .unsetMark('commentHighlight')
+        .unsetMark('suggestionHighlight')
+        .run();
+      
+      // Apply new highlights
+      ranges.forEach(range => {
+        if (range.from >= 0 && range.to <= (element.content?.length || 0)) {
+          editor.chain()
+            .setTextSelection({ from: range.from + 1, to: range.to + 1 })
+            .setMark(range.mark, range.attrs)
+            .run();
+        }
+      });
+      
+      // Clear selection
+      editor.commands.blur();
+    }
+  }, [editor, isActive, elementComments, elementSuggestions, element.content]);
 
   // Focus when becoming active
   useEffect(() => {
@@ -2748,7 +2782,6 @@ const getElementStyle = (type) => {
   }
 };
 
-const getPlaceholder = (type) => ({ scene: 'INT./EXT. LIEU - JOUR/NUIT', action: "Description de l'action...", character: 'NOM DU PERSONNAGE', dialogue: 'Réplique du personnage...', parenthetical: '(indication de jeu)', transition: 'CUT TO:' }[type] || '');
 const getNextType = (t) => ({ scene: 'action', action: 'action', character: 'dialogue', dialogue: 'character', parenthetical: 'dialogue', transition: 'scene' }[t] || 'action');
 
 // ============ REMOTE CURSOR ============
