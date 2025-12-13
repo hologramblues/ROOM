@@ -2542,39 +2542,84 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
               return;
             }
             
-            // Calculate click position (character offset) for cursor placement
-            let clickOffset = null;
-            try {
-              // Get caret position from click coordinates
-              let clickRange = null;
-              if (document.caretRangeFromPoint) {
-                clickRange = document.caretRangeFromPoint(e.clientX, e.clientY);
-              } else if (document.caretPositionFromPoint) {
-                // Firefox
-                const caretPos = document.caretPositionFromPoint(e.clientX, e.clientY);
-                if (caretPos) {
-                  clickRange = document.createRange();
-                  clickRange.setStart(caretPos.offsetNode, caretPos.offset);
-                  clickRange.setEnd(caretPos.offsetNode, caretPos.offset);
-                }
-              }
-              
-              if (clickRange) {
-                // Calculate total offset from start of element
-                const preCaretRange = document.createRange();
-                preCaretRange.selectNodeContents(e.currentTarget);
-                preCaretRange.setEnd(clickRange.startContainer, clickRange.startOffset);
-                clickOffset = preCaretRange.toString().length;
-              }
-            } catch (err) {
-              // Fallback: cursor at end
-              clickOffset = null;
-            }
-            
-            // Normal click - activate for editing with cursor offset
-            onFocus(index, clickOffset);
+            // Store mousedown position to detect drag vs click
+            displayRef.current._mouseDownX = e.clientX;
+            displayRef.current._mouseDownY = e.clientY;
           }}
           onMouseUp={(e) => {
+            const selection = window.getSelection();
+            const hasSelection = selection && !selection.isCollapsed && selection.toString().trim();
+            
+            // Check if this was a drag selection (mouse moved significantly)
+            const dx = Math.abs(e.clientX - (displayRef.current?._mouseDownX || 0));
+            const dy = Math.abs(e.clientY - (displayRef.current?._mouseDownY || 0));
+            const wasDrag = dx > 5 || dy > 5;
+            
+            if (hasSelection) {
+              // User selected text - show selection menu, don't activate element
+              const selectedText = selection.toString();
+              const range = selection.getRangeAt(0);
+              const preSelectionRange = range.cloneRange();
+              preSelectionRange.selectNodeContents(e.currentTarget);
+              preSelectionRange.setEnd(range.startContainer, range.startOffset);
+              const startOffset = preSelectionRange.toString().length;
+              const endOffset = startOffset + selectedText.length;
+              
+              const rect = e.currentTarget.getBoundingClientRect();
+              if (onTextSelect) {
+                onTextSelect({
+                  elementId: element.id,
+                  elementIndex: index,
+                  text: selectedText,
+                  startOffset,
+                  endOffset,
+                  rect
+                });
+              }
+            } else if (!wasDrag) {
+              // Simple click - activate for editing with cursor at click position
+              let clickOffset = null;
+              try {
+                let clickRange = null;
+                if (document.caretRangeFromPoint) {
+                  clickRange = document.caretRangeFromPoint(e.clientX, e.clientY);
+                } else if (document.caretPositionFromPoint) {
+                  const caretPos = document.caretPositionFromPoint(e.clientX, e.clientY);
+                  if (caretPos) {
+                    clickRange = document.createRange();
+                    clickRange.setStart(caretPos.offsetNode, caretPos.offset);
+                    clickRange.setEnd(caretPos.offsetNode, caretPos.offset);
+                  }
+                }
+                
+                if (clickRange) {
+                  const preCaretRange = document.createRange();
+                  preCaretRange.selectNodeContents(e.currentTarget);
+                  preCaretRange.setEnd(clickRange.startContainer, clickRange.startOffset);
+                  clickOffset = preCaretRange.toString().length;
+                }
+              } catch (err) {
+                clickOffset = null;
+              }
+              
+              onFocus(index, clickOffset);
+            }
+          }}
+        >
+          {hasHighlights ? highlightedContent : (element.content || '\u200B')}
+        </div>
+      )}
+      
+      {/* EDIT DIV - Plain text editing, visible when active */}
+      {isActive && (
+        <div
+          ref={editRef}
+          contentEditable={canEdit && !isLocked}
+          suppressContentEditableWarning={true}
+          onInput={handleInput}
+          onKeyDown={handleKey}
+          onMouseUp={(e) => {
+            // Handle text selection for inline comments
             const selection = window.getSelection();
             if (selection && !selection.isCollapsed && onTextSelect) {
               const selectedText = selection.toString();
@@ -2598,19 +2643,6 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
               }
             }
           }}
-        >
-          {hasHighlights ? highlightedContent : (element.content || '\u200B')}
-        </div>
-      )}
-      
-      {/* EDIT DIV - Plain text editing, visible when active */}
-      {isActive && (
-        <div
-          ref={editRef}
-          contentEditable={canEdit && !isLocked}
-          suppressContentEditableWarning={true}
-          onInput={handleInput}
-          onKeyDown={handleKey}
           onBlur={() => {
             // Could deactivate here if needed
           }}
