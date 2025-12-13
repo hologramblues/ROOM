@@ -151,6 +151,7 @@ const TipTapSceneLine = React.memo(({
   const [autoType, setAutoType] = useState(null);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
   const editorContainerRef = useRef(null);
+  const prevHighlightsRef = useRef({ comments: [], suggestions: [] });
   
   // Get highlights for this element
   const elementComments = useMemo(() => 
@@ -283,22 +284,31 @@ const TipTapSceneLine = React.memo(({
     }
   }, [editor, element.content]);
 
-  // Apply highlights only when element becomes INACTIVE
+  // Apply highlights - only when they CHANGE, not on every content update
   useEffect(() => {
     if (!editor) return;
     
-    if (isActive) {
-      // When active, remove all highlights to avoid cursor issues
-      editor.chain()
-        .selectAll()
-        .unsetMark('commentHighlight')
-        .unsetMark('suggestionHighlight')
-        .setTextSelection(editor.state.doc.content.size)
-        .run();
-      return;
+    // Check if highlights actually changed
+    const currentCommentIds = elementComments.map(c => c.id).join(',');
+    const currentSuggestionIds = elementSuggestions.map(s => s.id).join(',');
+    const prevCommentIds = prevHighlightsRef.current.comments.join(',');
+    const prevSuggestionIds = prevHighlightsRef.current.suggestions.join(',');
+    
+    if (currentCommentIds === prevCommentIds && currentSuggestionIds === prevSuggestionIds) {
+      return; // No change in highlights
     }
     
-    // When inactive, apply highlights
+    // Update ref
+    prevHighlightsRef.current = {
+      comments: elementComments.map(c => c.id),
+      suggestions: elementSuggestions.map(s => s.id)
+    };
+    
+    // Save cursor position
+    const { from: cursorFrom, to: cursorTo } = editor.state.selection;
+    const hadFocus = editor.isFocused;
+    
+    // Build ranges for highlights
     const ranges = [];
     
     elementComments.forEach(comment => {
@@ -321,28 +331,37 @@ const TipTapSceneLine = React.memo(({
       });
     });
     
-    if (ranges.length > 0) {
-      // Clear existing highlights first
+    // Clear all existing highlights
+    const contentLength = editor.state.doc.content.size;
+    if (contentLength > 2) {
       editor.chain()
-        .selectAll()
+        .setTextSelection({ from: 1, to: contentLength - 1 })
         .unsetMark('commentHighlight')
         .unsetMark('suggestionHighlight')
         .run();
-      
-      // Apply new highlights
-      ranges.forEach(range => {
-        if (range.from >= 0 && range.to <= (element.content?.length || 0)) {
-          editor.chain()
-            .setTextSelection({ from: range.from + 1, to: range.to + 1 })
-            .setMark(range.mark, range.attrs)
-            .run();
-        }
-      });
-      
-      // Clear selection
+    }
+    
+    // Apply new highlights
+    ranges.forEach(range => {
+      const docLength = editor.state.doc.content.size - 2; // -2 for paragraph boundaries
+      if (range.from >= 0 && range.to <= docLength) {
+        editor.chain()
+          .setTextSelection({ from: range.from + 1, to: range.to + 1 })
+          .setMark(range.mark, range.attrs)
+          .run();
+      }
+    });
+    
+    // Restore cursor position
+    if (hadFocus) {
+      editor.chain()
+        .setTextSelection({ from: cursorFrom, to: cursorTo })
+        .focus()
+        .run();
+    } else {
       editor.commands.blur();
     }
-  }, [editor, isActive, elementComments, elementSuggestions, element.content]);
+  }, [editor, elementComments, elementSuggestions]);
 
   // Focus when becoming active
   useEffect(() => {
