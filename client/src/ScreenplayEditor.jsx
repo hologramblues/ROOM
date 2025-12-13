@@ -662,7 +662,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment }) => {
+const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
@@ -1336,95 +1336,119 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   {/* Suggestions for this element */}
                   {(filter === 'all' || filter === 'suggestions') && suggestions && suggestions
                     .filter(s => s.elementIndex === idx && s.status === 'pending')
-                    .map(s => (
-                      <div 
-                        key={s.id}
-                        data-suggestion-id={s.id}
-                        style={{
-                          background: darkMode ? '#1f2937' : 'white',
-                          border: '2px solid #10b981',
-                          borderRadius: 8,
-                          padding: 12,
-                          marginBottom: 6,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                          <div style={{ 
-                            width: 28, 
-                            height: 28, 
-                            borderRadius: '50%', 
-                            background: s.userColor || '#10b981', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            color: 'white', 
-                            fontWeight: 'bold', 
-                            fontSize: 11 
-                          }}>
-                            {s.userName?.charAt(0).toUpperCase()}
+                    .map(s => {
+                      const isSelected = selectedSuggestionId === s.id;
+                      const timeAgo = s.createdAt ? new Date(s.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '';
+                      
+                      return (
+                        <div 
+                          key={s.id}
+                          data-suggestion-id={s.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectSuggestion && onSelectSuggestion(isSelected ? null : s.id);
+                          }}
+                          style={{
+                            background: darkMode ? '#1f2937' : '#f0fdf4',
+                            borderRadius: 8,
+                            padding: isSelected ? 12 : 10,
+                            marginBottom: 6,
+                            boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.15)' : '0 1px 3px rgba(0,0,0,0.08)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            borderLeft: '3px solid #10b981'
+                          }}
+                        >
+                          {/* Header - always visible */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ 
+                              width: 24, 
+                              height: 24, 
+                              borderRadius: '50%', 
+                              background: s.userColor || '#10b981', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              color: 'white', 
+                              fontWeight: 'bold', 
+                              fontSize: 10,
+                              flexShrink: 0
+                            }}>
+                              {s.userName?.charAt(0).toUpperCase()}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 12 }}>{s.userName}</span>
+                                <span style={{ color: '#6b7280', fontSize: 11 }}>{timeAgo}</span>
+                              </div>
+                              {/* Compact view - one line description */}
+                              {!isSelected && (
+                                <div style={{ fontSize: 12, color: darkMode ? '#9ca3af' : '#4b5563', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  <strong>Remplacer :</strong> <span style={{ fontStyle: 'italic' }}>"{s.originalText.substring(0, 20)}{s.originalText.length > 20 ? '...' : ''}"</span> par <span style={{ fontStyle: 'italic' }}>"{s.suggestedText.substring(0, 20)}{s.suggestedText.length > 20 ? '...' : ''}"</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 13 }}>{s.userName}</span>
-                            <span style={{ marginLeft: 8, color: '#10b981', fontSize: 11, fontWeight: 500 }}>✏️ Suggestion</span>
-                          </div>
+                          
+                          {/* Expanded view */}
+                          {isSelected && (
+                            <>
+                              <div style={{ fontSize: 13, margin: '12px 0' }}>
+                                <div style={{ color: '#6b7280', fontSize: 11, marginBottom: 4, fontWeight: 500 }}>Remplacer :</div>
+                                <div style={{ 
+                                  textDecoration: 'line-through', 
+                                  color: '#dc2626',
+                                  marginBottom: 6,
+                                  fontSize: 13
+                                }}>
+                                  "{s.originalText}"
+                                </div>
+                                <div style={{ color: '#6b7280', fontSize: 11, marginBottom: 4, fontWeight: 500 }}>Par :</div>
+                                <div style={{ 
+                                  color: '#16a34a',
+                                  fontWeight: 500,
+                                  fontSize: 13
+                                }}>
+                                  "{s.suggestedText}"
+                                </div>
+                              </div>
+                              
+                              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onRejectSuggestion && onRejectSuggestion(s.id); }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    background: 'transparent',
+                                    border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                                    borderRadius: 4,
+                                    color: darkMode ? '#9ca3af' : '#6b7280',
+                                    fontSize: 12,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Rejeter
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onAcceptSuggestion && onAcceptSuggestion(s.id); }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    background: '#10b981',
+                                    border: 'none',
+                                    borderRadius: 4,
+                                    color: 'white',
+                                    fontSize: 12,
+                                    cursor: 'pointer',
+                                    fontWeight: 500
+                                  }}
+                                >
+                                  ✓ Accepter
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
-                        
-                        <div style={{ fontSize: 13, marginBottom: 10 }}>
-                          <div style={{ 
-                            textDecoration: 'line-through', 
-                            color: '#ef4444', 
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            padding: '4px 8px',
-                            borderRadius: 4,
-                            marginBottom: 4
-                          }}>
-                            {s.originalText}
-                          </div>
-                          <div style={{ 
-                            color: '#16a34a', 
-                            background: 'rgba(34, 197, 94, 0.1)',
-                            padding: '4px 8px',
-                            borderRadius: 4,
-                            fontWeight: 500
-                          }}>
-                            {s.suggestedText}
-                          </div>
-                        </div>
-                        
-                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                          <button
-                            onClick={() => onRejectSuggestion && onRejectSuggestion(s.id)}
-                            style={{
-                              padding: '6px 12px',
-                              background: 'transparent',
-                              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
-                              borderRadius: 4,
-                              color: darkMode ? '#9ca3af' : '#6b7280',
-                              fontSize: 12,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Rejeter
-                          </button>
-                          <button
-                            onClick={() => onAcceptSuggestion && onAcceptSuggestion(s.id)}
-                            style={{
-                              padding: '6px 12px',
-                              background: '#10b981',
-                              border: 'none',
-                              borderRadius: 4,
-                              color: 'white',
-                              fontSize: 12,
-                              cursor: 'pointer',
-                              fontWeight: 500
-                            }}
-                          >
-                            ✓ Accepter
-                          </button>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   }
                 </div>
               );
@@ -2449,6 +2473,7 @@ export default function ScreenplayEditor() {
   const [showComments, setShowComments] = useState(false);
   const [selectedCommentIndex, setSelectedCommentIndex] = useState(null); // Index of element whose comment was clicked
   const [selectedCommentId, setSelectedCommentId] = useState(null); // ID of selected comment (for expanding)
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState(null); // ID of selected suggestion (for expanding)
   const [showImportExport, setShowImportExport] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -2486,7 +2511,7 @@ export default function ScreenplayEditor() {
   const [sessionWordCount, setSessionWordCount] = useState(0);
   const [sessionStartWords, setSessionStartWords] = useState(0);
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
-  const [outlineFilter, setOutlineFilter] = useState({ status: '', character: '' });
+  const [outlineFilter, setOutlineFilter] = useState({ status: '', assignee: '' });
   const [showBeatSheet, setShowBeatSheet] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [lastModifiedBy, setLastModifiedBy] = useState(null); // { userName, timestamp }
@@ -3029,11 +3054,14 @@ export default function ScreenplayEditor() {
     return outline.filter(scene => {
       // Filter by status
       if (outlineFilter.status && sceneStatus[scene.id] !== outlineFilter.status) return false;
-      // Filter by character
-      if (outlineFilter.character && !scene.characters.includes(outlineFilter.character)) return false;
+      // Filter by assignee
+      if (outlineFilter.assignee) {
+        const assignment = sceneAssignments[scene.id];
+        if (!assignment || assignment.userName !== outlineFilter.assignee) return false;
+      }
       return true;
     });
-  }, [outline, outlineFilter, sceneStatus]);
+  }, [outline, outlineFilter, sceneStatus, sceneAssignments]);
 
   // Find current scene based on activeIndex
   const currentSceneNumber = useMemo(() => {
@@ -3406,28 +3434,19 @@ export default function ScreenplayEditor() {
       }
       if (seg.type === 'suggestion') {
         return (
-          <span key={idx} data-suggestion-id={seg.suggestionId}>
+          <span key={idx} data-suggestion-id={seg.suggestionId} style={{ cursor: 'pointer' }}>
             <span
               style={{
-                background: 'rgba(239, 68, 68, 0.2)',
                 textDecoration: 'line-through',
-                color: '#dc2626',
-                borderRadius: 2,
-                padding: '0 1px'
+                color: '#dc2626'
               }}
-              title="Texte à supprimer"
             >
               {seg.originalContent}
             </span>
             <span
               style={{
-                background: 'rgba(34, 197, 94, 0.3)',
-                color: '#16a34a',
-                borderRadius: 2,
-                padding: '0 2px',
-                fontWeight: 500
+                color: '#16a34a'
               }}
-              title="Texte suggéré"
             >
               {seg.suggestedContent}
             </span>
@@ -4230,8 +4249,8 @@ export default function ScreenplayEditor() {
               <option value="urgent">Urgent</option>
             </select>
             <select 
-              value={outlineFilter.character} 
-              onChange={e => setOutlineFilter(f => ({ ...f, character: e.target.value }))}
+              value={outlineFilter.assignee} 
+              onChange={e => setOutlineFilter(f => ({ ...f, assignee: e.target.value }))}
               style={{ 
                 flex: 1,
                 minWidth: 0,
@@ -4251,13 +4270,13 @@ export default function ScreenplayEditor() {
                 backgroundPosition: 'right 8px center'
               }}
             >
-              <option value="">Personnage</option>
-              {[...new Set(elements.filter(e => e.type === 'character').map(e => e.content.toUpperCase()))].sort().map(c => (
-                <option key={c} value={c}>{c}</option>
+              <option value="">Assigné à</option>
+              {[...new Set(Object.values(sceneAssignments).map(a => a.userName))].sort().map(name => (
+                <option key={name} value={name}>{name}</option>
               ))}
             </select>
-            {(outlineFilter.status || outlineFilter.character) && (
-              <button onClick={() => setOutlineFilter({ status: '', character: '' })} style={{ padding: '6px 10px', fontSize: 11, background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+            {(outlineFilter.status || outlineFilter.assignee) && (
+              <button onClick={() => setOutlineFilter({ status: '', assignee: '' })} style={{ padding: '6px 10px', fontSize: 11, background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', flexShrink: 0 }}>✕</button>
             )}
           </div>
           
@@ -4734,6 +4753,7 @@ export default function ScreenplayEditor() {
                       onHighlightClick={(commentId) => {
                         setShowComments(true);
                         setSelectedCommentId(commentId);
+                        setSelectedSuggestionId(null);
                         setTimeout(() => {
                           const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
                           if (commentEl) commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -4741,6 +4761,8 @@ export default function ScreenplayEditor() {
                       }}
                       onSuggestionClick={(suggestionId) => {
                         setShowComments(true);
+                        setSelectedSuggestionId(suggestionId);
+                        setSelectedCommentId(null);
                         setTimeout(() => {
                           const suggestionEl = document.querySelector(`[data-suggestion-id="${suggestionId}"]`);
                           if (suggestionEl) suggestionEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -4764,13 +4786,13 @@ export default function ScreenplayEditor() {
           activeIndex={activeIndex}
           selectedCommentIndex={selectedCommentIndex}
           selectedCommentId={selectedCommentId}
-          onSelectComment={setSelectedCommentId}
+          onSelectComment={(id) => { setSelectedCommentId(id); if (id) setSelectedSuggestionId(null); }}
           elementPositions={elementPositions}
           scrollTop={documentScrollTop}
           token={token} 
           docId={docId} 
           canComment={canComment}
-          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setSelectedCommentId(null); setPendingInlineComment(null); setPendingSuggestion(null); }}
+          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setSelectedCommentId(null); setSelectedSuggestionId(null); setPendingInlineComment(null); setPendingSuggestion(null); }}
           darkMode={darkMode}
           onNavigateToElement={(idx) => {
             setActiveIndex(idx);
@@ -4865,6 +4887,8 @@ export default function ScreenplayEditor() {
               socketRef.current.emit('suggestion-reject', { suggestionId });
             }
           }}
+          selectedSuggestionId={selectedSuggestionId}
+          onSelectSuggestion={(id) => { setSelectedSuggestionId(id); if (id) setSelectedCommentId(null); }}
         />
       )}
       
