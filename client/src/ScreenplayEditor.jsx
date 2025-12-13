@@ -2365,50 +2365,29 @@ const RemoteCursor = ({ user }) => (
 
 // ============ SCENE LINE ============
 const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlightedContent, onTextSelect, onHighlightClick, onSuggestionClick }) => {
-  const textareaRef = useRef(null);
+  const editRef = useRef(null);
+  const displayRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
   const [filtered, setFiltered] = useState([]);
-  const [autoType, setAutoType] = useState(null); // 'character' or 'location'
+  const [autoType, setAutoType] = useState(null);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
-  
-  // Ref to track if we should prevent focus (when clicking highlight)
-  const preventFocusRef = useRef(false);
 
-  // Focus and set content when becoming active
+  // Focus edit div when becoming active
   useEffect(() => { 
-    if (isActive && textareaRef.current && !preventFocusRef.current) {
-      // Set the content via DOM since React renders simplified content when active
-      textareaRef.current.innerText = element.content || '';
-      textareaRef.current.focus();
+    if (isActive && editRef.current) {
+      editRef.current.focus();
       // Place cursor at end
       const range = document.createRange();
       const sel = window.getSelection();
-      if (textareaRef.current.childNodes.length > 0) {
-        range.selectNodeContents(textareaRef.current);
+      if (editRef.current.childNodes.length > 0) {
+        range.selectNodeContents(editRef.current);
         range.collapse(false);
         sel.removeAllRanges();
         sel.addRange(range);
       }
     }
-    preventFocusRef.current = false;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive]); // Only run when isActive changes, not on content changes
-  
-  // Auto-resize
-  useEffect(() => { 
-    const adjustHeight = () => {
-      if (textareaRef.current) { 
-        textareaRef.current.style.height = 'auto'; 
-        textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'; 
-      }
-    };
-    adjustHeight();
-    if (isActive) {
-      const timer = setTimeout(adjustHeight, 10);
-      return () => clearTimeout(timer);
-    }
-  }, [element.content, isActive]);
+  }, [isActive]);
   
   // Character autocomplete
   useEffect(() => {
@@ -2445,36 +2424,40 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     onKeyDown(e, index);
   };
   
-  // Handle input - just update the content, no cursor management needed
   const handleInput = (e) => {
     if (!canEdit) return;
     const text = e.currentTarget.innerText;
     onUpdate(index, { ...element, content: text });
   };
   
-  // Check if content has highlights
   const hasHighlights = highlightedContent && typeof highlightedContent !== 'string' && Array.isArray(highlightedContent);
+
+  const baseStyle = {
+    ...getElementStyle(element.type), 
+    cursor: canEdit ? 'text' : 'default', 
+    opacity: canEdit ? 1 : 0.7, 
+    background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+    whiteSpace: 'pre-wrap',
+    minHeight: '1.5em',
+    outline: 'none'
+  };
 
   return (
     <div style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
       {usersOnLine.map(u => <RemoteCursor key={u.id} user={u} />)}
       
-      {/* Lock indicator for scene heading */}
       {element.type === 'scene' && isLocked && (
         <span style={{ position: 'absolute', left: showSceneNumbers ? -65 : -30, top: 4, fontSize: 14, color: '#f59e0b' }} title="Scène verrouillée">🔒</span>
       )}
       
-      {/* Scene number (left side) */}
       {element.type === 'scene' && showSceneNumbers && sceneNumber && (
         <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
       )}
       
-      {/* Scene number (right side) */}
       {element.type === 'scene' && showSceneNumbers && sceneNumber && (
         <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
       )}
       
-      {/* Note indicator */}
       {note && (
         <div 
           onClick={() => onNoteClick(element.id)} 
@@ -2483,97 +2466,89 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         >📝</div>
       )}
       
-      {/* Type label */}
       {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       
-      {/* Editable content with highlights always visible */}
-      <div
-        ref={textareaRef}
-        contentEditable={canEdit && !isLocked}
-        suppressContentEditableWarning={true}
-        onInput={handleInput}
-        onFocus={() => {
-          if (!preventFocusRef.current) {
+      {/* DISPLAY DIV - Shows highlights, visible when NOT active */}
+      {!isActive && (
+        <div
+          ref={displayRef}
+          style={baseStyle}
+          onMouseDown={(e) => {
+            const target = e.target;
+            
+            // Check for comment highlight click
+            if (target.dataset && target.dataset.commentId) {
+              e.preventDefault();
+              e.stopPropagation();
+              if (typeof onHighlightClick === 'function') {
+                onHighlightClick(target.dataset.commentId);
+              }
+              return;
+            }
+            
+            // Check for suggestion highlight click
+            const suggestionSpan = target.closest('[data-suggestion-id]');
+            if (suggestionSpan && suggestionSpan.dataset.suggestionId) {
+              e.preventDefault();
+              e.stopPropagation();
+              if (typeof onSuggestionClick === 'function') {
+                onSuggestionClick(suggestionSpan.dataset.suggestionId);
+              }
+              return;
+            }
+            
+            // Normal click - activate for editing
             onFocus(index);
-          }
-        }}
-        onKeyDown={handleKey}
-        onMouseDown={(e) => {
-          // Check if clicked on a highlight span BEFORE focus happens
-          const target = e.target;
-          
-          // Check for comment highlight
-          if (target.dataset && target.dataset.commentId) {
-            e.preventDefault(); // Prevent focus
-            preventFocusRef.current = true;
-            if (typeof onHighlightClick === 'function') {
-              onHighlightClick(target.dataset.commentId);
+          }}
+          onMouseUp={(e) => {
+            const selection = window.getSelection();
+            if (selection && !selection.isCollapsed && onTextSelect) {
+              const selectedText = selection.toString();
+              if (selectedText.trim()) {
+                const range = selection.getRangeAt(0);
+                const preSelectionRange = range.cloneRange();
+                preSelectionRange.selectNodeContents(e.currentTarget);
+                preSelectionRange.setEnd(range.startContainer, range.startOffset);
+                const startOffset = preSelectionRange.toString().length;
+                const endOffset = startOffset + selectedText.length;
+                
+                const rect = e.currentTarget.getBoundingClientRect();
+                onTextSelect({
+                  elementId: element.id,
+                  elementIndex: index,
+                  text: selectedText,
+                  startOffset,
+                  endOffset,
+                  rect
+                });
+              }
             }
-            return;
-          }
-          
-          // Check for suggestion highlight (could be nested spans)
-          const suggestionSpan = target.closest('[data-suggestion-id]');
-          if (suggestionSpan && suggestionSpan.dataset.suggestionId) {
-            e.preventDefault(); // Prevent focus
-            preventFocusRef.current = true;
-            if (typeof onSuggestionClick === 'function') {
-              onSuggestionClick(suggestionSpan.dataset.suggestionId);
-            }
-            return;
-          }
-          
-          // Normal click - allow focus
-          preventFocusRef.current = false;
-        }}
-        onMouseUp={(e) => {
-          // Handle text selection for inline comments
-          const selection = window.getSelection();
-          if (selection && !selection.isCollapsed && onTextSelect) {
-            const selectedText = selection.toString();
-            if (selectedText.trim()) {
-              // Calculate offsets relative to the element content
-              const range = selection.getRangeAt(0);
-              const preSelectionRange = range.cloneRange();
-              preSelectionRange.selectNodeContents(e.currentTarget);
-              preSelectionRange.setEnd(range.startContainer, range.startOffset);
-              const startOffset = preSelectionRange.toString().length;
-              const endOffset = startOffset + selectedText.length;
-              
-              const rect = e.currentTarget.getBoundingClientRect();
-              onTextSelect({
-                elementId: element.id,
-                elementIndex: index,
-                text: selectedText,
-                startOffset,
-                endOffset,
-                rect
-              });
-            }
-          }
-        }}
-        onBlur={() => {
-          // Nothing needed here anymore
-        }}
-        style={{ 
-          ...getElementStyle(element.type), 
-          cursor: canEdit ? 'text' : 'default', 
-          opacity: canEdit ? 1 : 0.7, 
-          background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
-          whiteSpace: 'pre-wrap',
-          minHeight: '1.5em',
-          outline: 'none'
-        }}
-        data-placeholder={isActive ? getPlaceholder(element.type) : ''}
-      >
-        {/* When inactive: show highlights or plain content. When active: empty - content set via ref */}
-        {!isActive ? (hasHighlights ? highlightedContent : (element.content || '\u200B')) : null}
-      </div>
+          }}
+        >
+          {hasHighlights ? highlightedContent : (element.content || '\u200B')}
+        </div>
+      )}
       
-      {/* Character autocomplete */}
+      {/* EDIT DIV - Plain text editing, visible when active */}
+      {isActive && (
+        <div
+          ref={editRef}
+          contentEditable={canEdit && !isLocked}
+          suppressContentEditableWarning={true}
+          onInput={handleInput}
+          onKeyDown={handleKey}
+          onBlur={() => {
+            // Could deactivate here if needed
+          }}
+          style={baseStyle}
+          data-placeholder={getPlaceholder(element.type)}
+        >
+          {element.content || '\u200B'}
+        </div>
+      )}
+      
       {autoType === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
       
-      {/* Location autocomplete */}
       {autoType === 'location' && showAuto && <div style={{ position: 'absolute', top: '100%', left: 0, background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 250 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectLocation(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
     </div>
   );
