@@ -4170,7 +4170,24 @@ export default function ScreenplayEditor() {
       };
     };
     
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (el.type === 'parenthetical' && el.content.trim()) { let c = el.content.trim(); if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } insertElement(index, getNextType(el.type)); }
+    // Enter key handling - allow line breaks in middle, create new element at end
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const cursor = getCursorPosition();
+      
+      // If at end of text (or empty), create new element
+      if (cursor.atEnd || el.content.trim() === '') {
+        e.preventDefault();
+        if (el.type === 'parenthetical' && el.content.trim()) {
+          let c = el.content.trim();
+          if (!c.startsWith('(')) c = '(' + c;
+          if (!c.endsWith(')')) c = c + ')';
+          updateElement(index, { ...el, content: c });
+        }
+        insertElement(index, getNextType(el.type));
+      }
+      // Otherwise, allow default behavior (line break in contenteditable)
+    }
+    
     if (e.key === 'Tab') {
       e.preventDefault();
       const prev = index > 0 ? elements[index - 1] : null;
@@ -5250,19 +5267,37 @@ export default function ScreenplayEditor() {
                         setShowComments(true);
                         setSelectedCommentId(commentId);
                         setSelectedSuggestionId(null);
-                        setTimeout(() => {
-                          const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
-                          if (commentEl) commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }, 100);
+                        // Find the element containing this comment and scroll to it
+                        const comment = comments.find(c => c.id === commentId);
+                        if (comment) {
+                          const elIdx = comment.elementIndex;
+                          if (elIdx !== undefined) {
+                            setActiveIndex(elIdx);
+                            setTimeout(() => {
+                              // Scroll the document to the element - this syncs the comment panel
+                              const el = document.querySelector(`[data-element-index="${elIdx}"]`);
+                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 50);
+                          }
+                        }
                       }}
                       onSuggestionClick={(suggestionId) => {
                         setShowComments(true);
                         setSelectedSuggestionId(suggestionId);
                         setSelectedCommentId(null);
-                        setTimeout(() => {
-                          const suggestionEl = document.querySelector(`[data-suggestion-id="${suggestionId}"]`);
-                          if (suggestionEl) suggestionEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }, 100);
+                        // Find the element containing this suggestion and scroll to it
+                        const suggestion = suggestions.find(s => s.id === suggestionId);
+                        if (suggestion) {
+                          const elIdx = suggestion.elementIndex;
+                          if (elIdx !== undefined) {
+                            setActiveIndex(elIdx);
+                            setTimeout(() => {
+                              // Scroll the document to the element - this syncs the comment panel
+                              const el = document.querySelector(`[data-element-index="${elIdx}"]`);
+                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 50);
+                          }
+                        }
                       }}
                     />
                   </div>
