@@ -4980,8 +4980,8 @@ export default function ScreenplayEditor() {
           )}
         </div>
         
-        {/* CENTER ZONE: Title + Collaborators + User */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, justifyContent: 'center', minWidth: 0 }}>
+        {/* CENTER ZONE: Title only */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center', minWidth: 0 }}>
           {docId ? (
             <>
               <input 
@@ -4995,7 +4995,7 @@ export default function ScreenplayEditor() {
                   fontSize: 14, 
                   fontWeight: 600, 
                   outline: 'none', 
-                  maxWidth: 200,
+                  maxWidth: 250,
                   textOverflow: 'ellipsis',
                   textAlign: 'center'
                 }} 
@@ -5003,64 +5003,52 @@ export default function ScreenplayEditor() {
               {lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
               {!canEdit && <span style={{ fontSize: 10, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
               {(loading || importing) && <span style={{ fontSize: 11, color: '#60a5fa' }}>...</span>}
-              
-              {/* Collaborators + User */}
-              <div style={{ display: 'flex', alignItems: 'center', marginLeft: 8 }}>
-                {currentUser ? (
-                  <>
-                    {/* Current user avatar with green border */}
-                    <div style={{ position: 'relative' }}>
-                      <UserAvatar user={{ name: currentUser.name, color: currentUser.color || '#3b82f6' }} isYou={true} />
-                      <button 
-                        onClick={handleLogout} 
-                        style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }} 
-                        title="Déconnexion"
-                      >×</button>
-                    </div>
-                    {/* Other online users */}
-                    {users.filter(u => u.id !== myId).slice(0, 3).map((u, i) => (
-                      <div key={u.id} style={{ marginLeft: -6 }}><UserAvatar user={u} isYou={false} /></div>
-                    ))}
-                    {users.length > 4 && <span style={{ color: '#9ca3af', fontSize: 10, marginLeft: 4 }}>+{users.length - 4}</span>}
-                  </>
-                ) : (
-                  <button onClick={() => setShowAuthModal(true)} style={{ padding: '4px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
-                )}
-                <button 
-                  onClick={copyLink} 
-                  style={{ marginLeft: 6, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
-                  title="Inviter (copier le lien)"
-                >+</button>
-                <button
-                  onClick={() => setShowChat(!showChat)}
-                  style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: 'none', background: showChat ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), color: showChat ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-                  title="Chat"
-                >
-                  💬
-                  {unreadMessages > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: 'white', fontSize: 8, fontWeight: 'bold', padding: '1px 4px', borderRadius: 8, minWidth: 14, textAlign: 'center' }}>{unreadMessages > 9 ? '9+' : unreadMessages}</span>}
-                </button>
-              </div>
             </>
           ) : (
-            <>
-              <span style={{ color: '#6b7280', fontSize: 13 }}>Writer's Room</span>
-              {!currentUser && (
-                <button onClick={() => setShowAuthModal(true)} style={{ marginLeft: 8, padding: '4px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
-              )}
-              {currentUser && (
-                <div style={{ marginLeft: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <UserAvatar user={{ name: currentUser.name, color: currentUser.color || '#3b82f6' }} isYou={true} />
-                  <button onClick={handleLogout} style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }} title="Déconnexion">×</button>
-                </div>
-              )}
-            </>
+            <span style={{ color: '#6b7280', fontSize: 13 }}>Writer's Room</span>
           )}
         </div>
         
-        {/* RIGHT ZONE: Quick toggles only */}
+        {/* RIGHT ZONE: User/Collab + Toggles */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          {/* User & Collaborators */}
+          {currentUser ? (
+            <>
+              <div style={{ position: 'relative' }}>
+                <UserAvatar user={{ name: currentUser.name, color: currentUser.color || '#3b82f6' }} isYou={true} />
+                <button 
+                  onClick={handleLogout} 
+                  style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }} 
+                  title="Déconnexion"
+                >×</button>
+              </div>
+              {docId && users.filter(u => u.id !== myId).slice(0, 3).map((u) => (
+                <div key={u.id} style={{ marginLeft: -6 }}><UserAvatar user={u} isYou={false} /></div>
+              ))}
+              {docId && users.length > 4 && <span style={{ color: '#9ca3af', fontSize: 10, marginLeft: 2 }}>+{users.length - 4}</span>}
+            </>
+          ) : (
+            <button onClick={() => setShowAuthModal(true)} style={{ padding: '4px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
+          )}
+          
           {docId && (
             <>
+              <button 
+                onClick={copyLink} 
+                style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                title="Inviter (copier le lien)"
+              >+</button>
+              <button
+                onClick={() => setShowChat(!showChat)}
+                style={{ marginLeft: 2, width: 24, height: 24, borderRadius: '50%', border: 'none', background: showChat ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), color: showChat ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+                title="Chat"
+              >
+                💬
+                {unreadMessages > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: 'white', fontSize: 8, fontWeight: 'bold', padding: '1px 4px', borderRadius: 8, minWidth: 14, textAlign: 'center' }}>{unreadMessages > 9 ? '9+' : unreadMessages}</span>}
+              </button>
+              
+              <div style={{ width: 1, height: 20, background: darkMode ? '#374151' : '#d1d5db', margin: '0 6px' }} />
+              
               {/* Quick toggle buttons */}
               <button
                 onClick={() => setShowOutline(!showOutline)}
