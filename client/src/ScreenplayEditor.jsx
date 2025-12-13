@@ -281,23 +281,21 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 
   // Insert mention into reply
   const insertReplyMention = (userName) => {
-    const textarea = replyInputRef.current;
-    if (!textarea) return;
-    
-    const cursorPos = textarea.selectionStart;
-    const textBeforeCursor = replyContent.slice(0, cursorPos);
-    const textAfterCursor = replyContent.slice(cursorPos);
-    
-    const atMatch = textBeforeCursor.match(/@(\w*)$/);
-    if (atMatch) {
-      const beforeAt = textBeforeCursor.slice(0, -atMatch[0].length);
-      const newText = beforeAt + '@' + userName + ' ' + textAfterCursor;
-      onReplyChange(newText);
-    }
+    // Use the stored mention search to find where to insert
+    // This is more reliable than relying on cursor position after click
+    const atPattern = new RegExp('@' + replyMentionSearch + '$');
+    const newText = replyContent.replace(atPattern, '@' + userName + ' ');
+    onReplyChange(newText);
     
     setShowReplyMentions(false);
     setReplyMentionSearch('');
-    textarea.focus();
+    
+    // Focus back on textarea
+    setTimeout(() => {
+      if (replyInputRef.current) {
+        replyInputRef.current.focus();
+      }
+    }, 0);
   };
   
   // Close menu when clicking outside
@@ -710,24 +708,28 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
             
             {/* Mentions dropdown for reply */}
             {showReplyMentions && filteredReplyMentions.length > 0 && (
-              <div style={{
-                position: 'absolute',
-                bottom: '100%',
-                left: 0,
-                right: 0,
-                marginBottom: 4,
-                background: darkMode ? '#374151' : 'white',
-                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
-                borderRadius: 6,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                maxHeight: 120,
-                overflow: 'auto',
-                zIndex: 10
-              }}>
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.preventDefault()}
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: 0,
+                  right: 0,
+                  marginBottom: 4,
+                  background: darkMode ? '#374151' : 'white',
+                  border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                  borderRadius: 6,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  maxHeight: 120,
+                  overflow: 'auto',
+                  zIndex: 10
+                }}>
                 {filteredReplyMentions.map((user, idx) => (
                   <div
                     key={user.name}
-                    onClick={() => insertReplyMention(user.name)}
+                    onClick={(e) => { e.stopPropagation(); insertReplyMention(user.name); }}
+                    onMouseDown={(e) => e.preventDefault()}
                     style={{
                       padding: '6px 10px',
                       display: 'flex',
