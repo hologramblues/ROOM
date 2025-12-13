@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { io } from 'socket.io-client';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import { Mark, mergeAttributes } from '@tiptap/core';
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -27,6 +30,399 @@ const ELEMENT_TYPES = [
 const TYPE_TO_FDX = { scene: 'Scene Heading', action: 'Action', character: 'Character', dialogue: 'Dialogue', parenthetical: 'Parenthetical', transition: 'Transition' };
 const FDX_TO_TYPE = { 'Scene Heading': 'scene', 'Action': 'action', 'Character': 'character', 'Dialogue': 'dialogue', 'Parenthetical': 'parenthetical', 'Transition': 'transition', 'General': 'action' };
 const LINES_PER_PAGE = 55;
+
+// ============ TIPTAP CUSTOM EXTENSIONS ============
+
+// Comment Highlight Mark
+const CommentHighlight = Mark.create({
+  name: 'commentHighlight',
+  
+  addAttributes() {
+    return {
+      commentId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-comment-id'),
+        renderHTML: attributes => {
+          if (!attributes.commentId) return {};
+          return { 'data-comment-id': attributes.commentId };
+        },
+      },
+    };
+  },
+  
+  parseHTML() {
+    return [{ tag: 'span[data-comment-id]' }];
+  },
+  
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, { 
+      style: 'background-color: rgba(59, 130, 246, 0.3); border-bottom: 2px solid #3b82f6; cursor: pointer;' 
+    }), 0];
+  },
+});
+
+// Suggestion Highlight Mark
+const SuggestionHighlight = Mark.create({
+  name: 'suggestionHighlight',
+  
+  addAttributes() {
+    return {
+      suggestionId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-suggestion-id'),
+        renderHTML: attributes => {
+          if (!attributes.suggestionId) return {};
+          return { 'data-suggestion-id': attributes.suggestionId };
+        },
+      },
+    };
+  },
+  
+  parseHTML() {
+    return [{ tag: 'span[data-suggestion-id]' }];
+  },
+  
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, { 
+      style: 'background-color: rgba(16, 185, 129, 0.2); border-bottom: 2px solid #10b981; text-decoration: line-through; text-decoration-color: #ef4444; cursor: pointer;' 
+    }), 0];
+  },
+});
+
+// ============ HELPERS FOR TIPTAP ============
+const getPlaceholder = (type) => ({ 
+  scene: 'INT./EXT. LIEU - JOUR/NUIT', 
+  action: "Description de l'action...", 
+  character: 'NOM DU PERSONNAGE', 
+  dialogue: 'Réplique du personnage...', 
+  parenthetical: '(indication de jeu)', 
+  transition: 'CUT TO:' 
+}[type] || '');
+
+const getEditorStyle = (type) => {
+  const baseStyle = 'font-family: Courier Prime, monospace; font-size: 12pt; line-height: 1.5; padding: 0; margin: 0; outline: none; min-height: 1.5em; white-space: pre-wrap;';
+  
+  switch (type) {
+    case 'scene':
+      return baseStyle + ' text-transform: uppercase; font-weight: bold;';
+    case 'action':
+      return baseStyle;
+    case 'character':
+      return baseStyle + ' text-transform: uppercase; font-weight: bold; margin-left: 37%;';
+    case 'dialogue':
+      return baseStyle + ' margin-left: 17%; width: 60%;';
+    case 'parenthetical':
+      return baseStyle + ' margin-left: 27%; font-style: italic;';
+    case 'transition':
+      return baseStyle + ' text-transform: uppercase; text-align: right;';
+    default:
+      return baseStyle;
+  }
+};
+
+// ============ TIPTAP SCENE LINE COMPONENT ============
+const TipTapSceneLine = React.memo(({ 
+  element, 
+  index, 
+  isActive, 
+  onUpdate, 
+  onFocus, 
+  onKeyDown, 
+  characters, 
+  locations, 
+  onSelectCharacter, 
+  onSelectLocation, 
+  remoteCursors, 
+  canEdit, 
+  isLocked, 
+  sceneNumber, 
+  showSceneNumbers, 
+  note, 
+  onNoteClick, 
+  comments,
+  suggestions,
+  onTextSelect, 
+  onHighlightClick, 
+  onSuggestionClick 
+}) => {
+  const [showAuto, setShowAuto] = useState(false);
+  const [autoIdx, setAutoIdx] = useState(0);
+  const [filtered, setFiltered] = useState([]);
+  const [autoType, setAutoType] = useState(null);
+  const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
+  const editorContainerRef = useRef(null);
+  
+  // Get highlights for this element
+  const elementComments = useMemo(() => 
+    (comments || []).filter(c => c.elementId === element.id && c.highlight),
+    [comments, element.id]
+  );
+  const elementSuggestions = useMemo(() => 
+    (suggestions || []).filter(s => s.elementId === element.id && s.status === 'pending'),
+    [suggestions, element.id]
+  );
+
+  // TipTap Editor
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        // Disable features we don't need
+        heading: false,
+        bulletList: false,
+        orderedList: false,
+        blockquote: false,
+        codeBlock: false,
+        horizontalRule: false,
+        // Keep paragraph and basic text
+        paragraph: {
+          HTMLAttributes: {
+            style: 'margin: 0; padding: 0;'
+          }
+        }
+      }),
+      CommentHighlight,
+      SuggestionHighlight,
+    ],
+    content: element.content || '',
+    editable: canEdit && !isLocked,
+    
+    onUpdate: ({ editor }) => {
+      const text = editor.getText();
+      if (text !== element.content) {
+        onUpdate(index, { ...element, content: text });
+      }
+    },
+    
+    onFocus: () => {
+      onFocus(index);
+    },
+    
+    onSelectionUpdate: ({ editor }) => {
+      // Handle text selection for comments
+      const { from, to } = editor.state.selection;
+      if (from !== to && onTextSelect) {
+        const selectedText = editor.state.doc.textBetween(from, to, '');
+        if (selectedText.trim()) {
+          const rect = editorContainerRef.current?.getBoundingClientRect();
+          onTextSelect({
+            elementId: element.id,
+            elementIndex: index,
+            text: selectedText,
+            startOffset: from - 1, // Adjust for paragraph offset
+            endOffset: to - 1,
+            rect
+          });
+        }
+      }
+    },
+    
+    editorProps: {
+      attributes: {
+        style: getEditorStyle(element.type),
+        'data-placeholder': getPlaceholder(element.type),
+      },
+      handleKeyDown: (view, event) => {
+        // Handle autocomplete navigation
+        if (showAuto && filtered.length > 0) {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            setAutoIdx(i => (i + 1) % filtered.length);
+            return true;
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setAutoIdx(i => (i - 1 + filtered.length) % filtered.length);
+            return true;
+          }
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            if (autoType === 'character') {
+              onSelectCharacter(index, filtered[autoIdx]);
+            } else if (autoType === 'location') {
+              onSelectLocation(index, filtered[autoIdx]);
+            }
+            setShowAuto(false);
+            return true;
+          }
+          if (event.key === 'Escape') {
+            setShowAuto(false);
+            return true;
+          }
+        }
+        
+        // Pass to parent handler for Enter, Tab, Backspace, etc.
+        onKeyDown(event, index);
+        
+        // Let TipTap handle the actual key if we didn't prevent it
+        return false;
+      },
+      handleClick: (view, pos, event) => {
+        // Check for highlight clicks
+        const target = event.target;
+        if (target.dataset?.commentId) {
+          onHighlightClick?.(target.dataset.commentId);
+          return true;
+        }
+        const suggestionSpan = target.closest('[data-suggestion-id]');
+        if (suggestionSpan?.dataset?.suggestionId) {
+          onSuggestionClick?.(suggestionSpan.dataset.suggestionId);
+          return true;
+        }
+        return false;
+      }
+    }
+  }, [element.type, canEdit, isLocked]);
+
+  // Sync content from parent (for remote updates)
+  useEffect(() => {
+    if (editor && !editor.isFocused) {
+      const currentContent = editor.getText();
+      if (currentContent !== element.content) {
+        editor.commands.setContent(element.content || '');
+      }
+    }
+  }, [editor, element.content]);
+
+  // Apply highlights
+  useEffect(() => {
+    if (!editor) return;
+    
+    // Remove all existing highlights first
+    editor.commands.unsetMark('commentHighlight');
+    editor.commands.unsetMark('suggestionHighlight');
+    
+    // Apply comment highlights
+    elementComments.forEach(comment => {
+      if (comment.highlight) {
+        const { startOffset, endOffset } = comment.highlight;
+        editor.commands.setTextSelection({ from: startOffset + 1, to: endOffset + 1 });
+        editor.commands.setMark('commentHighlight', { commentId: comment.id });
+      }
+    });
+    
+    // Apply suggestion highlights
+    elementSuggestions.forEach(suggestion => {
+      editor.commands.setTextSelection({ from: suggestion.startOffset + 1, to: suggestion.endOffset + 1 });
+      editor.commands.setMark('suggestionHighlight', { suggestionId: suggestion.id });
+    });
+    
+    // Reset selection
+    editor.commands.setTextSelection(editor.state.selection.to);
+  }, [editor, elementComments, elementSuggestions]);
+
+  // Focus when becoming active
+  useEffect(() => {
+    if (isActive && editor && !editor.isFocused) {
+      editor.commands.focus('end');
+    }
+  }, [isActive, editor]);
+
+  // Character/Location autocomplete
+  useEffect(() => {
+    if (!editor) return;
+    const text = editor.getText();
+    
+    if (element.type === 'character' && isActive && text.length > 0) {
+      const q = text.toUpperCase();
+      const f = characters.filter(c => c.toUpperCase().startsWith(q) && c.toUpperCase() !== q);
+      setFiltered(f);
+      setShowAuto(f.length > 0);
+      setAutoIdx(0);
+      setAutoType('character');
+    } else if (element.type === 'scene' && isActive && text.length > 4) {
+      const match = text.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*(.*)$/i);
+      if (match && match[2]?.length > 0) {
+        const q = match[2].toUpperCase();
+        const f = locations.filter(l => l.startsWith(q) && l !== q);
+        setFiltered(f);
+        setShowAuto(f.length > 0);
+        setAutoIdx(0);
+        setAutoType('location');
+      } else {
+        setShowAuto(false);
+        setFiltered([]);
+      }
+    } else {
+      setShowAuto(false);
+      setFiltered([]);
+    }
+  }, [editor, element.type, isActive, characters, locations, element.content]);
+
+  return (
+    <div style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }} ref={editorContainerRef}>
+      {usersOnLine.map(u => <RemoteCursor key={u.id} user={u} />)}
+      
+      {/* Lock indicator */}
+      {element.type === 'scene' && isLocked && (
+        <span style={{ position: 'absolute', left: showSceneNumbers ? -65 : -30, top: 4, fontSize: 14, color: '#f59e0b' }} title="Scène verrouillée">🔒</span>
+      )}
+      
+      {/* Scene numbers */}
+      {element.type === 'scene' && showSceneNumbers && sceneNumber && (
+        <>
+          <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
+          <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
+        </>
+      )}
+      
+      {/* Note indicator */}
+      {note && (
+        <div 
+          onClick={() => onNoteClick(element.id)} 
+          style={{ position: 'absolute', right: -55, top: 2, width: 20, height: 20, background: note.color || '#fbbf24', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, cursor: 'pointer', boxShadow: '1px 1px 3px rgba(0,0,0,0.2)' }}
+          title={note.content}
+        >📝</div>
+      )}
+      
+      {/* Type label */}
+      {isActive && (
+        <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>
+          {isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}
+        </span>
+      )}
+      
+      {/* TipTap Editor */}
+      <EditorContent 
+        editor={editor} 
+        style={{
+          cursor: canEdit ? 'text' : 'default',
+          opacity: canEdit ? 1 : 0.7,
+          background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+        }}
+      />
+      
+      {/* Character autocomplete */}
+      {autoType === 'character' && showAuto && (
+        <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>
+          {filtered.map((s, i) => (
+            <div 
+              key={s} 
+              onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} 
+              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
+            >
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* Location autocomplete */}
+      {autoType === 'location' && showAuto && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 250 }}>
+          {filtered.map((s, i) => (
+            <div 
+              key={s} 
+              onClick={() => { onSelectLocation(index, s); setShowAuto(false); }} 
+              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
+            >
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
 
 // ============ AUTH MODAL ============
 const AuthModal = ({ onLogin, onClose }) => {
@@ -5227,7 +5623,7 @@ export default function ScreenplayEditor() {
                 
                 {page.elements.map(({ element, index }) => (
                   <div key={element.id} data-element-index={index}>
-                    <SceneLine 
+                    <TipTapSceneLine 
                       element={element} 
                       index={index} 
                       isActive={activeIndex === index} 
@@ -5239,14 +5635,14 @@ export default function ScreenplayEditor() {
                       onSelectCharacter={handleSelectChar}
                       onSelectLocation={handleSelectLocation}
                       remoteCursors={remoteCursors} 
-                      onCursorMove={handleCursor} 
                       canEdit={canEdit && !isElementLocked(index)}
                       isLocked={isElementLocked(index)}
                       sceneNumber={sceneNumbersMap[element.id]}
                       showSceneNumbers={showSceneNumbers}
                       note={notes[element.id]}
                       onNoteClick={(id) => setShowNoteFor(id)}
-                      highlightedContent={renderTextWithHighlights(element.content, element.id)}
+                      comments={comments}
+                      suggestions={suggestions}
                       onTextSelect={(selection) => {
                         if (canComment) {
                           setTextSelection(selection);
