@@ -2884,6 +2884,15 @@ export default function ScreenplayEditor() {
   const [editingSynopsis, setEditingSynopsis] = useState(null);
   const [typewriterSound, setTypewriterSound] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  
+  // AI Rewrite states
+  const [showAIRewrite, setShowAIRewrite] = useState(false);
+  const [aiRewriteSelection, setAiRewriteSelection] = useState(null); // { elementId, elementIndex, text, startOffset, endOffset }
+  const [aiRewriteMode, setAiRewriteMode] = useState(null); // 'concis', 'develop', 'reformulate', 'tone', 'custom'
+  const [aiRewriteCustomPrompt, setAiRewriteCustomPrompt] = useState('');
+  const [aiRewriteResult, setAiRewriteResult] = useState(null);
+  const [aiRewriteLoading, setAiRewriteLoading] = useState(false);
+  const [aiRewriteTone, setAiRewriteTone] = useState('dramatique'); // for tone mode
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [unreadMessages, setUnreadMessages] = useState(0);
@@ -4287,6 +4296,90 @@ export default function ScreenplayEditor() {
     } catch (err) { console.error(err); }
   };
 
+  // AI Rewrite function
+  const handleAIRewrite = async (mode, customPrompt = '') => {
+    if (!aiRewriteSelection) return;
+    
+    setAiRewriteLoading(true);
+    setAiRewriteResult(null);
+    
+    const { text } = aiRewriteSelection;
+    
+    // Build the prompt based on mode
+    let systemPrompt = "Tu es un assistant d'écriture de scénario professionnel. Tu aides les scénaristes à améliorer leur texte. Réponds UNIQUEMENT avec le texte réécrit, sans explication ni commentaire.";
+    let userPrompt = '';
+    
+    switch (mode) {
+      case 'concis':
+        userPrompt = `Réécris ce texte de manière plus concise et directe, en gardant l'essence mais en éliminant les mots superflus :\n\n"${text}"`;
+        break;
+      case 'develop':
+        userPrompt = `Développe et enrichis ce texte avec plus de détails et de nuances, tout en gardant le style scénaristique :\n\n"${text}"`;
+        break;
+      case 'reformulate':
+        userPrompt = `Reformule ce texte différemment tout en gardant exactement le même sens. Propose une formulation alternative :\n\n"${text}"`;
+        break;
+      case 'tone':
+        userPrompt = `Réécris ce texte avec un ton plus ${aiRewriteTone} :\n\n"${text}"`;
+        break;
+      case 'custom':
+        userPrompt = `${customPrompt}\n\nTexte à modifier :\n"${text}"`;
+        break;
+      default:
+        userPrompt = `Améliore ce texte :\n\n"${text}"`;
+    }
+    
+    try {
+      const res = await fetch(SERVER_URL + '/api/ai/rewrite', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': token ? 'Bearer ' + token : ''
+        },
+        body: JSON.stringify({ 
+          systemPrompt,
+          userPrompt,
+          originalText: text
+        })
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Erreur API');
+      }
+      
+      const data = await res.json();
+      setAiRewriteResult(data.rewrittenText);
+    } catch (err) {
+      console.error('AI Rewrite error:', err);
+      setAiRewriteResult('❌ Erreur: ' + err.message);
+    } finally {
+      setAiRewriteLoading(false);
+    }
+  };
+  
+  // Apply AI rewrite to the element
+  const applyAIRewrite = () => {
+    if (!aiRewriteResult || !aiRewriteSelection) return;
+    
+    const { elementIndex, startOffset, endOffset } = aiRewriteSelection;
+    const element = elements[elementIndex];
+    if (!element) return;
+    
+    // Replace the selected portion with the AI result
+    const before = element.content.substring(0, startOffset);
+    const after = element.content.substring(endOffset);
+    const newContent = before + aiRewriteResult + after;
+    
+    updateElement(elementIndex, newContent);
+    
+    // Close the modal
+    setShowAIRewrite(false);
+    setAiRewriteSelection(null);
+    setAiRewriteResult(null);
+    setAiRewriteMode(null);
+  };
+
   const exportFDX = () => {
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<FinalDraft DocumentType="Script" Version="3">\n<Content>\n';
@@ -5583,8 +5676,21 @@ export default function ScreenplayEditor() {
             </svg>
           </button>
           
-          {/* Link button (placeholder) */}
+          {/* AI Rewrite button */}
           <button 
+            onClick={() => {
+              setAiRewriteSelection({
+                elementId: textSelection.elementId,
+                elementIndex: textSelection.elementIndex,
+                text: textSelection.text,
+                startOffset: textSelection.startOffset,
+                endOffset: textSelection.endOffset
+              });
+              setShowAIRewrite(true);
+              setAiRewriteMode(null);
+              setAiRewriteResult(null);
+              setTextSelection(null);
+            }}
             style={{
               width: 40,
               height: 40,
@@ -5594,18 +5700,326 @@ export default function ScreenplayEditor() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'not-allowed',
-              opacity: 0.4
+              cursor: 'pointer',
+              transition: 'background 0.15s ease'
             }}
-            title="Lien (bientôt)"
-            disabled
+            onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            title="Réécrire avec l'IA"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-              <polyline points="15 3 21 3 21 9" />
-              <line x1="10" y1="14" x2="21" y2="3" />
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9333ea" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
             </svg>
           </button>
+        </div>
+      )}
+
+      {/* AI Rewrite Modal */}
+      {showAIRewrite && aiRewriteSelection && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100
+        }}
+        onClick={(e) => { if (e.target === e.currentTarget) { setShowAIRewrite(false); setAiRewriteSelection(null); setAiRewriteResult(null); setAiRewriteMode(null); } }}
+        >
+          <div style={{
+            background: darkMode ? '#1f2937' : 'white',
+            borderRadius: 16,
+            padding: 24,
+            width: '100%',
+            maxWidth: 500,
+            maxHeight: '80vh',
+            overflow: 'auto',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.4)'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : '#1f2937', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: '#9333ea' }}>✨</span> Réécrire avec l'IA
+              </h3>
+              <button 
+                onClick={() => { setShowAIRewrite(false); setAiRewriteSelection(null); setAiRewriteResult(null); setAiRewriteMode(null); }}
+                style={{ background: 'none', border: 'none', fontSize: 20, color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer' }}
+              >✕</button>
+            </div>
+            
+            {/* Original text */}
+            <div style={{ 
+              background: darkMode ? '#374151' : '#f3f4f6', 
+              padding: 12, 
+              borderRadius: 8, 
+              marginBottom: 16,
+              fontSize: 13,
+              color: darkMode ? '#d1d5db' : '#4b5563',
+              fontStyle: 'italic',
+              borderLeft: '3px solid #9333ea'
+            }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#9333ea', marginBottom: 6, fontWeight: 600 }}>Texte sélectionné</div>
+              "{aiRewriteSelection.text}"
+            </div>
+            
+            {/* Mode selection - only show if no result yet */}
+            {!aiRewriteResult && !aiRewriteLoading && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 12, color: darkMode ? '#9ca3af' : '#6b7280', marginBottom: 4 }}>Que voulez-vous faire ?</div>
+                
+                <button 
+                  onClick={() => { setAiRewriteMode('concis'); handleAIRewrite('concis'); }}
+                  style={{
+                    padding: '12px 16px',
+                    background: darkMode ? '#374151' : '#f9fafb',
+                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    borderRadius: 8,
+                    color: darkMode ? 'white' : '#1f2937',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontSize: 14,
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#9333ea'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#374151' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb'; }}
+                >
+                  <span style={{ marginRight: 8 }}>🎯</span> <strong>Plus concis</strong>
+                  <div style={{ fontSize: 11, color: darkMode ? '#9ca3af' : '#6b7280', marginTop: 2 }}>Raccourcir et aller à l'essentiel</div>
+                </button>
+                
+                <button 
+                  onClick={() => { setAiRewriteMode('develop'); handleAIRewrite('develop'); }}
+                  style={{
+                    padding: '12px 16px',
+                    background: darkMode ? '#374151' : '#f9fafb',
+                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    borderRadius: 8,
+                    color: darkMode ? 'white' : '#1f2937',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontSize: 14,
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#9333ea'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#374151' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb'; }}
+                >
+                  <span style={{ marginRight: 8 }}>📝</span> <strong>Développer</strong>
+                  <div style={{ fontSize: 11, color: darkMode ? '#9ca3af' : '#6b7280', marginTop: 2 }}>Enrichir avec plus de détails</div>
+                </button>
+                
+                <button 
+                  onClick={() => { setAiRewriteMode('reformulate'); handleAIRewrite('reformulate'); }}
+                  style={{
+                    padding: '12px 16px',
+                    background: darkMode ? '#374151' : '#f9fafb',
+                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    borderRadius: 8,
+                    color: darkMode ? 'white' : '#1f2937',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontSize: 14,
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#9333ea'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#374151' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb'; }}
+                >
+                  <span style={{ marginRight: 8 }}>🔄</span> <strong>Reformuler</strong>
+                  <div style={{ fontSize: 11, color: darkMode ? '#9ca3af' : '#6b7280', marginTop: 2 }}>Dire la même chose autrement</div>
+                </button>
+                
+                {/* Tone selector */}
+                <div style={{
+                  padding: '12px 16px',
+                  background: darkMode ? '#374151' : '#f9fafb',
+                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                  borderRadius: 8,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ marginRight: 8 }}>🎭</span> <strong style={{ color: darkMode ? 'white' : '#1f2937', fontSize: 14 }}>Changer le ton</strong>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {['dramatique', 'comique', 'poétique', 'tendu', 'mélancolique', 'cynique'].map(tone => (
+                      <button 
+                        key={tone}
+                        onClick={() => { setAiRewriteTone(tone); setAiRewriteMode('tone'); handleAIRewrite('tone'); }}
+                        style={{
+                          padding: '6px 12px',
+                          background: darkMode ? '#1f2937' : 'white',
+                          border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`,
+                          borderRadius: 16,
+                          color: darkMode ? '#d1d5db' : '#4b5563',
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          transition: 'all 0.15s'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#9333ea'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#9333ea'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#1f2937' : 'white'; e.currentTarget.style.color = darkMode ? '#d1d5db' : '#4b5563'; e.currentTarget.style.borderColor = darkMode ? '#6b7280' : '#d1d5db'; }}
+                      >
+                        {tone}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Custom prompt */}
+                <div style={{
+                  padding: '12px 16px',
+                  background: darkMode ? '#374151' : '#f9fafb',
+                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                  borderRadius: 8,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ marginRight: 8 }}>✍️</span> <strong style={{ color: darkMode ? 'white' : '#1f2937', fontSize: 14 }}>Instruction libre</strong>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input 
+                      type="text"
+                      value={aiRewriteCustomPrompt}
+                      onChange={e => setAiRewriteCustomPrompt(e.target.value)}
+                      placeholder="Ex: Rends ce dialogue plus naturel..."
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        background: darkMode ? '#1f2937' : 'white',
+                        border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`,
+                        borderRadius: 6,
+                        color: darkMode ? 'white' : '#1f2937',
+                        fontSize: 13
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter' && aiRewriteCustomPrompt.trim()) { setAiRewriteMode('custom'); handleAIRewrite('custom', aiRewriteCustomPrompt); } }}
+                    />
+                    <button 
+                      onClick={() => { if (aiRewriteCustomPrompt.trim()) { setAiRewriteMode('custom'); handleAIRewrite('custom', aiRewriteCustomPrompt); } }}
+                      disabled={!aiRewriteCustomPrompt.trim()}
+                      style={{
+                        padding: '8px 16px',
+                        background: aiRewriteCustomPrompt.trim() ? '#9333ea' : (darkMode ? '#4b5563' : '#e5e7eb'),
+                        border: 'none',
+                        borderRadius: 6,
+                        color: aiRewriteCustomPrompt.trim() ? 'white' : (darkMode ? '#9ca3af' : '#9ca3af'),
+                        cursor: aiRewriteCustomPrompt.trim() ? 'pointer' : 'not-allowed',
+                        fontSize: 13,
+                        fontWeight: 500
+                      }}
+                    >
+                      Go
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Loading state */}
+            {aiRewriteLoading && (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <div style={{ 
+                  width: 40, 
+                  height: 40, 
+                  border: '3px solid transparent',
+                  borderTopColor: '#9333ea',
+                  borderRadius: '50%',
+                  margin: '0 auto 16px',
+                  animation: 'spin 1s linear infinite'
+                }} />
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                <div style={{ color: darkMode ? '#9ca3af' : '#6b7280', fontSize: 14 }}>L'IA réfléchit...</div>
+              </div>
+            )}
+            
+            {/* Result */}
+            {aiRewriteResult && !aiRewriteLoading && (
+              <div>
+                <div style={{ 
+                  background: aiRewriteResult.startsWith('❌') ? (darkMode ? '#7f1d1d' : '#fef2f2') : (darkMode ? '#1e3a5f' : '#eff6ff'), 
+                  padding: 16, 
+                  borderRadius: 8, 
+                  marginBottom: 16,
+                  borderLeft: `3px solid ${aiRewriteResult.startsWith('❌') ? '#ef4444' : '#3b82f6'}`
+                }}>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', color: aiRewriteResult.startsWith('❌') ? '#ef4444' : '#3b82f6', marginBottom: 8, fontWeight: 600 }}>
+                    {aiRewriteResult.startsWith('❌') ? 'Erreur' : 'Proposition de l\'IA'}
+                  </div>
+                  <div style={{ 
+                    color: darkMode ? 'white' : '#1f2937', 
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap'
+                  }}>
+                    {aiRewriteResult}
+                  </div>
+                </div>
+                
+                {/* Actions */}
+                {!aiRewriteResult.startsWith('❌') && (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button 
+                      onClick={applyAIRewrite}
+                      style={{
+                        flex: 1,
+                        padding: '12px 16px',
+                        background: '#22c55e',
+                        border: 'none',
+                        borderRadius: 8,
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        fontWeight: 600
+                      }}
+                    >
+                      ✓ Appliquer
+                    </button>
+                    <button 
+                      onClick={() => handleAIRewrite(aiRewriteMode, aiRewriteMode === 'custom' ? aiRewriteCustomPrompt : '')}
+                      style={{
+                        padding: '12px 16px',
+                        background: darkMode ? '#374151' : '#f3f4f6',
+                        border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                        borderRadius: 8,
+                        color: darkMode ? 'white' : '#1f2937',
+                        cursor: 'pointer',
+                        fontSize: 14
+                      }}
+                    >
+                      🔄 Régénérer
+                    </button>
+                    <button 
+                      onClick={() => { setAiRewriteResult(null); setAiRewriteMode(null); }}
+                      style={{
+                        padding: '12px 16px',
+                        background: 'transparent',
+                        border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                        borderRadius: 8,
+                        color: darkMode ? '#9ca3af' : '#6b7280',
+                        cursor: 'pointer',
+                        fontSize: 14
+                      }}
+                    >
+                      ← Retour
+                    </button>
+                  </div>
+                )}
+                
+                {aiRewriteResult.startsWith('❌') && (
+                  <button 
+                    onClick={() => { setAiRewriteResult(null); setAiRewriteMode(null); }}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      background: darkMode ? '#374151' : '#f3f4f6',
+                      border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                      borderRadius: 8,
+                      color: darkMode ? 'white' : '#1f2937',
+                      cursor: 'pointer',
+                      fontSize: 14
+                    }}
+                  >
+                    ← Réessayer
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

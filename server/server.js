@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
+const Anthropic = require('@anthropic-ai/sdk');
 const { User, Document, HistoryEntry } = require('./models');
 const { router: authRouter, authMiddleware, optionalAuthMiddleware, socketAuthMiddleware } = require('./auth');
 
@@ -14,6 +15,13 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/screenplay-collab';
 mongoose.connect(MONGODB_URI).then(() => console.log('Connected to MongoDB')).catch(err => console.error('MongoDB connection error:', err));
 
+// Anthropic client (initialized only if API key is present)
+let anthropic = null;
+if (process.env.ANTHROPIC_API_KEY) {
+  anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  console.log('Anthropic API initialized');
+}
+
 app.use(cors());
 app.use(express.json());
 app.use('/api/auth', authRouter);
@@ -21,7 +29,7 @@ app.use('/api/auth', authRouter);
 app.get('/api/health', async (req, res) => {
   const docCount = await Document.countDocuments();
   const userCount = await User.countDocuments();
-  res.json({ status: 'ok', documents: docCount, users: userCount });
+  res.json({ status: 'ok', documents: docCount, users: userCount, aiEnabled: !!anthropic });
 });
 
 function checkDocumentAccess(doc, user, requiredRole) {
@@ -97,6 +105,67 @@ app.post('/api/documents/:shortId/restore/:historyId', authMiddleware, async (re
     io.to(req.params.shortId).emit('document-restored', { title: doc.title, elements: doc.elements });
     res.json({ success: true });
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
+});
+
+// ============ AI REWRITE ROUTE ============
+
+app.post('/api/ai/rewrite', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const { systemPrompt, userPrompt, originalText } = req.body;
+    
+    if (!userPrompt || !originalText) {
+      return res.status(400).json({ error: 'Paramètres manquants' });
+    }
+    
+    if (!anthropic) {
+      return res.status(503).json({ error: 'Service IA non configuré. Contactez l\'administrateur.' });
+    }
+    
+    console.log('AI Rewrite request:', { originalText: originalText.substring(0, 50) + '...', userPromptLength: userPrompt.length });
+    
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      system: systemPrompt || "Tu es un assistant d'écriture de scénario professionnel.",
+      messages: [
+        { role: 'user', content: userPrompt }
+      ]
+    });
+    
+    // Extract text from response
+    const rewrittenText = message.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('\n')
+      .trim();
+    
+    // Clean up any quotes that might wrap the response
+    const cleanedText = rewrittenText
+      .replace(/^["«]|["»]$/g, '')
+      .trim();
+    
+    console.log('AI Rewrite success:', { resultLength: cleanedText.length, usage: message.usage });
+    
+    res.json({ 
+      rewrittenText: cleanedText,
+      usage: message.usage
+    });
+    
+  } catch (error) {
+    console.error('AI Rewrite error:', error);
+    
+    if (error.status === 401) {
+      return res.status(500).json({ error: 'Clé API invalide' });
+    }
+    if (error.status === 429) {
+      return res.status(429).json({ error: 'Limite de requêtes atteinte. Réessayez dans quelques minutes.' });
+    }
+    if (error.status === 400) {
+      return res.status(400).json({ error: 'Requête invalide: ' + (error.message || 'erreur inconnue') });
+    }
+    
+    res.status(500).json({ error: error.message || 'Erreur serveur' });
+  }
 });
 
 // ============ COMMENT ROUTES ============
