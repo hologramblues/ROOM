@@ -2818,7 +2818,6 @@ export default function ScreenplayEditor() {
   const [selectedCommentIndex, setSelectedCommentIndex] = useState(null); // Index of element whose comment was clicked
   const [selectedCommentId, setSelectedCommentId] = useState(null); // ID of selected comment (for expanding)
   const [selectedSuggestionId, setSelectedSuggestionId] = useState(null); // ID of selected suggestion (for expanding)
-  const [showImportExport, setShowImportExport] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
@@ -2828,12 +2827,10 @@ export default function ScreenplayEditor() {
   const [searchResults, setSearchResults] = useState([]);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const [showOutline, setShowOutline] = useState(false);
-  const [showMinimap, setShowMinimap] = useState(false);
   const [showSceneNumbers, setShowSceneNumbers] = useState(false);
   const [notes, setNotes] = useState({}); // { elementId: { content, color } }
   const [showNoteFor, setShowNoteFor] = useState(null);
   const [showCharactersPanel, setShowCharactersPanel] = useState(false);
-  const [showViewMenu, setShowViewMenu] = useState(false);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showDocMenu, setShowDocMenu] = useState(false);
   const [lockedScenes, setLockedScenes] = useState(new Set()); // Set of scene element IDs
@@ -2886,7 +2883,6 @@ export default function ScreenplayEditor() {
   const [isDraggingNote, setIsDraggingNote] = useState(false);
   const [isDraggingTimer, setIsDraggingTimer] = useState(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
-  const minimapRef = useRef(null);
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
   const chatEndRef = useRef(null);
@@ -2931,15 +2927,6 @@ export default function ScreenplayEditor() {
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
   }, [docId]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = () => setShowImportExport(false);
-    if (showImportExport) {
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
-    }
-  }, [showImportExport]);
 
   // Auto-backup to localStorage every 30 seconds
   useEffect(() => {
@@ -3154,16 +3141,6 @@ export default function ScreenplayEditor() {
       }
     }
   }, [docId]); // eslint-disable-line
-
-  // Auto-scroll minimap to keep active element visible
-  useEffect(() => {
-    if (showMinimap && minimapRef.current) {
-      const activeEl = minimapRef.current.querySelector(`[data-minimap-idx="${activeIndex}"]`);
-      if (activeEl) {
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    }
-  }, [activeIndex, showMinimap]);
 
   // Apply pending template after document loads
   useEffect(() => {
@@ -4892,220 +4869,210 @@ export default function ScreenplayEditor() {
         </div>
       )}
       
-      {/* HEADER */}
-      <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '8px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 200 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      {/* HEADER - 3 zones: Left (menus), Center (doc info + collab), Right (quick toggles) */}
+      <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 200, gap: 16 }}>
+        
+        {/* LEFT ZONE: Logo + Menus */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <Logo darkMode={darkMode} />
-          <div style={{ width: 1, height: 24, background: darkMode ? '#374151' : '#d1d5db' }} />
-          <input value={title} onChange={e => emitTitle(e.target.value)} disabled={!canEdit} style={{ background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', fontSize: 16, fontWeight: 'bold', outline: 'none', maxWidth: 250 }} />
-          <span style={{ color: '#6b7280', fontSize: 12 }}>{totalPages}p • {stats.scenes}sc • {stats.words}m</span>
-          <span style={{ fontSize: 10, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '●' : '○'}</span>
-          {lastSaved && <span style={{ fontSize: 10, color: '#6b7280' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
-          {lastModifiedBy && <span style={{ fontSize: 10, color: '#6b7280' }}>par {lastModifiedBy.userName}</span>}
-          {!canEdit && <span style={{ fontSize: 11, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
-          {(loading || importing) && <span style={{ fontSize: 11, color: '#60a5fa' }}>...</span>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: -8, marginRight: 4 }}>
-            {users.slice(0, 5).map((u, i) => <div key={u.id} style={{ marginLeft: i > 0 ? -8 : 0 }}><UserAvatar user={u} isYou={u.id === myId} /></div>)}
-            {users.length > 5 && <span style={{ color: '#9ca3af', fontSize: 11, marginLeft: 4 }}>+{users.length - 5}</span>}
-            {docId && (
-              <button 
-                onClick={copyLink} 
-                style={{ 
-                  marginLeft: 4, 
-                  width: 28, 
-                  height: 28, 
-                  borderRadius: '50%', 
-                  border: `2px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, 
-                  background: 'transparent', 
-                  color: '#9ca3af', 
-                  cursor: 'pointer', 
-                  fontSize: 16, 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  transition: 'all 0.2s'
-                }} 
-                title="Inviter un collaborateur (copier le lien)"
-              >+</button>
-            )}
-            {/* Chat button */}
-            {docId && (
-              <button
-                onClick={() => setShowChat(!showChat)}
-                style={{
-                  marginLeft: 4,
-                  width: 28,
-                  height: 28,
-                  borderRadius: '50%',
-                  border: 'none',
-                  background: showChat ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'),
-                  color: showChat ? 'white' : '#9ca3af',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  position: 'relative'
-                }}
-                title="Chat d'équipe"
-              >
-                💬
-                {unreadMessages > 0 && (
-                  <span style={{
-                    position: 'absolute',
-                    top: -4,
-                    right: -4,
-                    background: '#ef4444',
-                    color: 'white',
-                    fontSize: 9,
-                    fontWeight: 'bold',
-                    padding: '2px 5px',
-                    borderRadius: 10,
-                    minWidth: 16,
-                    textAlign: 'center'
-                  }}>
-                    {unreadMessages > 9 ? '9+' : unreadMessages}
-                  </span>
-                )}
-              </button>
-            )}
-          </div>
           
-          {currentUser ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 13, color: '#9ca3af' }}>{currentUser.name}</span>
-              <button onClick={handleLogout} style={{ fontSize: 11, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
-            </div>
-          ) : (
-            <button onClick={() => setShowAuthModal(true)} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }}>Connexion</button>
-          )}
-          
-          {token && <button onClick={() => setShowDocsList(true)} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }} title="Mes documents">📁</button>}
-          
-          {!docId ? (
-            <button onClick={() => { if (!token) { setShowAuthModal(true); } else { setShowTemplateModal(true); } }} style={{ padding: '5px 12px', background: '#059669', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: 12 }}>+ Nouveau</button>
-          ) : (
-            <>
-              {/* VIEW MENU */}
-              <div style={{ position: 'relative' }}>
-                <button onClick={(e) => { e.stopPropagation(); setShowViewMenu(!showViewMenu); setShowToolsMenu(false); setShowDocMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: (showOutline || showCharactersPanel || showSceneNumbers || showComments) ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12, position: 'relative' }}>
-                  Affichage ▾ {totalComments > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#f59e0b', color: 'black', fontSize: 9, padding: '1px 4px', borderRadius: 8 }}>{totalComments}</span>}
+          {/* DOCUMENT MENU */}
+          <div style={{ position: 'relative' }}>
+            <button onClick={(e) => { e.stopPropagation(); setShowDocMenu(!showDocMenu); setShowToolsMenu(false); }} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: showDocMenu ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: darkMode ? '#e5e7eb' : '#374151', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+              Document ▾
+            </button>
+            {showDocMenu && (
+              <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                <button onClick={() => { if (!token) { setShowAuthModal(true); } else { setShowTemplateModal(true); } setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                  📄 Nouveau
                 </button>
-                {showViewMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                    <button onClick={() => { setShowOutline(!showOutline); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showOutline ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>📋 Outline</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘O</span>
-                    </button>
-                    <button onClick={() => { setShowCharactersPanel(!showCharactersPanel); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showCharactersPanel ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      👥 Personnages
-                    </button>
-                    <button onClick={() => { setShowComments(!showComments); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showComments ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>💬 Commentaires</span>{totalComments > 0 && <span style={{ background: '#f59e0b', color: 'black', fontSize: 10, padding: '1px 6px', borderRadius: 8 }}>{totalComments}</span>}
-                    </button>
-                    <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      # Numéros de scènes
-                    </button>
-                    <button onClick={() => { setShowMinimap(!showMinimap); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showMinimap ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      🗺️ Minimap {showMinimap && '✓'}
-                    </button>
-                    <button onClick={() => { setDarkMode(!darkMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
-                    </button>
-                    <button onClick={() => { setFocusMode(!focusMode); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: focusMode ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      🎯 Mode focus {focusMode && '✓'}
-                    </button>
-                    <button onClick={() => { setShowGoToScene(true); setShowViewMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>🎬 Aller à la scène</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘G</span>
-                    </button>
-                  </div>
+                {token && (
+                  <button onClick={() => { setShowDocsList(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    📂 Mes documents
+                  </button>
                 )}
-              </div>
-              
-              {/* TOOLS MENU */}
-              <div style={{ position: 'relative' }}>
-                <button onClick={(e) => { e.stopPropagation(); setShowToolsMenu(!showToolsMenu); setShowViewMenu(false); setShowDocMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12, position: 'relative' }}>
-                  Outils ▾
-                </button>
-                {showToolsMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                    <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>🔍 Rechercher</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
-                    </button>
-                    <button onClick={() => { setShowNoteFor(elements[activeIndex]?.id); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>📝 Ajouter note</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘N</span>
-                    </button>
-                    <button onClick={() => { setShowRenameChar(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      ✏️ Renommer personnage
-                    </button>
-                    <button onClick={() => { setShowTimer(!showTimer); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showTimer ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      ⏱️ Timer d'écriture {showTimer && '✓'}
-                    </button>
-                    <button onClick={() => { setTypewriterSound(!typewriterSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: typewriterSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      🎹 Son machine à écrire {typewriterSound && '✓'}
-                    </button>
-                    <button onClick={() => { setChatNotificationSound(!chatNotificationSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: chatNotificationSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      🔔 Notifications chat {chatNotificationSound && '✓'}
-                    </button>
-                    <button onClick={() => { setShowStats(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
-                      📊 Statistiques
-                    </button>
-                    <button onClick={() => { setShowShortcuts(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>⌨️ Raccourcis</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-              {/* DOCUMENT MENU - only for logged in users */}
-              {token && (
-              <div style={{ position: 'relative' }}>
-                <button onClick={(e) => { e.stopPropagation(); setShowDocMenu(!showDocMenu); setShowViewMenu(false); setShowToolsMenu(false); setShowImportExport(false); }} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 12 }}>
-                  Document ▾
-                </button>
-                {showDocMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 180, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                {docId && token && (
+                  <>
+                    <div style={{ height: 1, background: darkMode ? '#374151' : '#e5e7eb', margin: '4px 0' }} />
                     <button onClick={() => { createSnapshot(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>💾 Snapshot</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘S</span>
                     </button>
-                    <button onClick={() => { setShowHistory(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={() => { setShowHistory(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📜 Historique
                     </button>
-                  </div>
-                )}
-              </div>
-              )}
-              
-              {/* IMPORT/EXPORT MENU */}
-              <div style={{ position: 'relative' }}>
-                <button onClick={(e) => { e.stopPropagation(); setShowImportExport(!showImportExport); setShowViewMenu(false); setShowToolsMenu(false); setShowDocMenu(false); }} style={{ padding: '5px 10px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12 }}>
-                  Import/Export ▾
-                </button>
-                {showImportExport && (
-                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                    <button onClick={() => { importFDX(); setShowImportExport(false); }} disabled={importing || !token} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !token ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !token ? 'default' : 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <div style={{ height: 1, background: darkMode ? '#374151' : '#e5e7eb', margin: '4px 0' }} />
+                    <button onClick={() => { importFDX(); setShowDocMenu(false); }} disabled={importing || !token} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !token ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !token ? 'default' : 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📥 Importer FDX
                     </button>
-                    <button onClick={() => { exportFDX(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={() => { exportFDX(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📤 Exporter FDX
                     </button>
-                    <button onClick={() => { exportFountain(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={() => { exportFountain(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📝 Exporter Fountain
                     </button>
-                    <button onClick={() => { exportPDF(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={() => { exportPDF(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📄 Exporter PDF
                     </button>
-                    <button onClick={() => { exportTXT(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={() => { exportTXT(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📃 Exporter TXT
                     </button>
-                    <button onClick={() => { exportMarkdown(); setShowImportExport(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={() => { exportMarkdown(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📋 Exporter Markdown
                     </button>
-                  </div>
+                  </>
                 )}
               </div>
+            )}
+          </div>
+          
+          {/* TOOLS MENU */}
+          {docId && (
+          <div style={{ position: 'relative' }}>
+            <button onClick={(e) => { e.stopPropagation(); setShowToolsMenu(!showToolsMenu); setShowDocMenu(false); }} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: showToolsMenu ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: darkMode ? '#e5e7eb' : '#374151', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+              Outils ▾
+            </button>
+            {showToolsMenu && (
+              <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>🔍 Rechercher</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
+                </button>
+                <button onClick={() => { setShowNoteFor(elements[activeIndex]?.id); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>📝 Ajouter note</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘N</span>
+                </button>
+                <button onClick={() => { setShowRenameChar(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                  ✏️ Renommer personnage
+                </button>
+                <button onClick={() => { setShowCharactersPanel(!showCharactersPanel); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showCharactersPanel ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                  👥 Personnages {showCharactersPanel && '✓'}
+                </button>
+                <button onClick={() => { setShowStats(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                  📊 Statistiques
+                </button>
+                <button onClick={() => { setShowGoToScene(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>🎬 Aller à la scène</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘G</span>
+                </button>
+                <div style={{ height: 1, background: darkMode ? '#374151' : '#e5e7eb', margin: '4px 0' }} />
+                <button onClick={() => { setTypewriterSound(!typewriterSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: typewriterSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                  🎹 Son machine à écrire {typewriterSound && '✓'}
+                </button>
+                <button onClick={() => { setChatNotificationSound(!chatNotificationSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: chatNotificationSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                  🔔 Notifications chat {chatNotificationSound && '✓'}
+                </button>
+                <button onClick={() => { setShowShortcuts(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>⌨️ Raccourcis</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
+                </button>
+              </div>
+            )}
+          </div>
+          )}
+        </div>
+        
+        {/* CENTER ZONE: Title + Stats + Collaborators */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, justifyContent: 'center', minWidth: 0 }}>
+          {docId ? (
+            <>
+              <input 
+                value={title} 
+                onChange={e => emitTitle(e.target.value)} 
+                disabled={!canEdit} 
+                style={{ 
+                  background: 'transparent', 
+                  border: 'none', 
+                  color: darkMode ? 'white' : 'black', 
+                  fontSize: 14, 
+                  fontWeight: 600, 
+                  outline: 'none', 
+                  maxWidth: 180,
+                  textOverflow: 'ellipsis',
+                  textAlign: 'center'
+                }} 
+              />
+              <span style={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>{totalPages}p • {stats.scenes}sc • {stats.words}m</span>
+              <span style={{ fontSize: 8, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '●' : '○'}</span>
+              {lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
+              {!canEdit && <span style={{ fontSize: 10, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
+              {(loading || importing) && <span style={{ fontSize: 11, color: '#60a5fa' }}>...</span>}
+              
+              {/* Collaborators */}
+              <div style={{ display: 'flex', alignItems: 'center', marginLeft: 8 }}>
+                {users.slice(0, 4).map((u, i) => <div key={u.id} style={{ marginLeft: i > 0 ? -6 : 0 }}><UserAvatar user={u} isYou={u.id === myId} /></div>)}
+                {users.length > 4 && <span style={{ color: '#9ca3af', fontSize: 10, marginLeft: 4 }}>+{users.length - 4}</span>}
+                <button 
+                  onClick={copyLink} 
+                  style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                  title="Inviter (copier le lien)"
+                >+</button>
+                <button
+                  onClick={() => setShowChat(!showChat)}
+                  style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: 'none', background: showChat ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), color: showChat ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+                  title="Chat"
+                >
+                  💬
+                  {unreadMessages > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: 'white', fontSize: 8, fontWeight: 'bold', padding: '1px 4px', borderRadius: 8, minWidth: 14, textAlign: 'center' }}>{unreadMessages > 9 ? '9+' : unreadMessages}</span>}
+                </button>
+              </div>
             </>
+          ) : (
+            <span style={{ color: '#6b7280', fontSize: 13 }}>Writer's Room</span>
+          )}
+        </div>
+        
+        {/* RIGHT ZONE: Quick toggles + User */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          {docId && (
+            <>
+              {/* Quick toggle buttons */}
+              <button
+                onClick={() => setShowOutline(!showOutline)}
+                style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showOutline ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showOutline ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Outline (⌘O)"
+              >📋</button>
+              
+              <button
+                onClick={() => setShowComments(!showComments)}
+                style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showComments ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showComments ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+                title="Commentaires"
+              >
+                💬
+                {totalComments > 0 && <span style={{ position: 'absolute', top: -2, right: -2, background: '#f59e0b', color: 'black', fontSize: 8, fontWeight: 'bold', padding: '1px 4px', borderRadius: 8, minWidth: 14, textAlign: 'center' }}>{totalComments}</span>}
+              </button>
+              
+              <button
+                onClick={() => setShowTimer(!showTimer)}
+                style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showTimer ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showTimer ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Timer"
+              >⏱️</button>
+              
+              <button
+                onClick={() => setFocusMode(!focusMode)}
+                style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: focusMode ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: focusMode ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Mode focus"
+              >🎯</button>
+              
+              <button
+                onClick={() => setShowSceneNumbers(!showSceneNumbers)}
+                style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showSceneNumbers ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showSceneNumbers ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Numéros de scènes"
+              >#</button>
+              
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#374151' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title={darkMode ? 'Mode clair' : 'Mode sombre'}
+              >{darkMode ? '☀️' : '🌙'}</button>
+              
+              <div style={{ width: 1, height: 20, background: darkMode ? '#374151' : '#d1d5db', margin: '0 4px' }} />
+            </>
+          )}
+          
+          {/* User account */}
+          {currentUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#9ca3af', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.name}</span>
+              <button onClick={handleLogout} style={{ fontSize: 14, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 4 }} title="Déconnexion">×</button>
+            </div>
+          ) : (
+            <button onClick={() => setShowAuthModal(true)} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
           )}
         </div>
       </div>
@@ -6004,120 +5971,6 @@ export default function ScreenplayEditor() {
         </div>
       )}
       
-      {/* Minimap - quick navigation */}
-      {showMinimap && (
-        <div 
-          style={{
-            position: 'fixed',
-            right: showComments ? 340 : 20,
-            top: 70,
-            bottom: 20,
-            width: 90,
-            background: darkMode ? '#1f2937' : 'white',
-            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
-            borderRadius: 8,
-            overflow: 'hidden',
-            zIndex: 150,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            display: 'flex',
-            flexDirection: 'column'
-          }}
-        >
-          <div style={{ 
-            padding: '6px 8px', 
-            borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-            fontSize: 9,
-            color: '#6b7280',
-            textAlign: 'center',
-            fontWeight: 500,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <span>🗺️</span>
-            <span>{activeIndex + 1}/{elements.length}</span>
-            <button 
-              onClick={() => setShowMinimap(false)}
-              style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 10, padding: 0 }}
-            >✕</button>
-          </div>
-          <div 
-            ref={minimapRef}
-            style={{ 
-              flex: 1, 
-              overflow: 'auto', 
-              position: 'relative',
-              cursor: 'pointer'
-            }}
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const scrollTop = e.currentTarget.scrollTop;
-              const clickY = e.clientY - rect.top + scrollTop;
-              const totalHeight = e.currentTarget.scrollHeight;
-              const percentage = clickY / totalHeight;
-              const targetIndex = Math.floor(percentage * elements.length);
-              const clampedIndex = Math.max(0, Math.min(elements.length - 1, targetIndex));
-              setActiveIndex(clampedIndex);
-              const targetEl = document.querySelector(`[data-element-index="${clampedIndex}"]`);
-              if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }}
-          >
-            {/* Elements representation */}
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: 1,
-              padding: '4px'
-            }}>
-              {elements.map((el, idx) => {
-                const colors = {
-                  scene: '#f59e0b',
-                  action: darkMode ? '#4b5563' : '#9ca3af',
-                  character: '#3b82f6',
-                  dialogue: '#6366f1',
-                  parenthetical: '#8b5cf6',
-                  transition: '#ef4444'
-                };
-                const isActive = idx === activeIndex;
-                const contentLength = el.content?.length || 0;
-                const height = el.type === 'scene' ? 6 : Math.max(2, Math.min(6, contentLength / 100 * 4 + 2));
-                
-                return (
-                  <div
-                    key={el.id}
-                    data-minimap-idx={idx}
-                    style={{
-                      width: el.type === 'scene' ? '100%' : el.type === 'character' ? '55%' : el.type === 'dialogue' ? '70%' : el.type === 'parenthetical' ? '45%' : el.type === 'transition' ? '35%' : '85%',
-                      marginLeft: el.type === 'character' ? '22%' : el.type === 'dialogue' ? '18%' : el.type === 'parenthetical' ? '27%' : el.type === 'transition' ? 'auto' : 0,
-                      height: height,
-                      background: isActive ? '#22c55e' : colors[el.type] || '#6b7280',
-                      borderRadius: 1,
-                      opacity: isActive ? 1 : 0.5,
-                      transition: 'all 0.1s ease',
-                      flexShrink: 0
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-          
-          {/* Scene legend */}
-          <div style={{
-            padding: '6px 8px',
-            borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 4,
-            justifyContent: 'center'
-          }}>
-            <span style={{ fontSize: 7, color: '#f59e0b' }}>■ SCN</span>
-            <span style={{ fontSize: 7, color: '#3b82f6' }}>■ CHAR</span>
-            <span style={{ fontSize: 7, color: '#6366f1' }}>■ DIAL</span>
-          </div>
-        </div>
-      )}
-
       {/* Focus Mode Overlay - dims everything except current element */}
       {focusMode && (
         <style>{`
