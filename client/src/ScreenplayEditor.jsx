@@ -4315,30 +4315,32 @@ export default function ScreenplayEditor() {
     }
     if (e.key === 'Backspace' && el.content === '' && elements.length > 1) { e.preventDefault(); deleteElement(index); }
     
-    // Smart arrow navigation: move to next/prev element when at last/first line
+    // Arrow navigation: let browser handle normal cursor movement
+    // Only intercept at element boundaries
     if (e.key === 'ArrowDown' && !e.metaKey && !e.ctrlKey) {
       const cursor = getCursorPosition();
-      const isOnLastLine = !cursor.textAfter || !cursor.textAfter.includes('\n');
-      
-      if (isOnLastLine && index < elements.length - 1) {
+      // Only move to next element if cursor is at the very end
+      if (cursor.atEnd && index < elements.length - 1) {
         e.preventDefault();
-        setActiveIndex(index + 1);
+        handleFocus(index + 1, 0); // Move to start of next element
       }
+      // Otherwise, let browser handle normal line navigation
     }
     if (e.key === 'ArrowUp' && !e.metaKey && !e.ctrlKey) {
       const cursor = getCursorPosition();
-      const isOnFirstLine = !cursor.textBefore || !cursor.textBefore.includes('\n');
-      
-      if (isOnFirstLine && index > 0) {
+      // Only move to prev element if cursor is at the very start
+      if (cursor.atStart && index > 0) {
         e.preventDefault();
-        setActiveIndex(index - 1);
+        handleFocus(index - 1, elements[index - 1].content.length); // Move to end of prev element
       }
+      // Otherwise, let browser handle normal line navigation
     }
     
-    if (e.key === 'ArrowUp' && e.metaKey) { e.preventDefault(); setActiveIndex(Math.max(0, index - 1)); }
-    if (e.key === 'ArrowDown' && e.metaKey) { e.preventDefault(); setActiveIndex(Math.min(elements.length - 1, index + 1)); }
+    // Cmd/Ctrl + Arrow for quick element navigation
+    if (e.key === 'ArrowUp' && e.metaKey) { e.preventDefault(); handleFocus(Math.max(0, index - 1), 0); }
+    if (e.key === 'ArrowDown' && e.metaKey) { e.preventDefault(); handleFocus(Math.min(elements.length - 1, index + 1), 0); }
     if ((e.metaKey || e.ctrlKey) && ['1','2','3','4','5','6'].includes(e.key)) { e.preventDefault(); changeType(index, ELEMENT_TYPES[parseInt(e.key) - 1].id); }
-  }, [elements, insertElement, changeType, deleteElement, updateElement, canEdit]);
+  }, [elements, insertElement, changeType, deleteElement, updateElement, canEdit, handleFocus]);
 
   // ============ IMPORT FDX - Creates new document ============
   const importFDX = async () => {
