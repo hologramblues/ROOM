@@ -687,7 +687,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users }) => {
+const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
@@ -704,11 +704,33 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const commentRefs = useRef({});
   const prevActiveIndexRef = useRef(activeIndex);
 
-  // Get unique users for mentions (from connected users)
+  // Get unique users for mentions (online users + offline collaborators)
   const mentionableUsers = useMemo(() => {
-    if (!users) return [];
-    return users.filter(u => u.name).map(u => ({ name: u.name, color: u.color }));
-  }, [users]);
+    const allUsers = [];
+    const seenNames = new Set();
+    
+    // Add online users first (with online indicator)
+    if (users) {
+      users.filter(u => u.name).forEach(u => {
+        if (!seenNames.has(u.name.toLowerCase())) {
+          seenNames.add(u.name.toLowerCase());
+          allUsers.push({ name: u.name, color: u.color, online: true });
+        }
+      });
+    }
+    
+    // Add offline collaborators
+    if (collaborators) {
+      collaborators.filter(c => c.name).forEach(c => {
+        if (!seenNames.has(c.name.toLowerCase())) {
+          seenNames.add(c.name.toLowerCase());
+          allUsers.push({ name: c.name, color: c.color || '#6b7280', online: false });
+        }
+      });
+    }
+    
+    return allUsers;
+  }, [users, collaborators]);
 
   // Filter users based on search
   const filteredMentions = useMemo(() => {
@@ -1247,13 +1269,32 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                             justifyContent: 'center',
                             color: 'white',
                             fontSize: 10,
-                            fontWeight: 'bold'
+                            fontWeight: 'bold',
+                            position: 'relative'
                           }}>
                             {user.name.charAt(0).toUpperCase()}
+                            {/* Online indicator */}
+                            <span style={{
+                              position: 'absolute',
+                              bottom: -1,
+                              right: -1,
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              background: user.online ? '#22c55e' : '#6b7280',
+                              border: `2px solid ${darkMode ? '#374151' : 'white'}`
+                            }} />
                           </div>
-                          <span style={{ fontSize: 13, color: darkMode ? 'white' : '#374151' }}>
-                            {user.name}
-                          </span>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: 13, color: darkMode ? 'white' : '#374151' }}>
+                              {user.name}
+                            </span>
+                            {!user.online && (
+                              <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 6 }}>
+                                (hors ligne)
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -5121,6 +5162,7 @@ export default function ScreenplayEditor() {
           selectedSuggestionId={selectedSuggestionId}
           onSelectSuggestion={(id) => { setSelectedSuggestionId(id); if (id) setSelectedCommentId(null); }}
           users={users}
+          collaborators={collaborators}
         />
       )}
       
