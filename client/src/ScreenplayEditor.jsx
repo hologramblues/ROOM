@@ -3023,23 +3023,27 @@ export default function ScreenplayEditor() {
           <span
             key={idx}
             onClick={(e) => {
-              e.stopPropagation();
-              // Open comments panel and select this comment
-              setShowComments(true);
-              setSelectedCommentId(seg.commentId);
-              setTimeout(() => {
-                const commentEl = document.querySelector(`[data-comment-id="${seg.commentId}"]`);
-                if (commentEl) commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }, 100);
+              // Ctrl+click (or Cmd+click on Mac) opens the comment
+              if (e.ctrlKey || e.metaKey) {
+                e.stopPropagation();
+                e.preventDefault();
+                setShowComments(true);
+                setSelectedCommentId(seg.commentId);
+                setTimeout(() => {
+                  const commentEl = document.querySelector(`[data-comment-id="${seg.commentId}"]`);
+                  if (commentEl) commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+              }
+              // Normal click - let it through for editing
             }}
             style={{
               background: 'rgba(251, 191, 36, 0.4)',
               borderBottom: `2px solid ${seg.userColor || '#f59e0b'}`,
-              cursor: 'pointer',
+              cursor: 'text',
               borderRadius: 2,
               padding: '0 1px'
             }}
-            title="Cliquer pour voir le commentaire"
+            title="⌘+clic pour voir le commentaire"
           >
             {seg.content}
           </span>
