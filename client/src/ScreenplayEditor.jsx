@@ -3548,10 +3548,8 @@ export default function ScreenplayEditor() {
   // Close dropdown menus when clicking outside
   useEffect(() => {
     const handleClickOutside = () => {
-      setShowViewMenu(false);
       setShowToolsMenu(false);
       setShowDocMenu(false);
-      setShowImportExport(false);
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
