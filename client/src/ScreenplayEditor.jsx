@@ -771,10 +771,28 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
     return map;
   }, [comments, elements]);
 
-  // Get sorted element indices that have comments
+  // Get element indices for suggestions
+  const suggestionsByElementIndex = useMemo(() => {
+    const map = {};
+    if (suggestions) {
+      suggestions.filter(s => s.status === 'pending').forEach(s => {
+        const idx = s.elementIndex;
+        if (idx >= 0) {
+          if (!map[idx]) map[idx] = [];
+          map[idx].push(s);
+        }
+      });
+    }
+    return map;
+  }, [suggestions]);
+
+  // Get sorted element indices that have comments OR suggestions
   const sortedIndices = useMemo(() => {
-    return Object.keys(commentsByElementIndex).map(Number).sort((a, b) => a - b);
-  }, [commentsByElementIndex]);
+    const commentIndices = Object.keys(commentsByElementIndex).map(Number);
+    const suggestionIndices = Object.keys(suggestionsByElementIndex).map(Number);
+    const allIndices = [...new Set([...commentIndices, ...suggestionIndices])];
+    return allIndices.sort((a, b) => a - b);
+  }, [commentsByElementIndex, suggestionsByElementIndex]);
 
   const unresolvedComments = comments.filter(c => !c.resolved);
   const pendingSuggestions = suggestions ? suggestions.filter(s => s.status === 'pending') : [];
@@ -1250,11 +1268,11 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
           })()}
           
           {sortedIndices.length === 0 && !pendingInlineComment && !pendingSuggestion ? (
-            <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire</p>
+            <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire ou suggestion</p>
           ) : sortedIndices.length > 0 ? (
             sortedIndices.map((idx, arrayIndex) => {
               const element = elements[idx];
-              const elementComments = commentsByElementIndex[idx];
+              const elementComments = commentsByElementIndex[idx] || [];
               const topPosition = adjustedPositions[idx] || 0;
               
               return (
