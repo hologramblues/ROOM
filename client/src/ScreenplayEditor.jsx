@@ -2559,7 +2559,12 @@ const Logo = ({ darkMode }) => {
   );
 };
 
-const UserAvatar = ({ user, isYou }) => <div style={{ width: 32, height: 32, borderRadius: '50%', background: user.color || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 'bold', color: 'white', border: isYou ? '3px solid white' : 'none', boxSizing: 'border-box' }} title={user.name}>{user.name?.charAt(0).toUpperCase() || '?'}</div>;
+const UserAvatar = ({ user, isYou }) => {
+  const initials = user.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '?';
+  return (
+    <div style={{ width: 28, height: 28, borderRadius: '50%', background: user.color || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 'bold', color: 'white', border: isYou ? '2px solid #22c55e' : 'none', boxSizing: 'border-box' }} title={user.name}>{initials}</div>
+  );
+};
 
 // Script templates
 const SCRIPT_TEMPLATES = {
@@ -4949,6 +4954,9 @@ export default function ScreenplayEditor() {
                 <button onClick={() => { setShowGoToScene(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span>🎬 Aller à la scène</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘G</span>
                 </button>
+                <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
+                  # Numéros de scènes {showSceneNumbers && '✓'}
+                </button>
                 <div style={{ height: 1, background: darkMode ? '#374151' : '#e5e7eb', margin: '4px 0' }} />
                 <button onClick={() => { setTypewriterSound(!typewriterSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: typewriterSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                   🎹 Son machine à écrire {typewriterSound && '✓'}
@@ -4965,7 +4973,7 @@ export default function ScreenplayEditor() {
           )}
         </div>
         
-        {/* CENTER ZONE: Title + Stats + Collaborators */}
+        {/* CENTER ZONE: Title + Collaborators + User */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, justifyContent: 'center', minWidth: 0 }}>
           {docId ? (
             <>
@@ -4980,24 +4988,40 @@ export default function ScreenplayEditor() {
                   fontSize: 14, 
                   fontWeight: 600, 
                   outline: 'none', 
-                  maxWidth: 180,
+                  maxWidth: 200,
                   textOverflow: 'ellipsis',
                   textAlign: 'center'
                 }} 
               />
-              <span style={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>{totalPages}p • {stats.scenes}sc • {stats.words}m</span>
-              <span style={{ fontSize: 8, color: connected ? '#10b981' : '#ef4444' }}>{connected ? '●' : '○'}</span>
               {lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
               {!canEdit && <span style={{ fontSize: 10, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
               {(loading || importing) && <span style={{ fontSize: 11, color: '#60a5fa' }}>...</span>}
               
-              {/* Collaborators */}
+              {/* Collaborators + User */}
               <div style={{ display: 'flex', alignItems: 'center', marginLeft: 8 }}>
-                {users.slice(0, 4).map((u, i) => <div key={u.id} style={{ marginLeft: i > 0 ? -6 : 0 }}><UserAvatar user={u} isYou={u.id === myId} /></div>)}
-                {users.length > 4 && <span style={{ color: '#9ca3af', fontSize: 10, marginLeft: 4 }}>+{users.length - 4}</span>}
+                {currentUser ? (
+                  <>
+                    {/* Current user avatar with green border */}
+                    <div style={{ position: 'relative' }}>
+                      <UserAvatar user={{ name: currentUser.name, color: currentUser.color || '#3b82f6' }} isYou={true} />
+                      <button 
+                        onClick={handleLogout} 
+                        style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }} 
+                        title="Déconnexion"
+                      >×</button>
+                    </div>
+                    {/* Other online users */}
+                    {users.filter(u => u.id !== myId).slice(0, 3).map((u, i) => (
+                      <div key={u.id} style={{ marginLeft: -6 }}><UserAvatar user={u} isYou={false} /></div>
+                    ))}
+                    {users.length > 4 && <span style={{ color: '#9ca3af', fontSize: 10, marginLeft: 4 }}>+{users.length - 4}</span>}
+                  </>
+                ) : (
+                  <button onClick={() => setShowAuthModal(true)} style={{ padding: '4px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
+                )}
                 <button 
                   onClick={copyLink} 
-                  style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                  style={{ marginLeft: 6, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
                   title="Inviter (copier le lien)"
                 >+</button>
                 <button
@@ -5011,11 +5035,22 @@ export default function ScreenplayEditor() {
               </div>
             </>
           ) : (
-            <span style={{ color: '#6b7280', fontSize: 13 }}>Writer's Room</span>
+            <>
+              <span style={{ color: '#6b7280', fontSize: 13 }}>Writer's Room</span>
+              {!currentUser && (
+                <button onClick={() => setShowAuthModal(true)} style={{ marginLeft: 8, padding: '4px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
+              )}
+              {currentUser && (
+                <div style={{ marginLeft: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <UserAvatar user={{ name: currentUser.name, color: currentUser.color || '#3b82f6' }} isYou={true} />
+                  <button onClick={handleLogout} style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }} title="Déconnexion">×</button>
+                </div>
+              )}
+            </>
           )}
         </div>
         
-        {/* RIGHT ZONE: Quick toggles + User */}
+        {/* RIGHT ZONE: Quick toggles only */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           {docId && (
             <>
@@ -5048,29 +5083,11 @@ export default function ScreenplayEditor() {
               >🎯</button>
               
               <button
-                onClick={() => setShowSceneNumbers(!showSceneNumbers)}
-                style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showSceneNumbers ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showSceneNumbers ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                title="Numéros de scènes"
-              >#</button>
-              
-              <button
                 onClick={() => setDarkMode(!darkMode)}
                 style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#374151' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 title={darkMode ? 'Mode clair' : 'Mode sombre'}
               >{darkMode ? '☀️' : '🌙'}</button>
-              
-              <div style={{ width: 1, height: 20, background: darkMode ? '#374151' : '#d1d5db', margin: '0 4px' }} />
             </>
-          )}
-          
-          {/* User account */}
-          {currentUser ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 12, color: '#9ca3af', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.name}</span>
-              <button onClick={handleLogout} style={{ fontSize: 14, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 4 }} title="Déconnexion">×</button>
-            </div>
-          ) : (
-            <button onClick={() => setShowAuthModal(true)} style={{ padding: '5px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
           )}
         </div>
       </div>
