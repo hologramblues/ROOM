@@ -1673,7 +1673,7 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlightedContent, onTextSelect }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlightedContent, onTextSelect, onHighlightClick }) => {
   const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
@@ -1769,71 +1769,72 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       {/* Type label */}
       {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       
-      {/* Show highlighted content when not active and has highlights */}
-      {!isActive && hasHighlights ? (
-        <div 
-          onClick={() => onFocus(index)}
-          style={{ 
-            ...getElementStyle(element.type), 
-            cursor: 'text',
-            opacity: canEdit ? 1 : 0.7, 
-            background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
-            whiteSpace: 'pre-wrap',
-            minHeight: '1.5em'
-          }}
-        >
-          {highlightedContent}
-        </div>
-      ) : (
-        <textarea 
-          ref={textareaRef} 
-          value={element.content} 
-          placeholder={isActive ? getPlaceholder(element.type) : ''} 
-          onChange={e => canEdit && onUpdate(index, { ...element, content: e.target.value })} 
-          onFocus={() => onFocus(index)} 
-          onKeyDown={handleKey} 
-          onSelect={e => {
-            onCursorMove(index, e.target.selectionStart);
-            // Handle text selection for inline comments
-            const { selectionStart, selectionEnd, value } = e.target;
-            if (selectionStart !== selectionEnd && onTextSelect) {
-              const selectedText = value.substring(selectionStart, selectionEnd);
-              if (selectedText.trim()) {
-                const rect = e.target.getBoundingClientRect();
-                onTextSelect({
-                  elementId: element.id,
-                  elementIndex: index,
-                  text: selectedText,
-                  startOffset: selectionStart,
-                  endOffset: selectionEnd,
-                  rect
-                });
-              }
+      {/* Editable content with highlights always visible */}
+      <div
+        ref={textareaRef}
+        contentEditable={canEdit && !isLocked}
+        suppressContentEditableWarning={true}
+        onInput={(e) => {
+          if (canEdit) {
+            // Extract plain text from contenteditable
+            const text = e.currentTarget.innerText;
+            onUpdate(index, { ...element, content: text });
+          }
+        }}
+        onFocus={() => onFocus(index)}
+        onKeyDown={handleKey}
+        onMouseUp={(e) => {
+          // Handle text selection for inline comments
+          const selection = window.getSelection();
+          if (selection && !selection.isCollapsed && onTextSelect) {
+            const selectedText = selection.toString();
+            if (selectedText.trim()) {
+              // Calculate offsets relative to the element content
+              const range = selection.getRangeAt(0);
+              const preSelectionRange = range.cloneRange();
+              preSelectionRange.selectNodeContents(e.currentTarget);
+              preSelectionRange.setEnd(range.startContainer, range.startOffset);
+              const startOffset = preSelectionRange.toString().length;
+              const endOffset = startOffset + selectedText.length;
+              
+              const rect = e.currentTarget.getBoundingClientRect();
+              onTextSelect({
+                elementId: element.id,
+                elementIndex: index,
+                text: selectedText,
+                startOffset,
+                endOffset,
+                rect
+              });
             }
-          }}
-          onMouseUp={e => {
-            // Also check on mouseup for selection
-            const { selectionStart, selectionEnd, value } = e.target;
-            if (selectionStart !== selectionEnd && onTextSelect) {
-              const selectedText = value.substring(selectionStart, selectionEnd);
-              if (selectedText.trim()) {
-                const rect = e.target.getBoundingClientRect();
-                onTextSelect({
-                  elementId: element.id,
-                  elementIndex: index,
-                  text: selectedText,
-                  startOffset: selectionStart,
-                  endOffset: selectionEnd,
-                  rect
-                });
-              }
+          }
+        }}
+        onBlur={() => {
+          // Clear selection popup when leaving
+        }}
+        onClick={(e) => {
+          // Check if clicked on a highlight span
+          const target = e.target;
+          if (target.dataset && target.dataset.commentId) {
+            // Clicked on a highlight - open the comment
+            if (typeof onHighlightClick === 'function') {
+              onHighlightClick(target.dataset.commentId);
             }
-          }}
-          style={{ ...getElementStyle(element.type), cursor: canEdit ? 'text' : 'default', opacity: canEdit ? 1 : 0.7, background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }} 
-          rows={1} 
-          readOnly={!canEdit} 
-        />
-      )}
+          }
+        }}
+        style={{ 
+          ...getElementStyle(element.type), 
+          cursor: canEdit ? 'text' : 'default', 
+          opacity: canEdit ? 1 : 0.7, 
+          background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+          whiteSpace: 'pre-wrap',
+          minHeight: '1.5em',
+          outline: 'none'
+        }}
+        data-placeholder={isActive ? getPlaceholder(element.type) : ''}
+      >
+        {hasHighlights ? highlightedContent : (element.content || '\u200B')}
+      </div>
       
       {/* Character autocomplete */}
       {autoType === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
@@ -3022,20 +3023,7 @@ export default function ScreenplayEditor() {
         return (
           <span
             key={idx}
-            onClick={(e) => {
-              // Ctrl+click (or Cmd+click on Mac) opens the comment
-              if (e.ctrlKey || e.metaKey) {
-                e.stopPropagation();
-                e.preventDefault();
-                setShowComments(true);
-                setSelectedCommentId(seg.commentId);
-                setTimeout(() => {
-                  const commentEl = document.querySelector(`[data-comment-id="${seg.commentId}"]`);
-                  if (commentEl) commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 100);
-              }
-              // Normal click - let it through for editing
-            }}
+            data-comment-id={seg.commentId}
             style={{
               background: 'rgba(251, 191, 36, 0.4)',
               borderBottom: `2px solid ${seg.userColor || '#f59e0b'}`,
@@ -3043,7 +3031,7 @@ export default function ScreenplayEditor() {
               borderRadius: 2,
               padding: '0 1px'
             }}
-            title="⌘+clic pour voir le commentaire"
+            title="Cliquer pour voir le commentaire"
           >
             {seg.content}
           </span>
@@ -4327,6 +4315,14 @@ export default function ScreenplayEditor() {
                         if (canComment) {
                           setTextSelection(selection);
                         }
+                      }}
+                      onHighlightClick={(commentId) => {
+                        setShowComments(true);
+                        setSelectedCommentId(commentId);
+                        setTimeout(() => {
+                          const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+                          if (commentEl) commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 100);
                       }}
                     />
                   </div>
