@@ -676,14 +676,15 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const commentRefs = useRef({});
   const prevActiveIndexRef = useRef(activeIndex);
 
-  // Deselect comment when clicking elsewhere in the script (activeIndex changes)
+  // Deselect comment/suggestion when clicking elsewhere in the script (activeIndex changes)
   useEffect(() => {
     if (activeIndex !== prevActiveIndexRef.current) {
       onSelectComment && onSelectComment(null);
+      onSelectSuggestion && onSelectSuggestion(null);
       setReplyTo(null);
       prevActiveIndexRef.current = activeIndex;
     }
-  }, [activeIndex, onSelectComment]);
+  }, [activeIndex, onSelectComment, onSelectSuggestion]);
 
   // Focus on inline comment input when pending comment appears
   const pendingCommentInitRef = useRef(null);
@@ -919,7 +920,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
         flexDirection: 'column',
         boxShadow: '-2px 0 8px rgba(0,0,0,0.1)'
       }}
-      onClick={() => onSelectComment && onSelectComment(null)}
+      onClick={() => { onSelectComment && onSelectComment(null); onSelectSuggestion && onSelectSuggestion(null); }}
     >
       {/* Header with navigation and filters */}
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
