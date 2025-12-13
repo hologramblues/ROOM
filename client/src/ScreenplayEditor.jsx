@@ -669,6 +669,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const [newCommentText, setNewCommentText] = useState('');
   const [inlineCommentText, setInlineCommentText] = useState('');
   const [suggestionText, setSuggestionText] = useState('');
+  const [filter, setFilter] = useState('all'); // 'all', 'comments', 'suggestions'
   const inlineCommentInputRef = useRef(null);
   const suggestionInputRef = useRef(null);
   const sidebarRef = useRef(null);
@@ -890,12 +891,53 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
       }}
       onClick={() => onSelectComment && onSelectComment(null)}
     >
-      {/* Header with navigation */}
+      {/* Header with navigation and filters */}
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : '#202124' }}>
-          💬 {unresolvedComments.length}
-          {pendingSuggestions.length > 0 && <span style={{ marginLeft: 8, color: '#10b981' }}>✏️ {pendingSuggestions.length}</span>}
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {/* Comment filter button */}
+          <button
+            onClick={() => setFilter(f => f === 'comments' ? 'all' : 'comments')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 8px',
+              background: filter === 'comments' || filter === 'all' ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent',
+              border: `1px solid ${filter === 'comments' ? '#1a73e8' : (darkMode ? '#4b5563' : '#d1d5db')}`,
+              borderRadius: 4,
+              color: filter === 'comments' ? '#1a73e8' : (darkMode ? 'white' : '#202124'),
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: filter === 'comments' ? 600 : 400
+            }}
+            title="Filtrer les commentaires"
+          >
+            💬 {unresolvedComments.length}
+          </button>
+          
+          {/* Suggestion filter button */}
+          {pendingSuggestions.length > 0 && (
+            <button
+              onClick={() => setFilter(f => f === 'suggestions' ? 'all' : 'suggestions')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '4px 8px',
+                background: filter === 'suggestions' || filter === 'all' ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent',
+                border: `1px solid ${filter === 'suggestions' ? '#10b981' : (darkMode ? '#4b5563' : '#d1d5db')}`,
+                borderRadius: 4,
+                color: filter === 'suggestions' ? '#10b981' : (darkMode ? 'white' : '#202124'),
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: filter === 'suggestions' ? 600 : 400
+              }}
+              title="Filtrer les suggestions"
+            >
+              ✏️ {pendingSuggestions.length}
+            </button>
+          )}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {/* Navigation arrows */}
           <button 
@@ -1227,7 +1269,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   }}
                 >
                   {/* Comments for this element */}
-                  {elementComments.map(c => {
+                  {(filter === 'all' || filter === 'comments') && elementComments.map(c => {
                     const cId = c.id || c._id;
                     const isThisCommentSelected = selectedCommentId === cId || (selectedCommentIndex === idx && elementComments.length === 1);
                     return (
@@ -1262,7 +1304,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   })}
                   
                   {/* Suggestions for this element */}
-                  {suggestions && suggestions
+                  {(filter === 'all' || filter === 'suggestions') && suggestions && suggestions
                     .filter(s => s.elementIndex === idx && s.status === 'pending')
                     .map(s => (
                       <div 
@@ -4974,8 +5016,7 @@ export default function ScreenplayEditor() {
         />
       )}
       
-      {/* Text Selection Comment Button - Google Docs style side button */}
-      {/* Text selection toolbar - Comment & Suggestion buttons */}
+      {/* Text Selection Toolbar - Google Docs style */}
       {textSelection && canComment && textSelection.rect && (
         <div 
           className="text-selection-popup"
@@ -4985,52 +5026,16 @@ export default function ScreenplayEditor() {
             top: textSelection.rect.top || 100,
             display: 'flex',
             flexDirection: 'column',
-            gap: 6,
-            zIndex: 1000
+            gap: 0,
+            zIndex: 1000,
+            background: 'white',
+            borderRadius: 24,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+            padding: 8,
+            border: '1px solid #e0e0e0'
           }}
         >
-          {/* Comment button */}
-          <button 
-            onClick={() => {
-              setPendingInlineComment({
-                elementId: textSelection.elementId,
-                elementIndex: textSelection.elementIndex,
-                text: textSelection.text,
-                startOffset: textSelection.startOffset,
-                endOffset: textSelection.endOffset
-              });
-              setShowComments(true);
-              setTextSelection(null);
-            }}
-            style={{
-              width: 36,
-              height: 36,
-              background: '#1a73e8',
-              border: 'none',
-              borderRadius: 8,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              fontSize: 16,
-              color: 'white',
-              transition: 'transform 0.15s ease, box-shadow 0.15s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'scale(1.1)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.4)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'scale(1)';
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-            }}
-            title="Ajouter un commentaire"
-          >
-            💬
-          </button>
-          
-          {/* Suggestion button */}
+          {/* Suggestion button (pen icon) */}
           <button 
             onClick={() => {
               setPendingSuggestion({
@@ -5044,31 +5049,110 @@ export default function ScreenplayEditor() {
               setTextSelection(null);
             }}
             style={{
-              width: 36,
-              height: 36,
-              background: '#10b981',
+              width: 40,
+              height: 40,
+              background: 'transparent',
               border: 'none',
-              borderRadius: 8,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              borderRadius: 20,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              fontSize: 16,
-              color: 'white',
-              transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+              transition: 'background 0.15s ease'
             }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'scale(1.1)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.4)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'scale(1)';
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
             title="Proposer une modification"
           >
-            ✏️
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </button>
+          
+          {/* Comment button (plus in speech bubble) */}
+          <button 
+            onClick={() => {
+              setPendingInlineComment({
+                elementId: textSelection.elementId,
+                elementIndex: textSelection.elementIndex,
+                text: textSelection.text,
+                startOffset: textSelection.startOffset,
+                endOffset: textSelection.endOffset
+              });
+              setShowComments(true);
+              setTextSelection(null);
+            }}
+            style={{
+              width: 40,
+              height: 40,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'background 0.15s ease'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            title="Ajouter un commentaire"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              <line x1="12" y1="8" x2="12" y2="14" />
+              <line x1="9" y1="11" x2="15" y2="11" />
+            </svg>
+          </button>
+          
+          {/* Emoji button (placeholder) */}
+          <button 
+            style={{
+              width: 40,
+              height: 40,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'not-allowed',
+              opacity: 0.4
+            }}
+            title="Réactions (bientôt)"
+            disabled
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+              <line x1="9" y1="9" x2="9.01" y2="9" />
+              <line x1="15" y1="9" x2="15.01" y2="9" />
+            </svg>
+          </button>
+          
+          {/* Link button (placeholder) */}
+          <button 
+            style={{
+              width: 40,
+              height: 40,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'not-allowed',
+              opacity: 0.4
+            }}
+            title="Lien (bientôt)"
+            disabled
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
           </button>
         </div>
       )}
