@@ -2513,7 +2513,6 @@ export default function ScreenplayEditor() {
   const [sessionStartWords, setSessionStartWords] = useState(0);
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
   const [outlineFilter, setOutlineFilter] = useState({ status: '', assignee: '' });
-  const [showBeatSheet, setShowBeatSheet] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [lastModifiedBy, setLastModifiedBy] = useState(null); // { userName, timestamp }
   const [undoStack, setUndoStack] = useState([]);
@@ -2528,7 +2527,6 @@ export default function ScreenplayEditor() {
     return saved ? JSON.parse(saved) : { daily: 1000, todayWords: 0, lastDate: null };
   });
   const [showGoToScene, setShowGoToScene] = useState(false);
-  const [showWritingGoals, setShowWritingGoals] = useState(false);
   const [editingSynopsis, setEditingSynopsis] = useState(null);
   const [typewriterSound, setTypewriterSound] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -3601,7 +3599,6 @@ export default function ScreenplayEditor() {
       // Escape = Close panels (one at a time)
       if (e.key === 'Escape') {
         if (showGoToScene) { setShowGoToScene(false); return; }
-        if (showWritingGoals) { setShowWritingGoals(false); return; }
         if (showShortcuts) { setShowShortcuts(false); return; }
         if (showRenameChar) { setShowRenameChar(false); return; }
         if (showNoteFor) { setShowNoteFor(null); return; }
@@ -3612,7 +3609,7 @@ export default function ScreenplayEditor() {
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, showWritingGoals, token, docId, title, elements, activeIndex, undo, redo, duplicateScene]);
+  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, token, docId, title, elements, activeIndex, undo, redo, duplicateScene]);
 
   // Typewriter sound effect - placeholder for custom audio files
   // To add real typewriter sounds, place audio files in public folder and update URLs below
@@ -4214,10 +4211,7 @@ export default function ScreenplayEditor() {
         }}>
           <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>📋 Outline</h3>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button onClick={() => setShowBeatSheet(!showBeatSheet)} style={{ background: showBeatSheet ? '#3b82f6' : 'none', border: 'none', color: showBeatSheet ? 'white' : '#9ca3af', cursor: 'pointer', fontSize: 12, padding: '2px 6px', borderRadius: 4 }} title="Beat Sheet">📝</button>
-              <button onClick={() => setShowOutline(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
-            </div>
+            <button onClick={() => setShowOutline(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
           </div>
           
           {/* Filters */}
@@ -4286,33 +4280,6 @@ export default function ScreenplayEditor() {
               <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>
                 {outline.length === 0 ? 'Aucune scène' : 'Aucun résultat'}
               </p>
-            ) : showBeatSheet ? (
-              // Beat Sheet Mode - condensed synopsis view
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {filteredOutline.map(scene => (
-                  <div 
-                    key={scene.id}
-                    onClick={() => navigateToScene(scene.index)}
-                    style={{ 
-                      padding: 10, 
-                      background: darkMode ? '#374151' : '#f3f4f6', 
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      borderLeft: `3px solid ${sceneStatus[scene.id] === 'done' ? '#22c55e' : sceneStatus[scene.id] === 'progress' ? '#f59e0b' : sceneStatus[scene.id] === 'urgent' ? '#ef4444' : '#6b7280'}`
-                    }}
-                  >
-                    <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>
-                      Scène {scene.number} • {scene.wordCount}m
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: 'bold', color: darkMode ? 'white' : 'black', marginBottom: 6 }}>
-                      {scene.content}
-                    </div>
-                    <div style={{ fontSize: 11, color: darkMode ? '#d1d5db' : '#4b5563', fontStyle: 'italic' }}>
-                      {sceneSynopsis[scene.id] || '(pas de synopsis)'}
-                    </div>
-                  </div>
-                ))}
-              </div>
             ) : (
               filteredOutline.map(scene => (
                 <div
@@ -4632,10 +4599,6 @@ export default function ScreenplayEditor() {
                     </button>
                     <button onClick={() => { setShowStats(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📊 Statistiques
-                    </button>
-                    <button onClick={() => { setShowWritingGoals(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>🎯 Objectif d'écriture</span>
-                      <span style={{ fontSize: 10, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : '#6b7280' }}>{Math.round((writingGoal.todayWords / writingGoal.daily) * 100)}%</span>
                     </button>
                     <button onClick={() => { setShowShortcuts(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>⌨️ Raccourcis</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
@@ -5071,17 +5034,6 @@ export default function ScreenplayEditor() {
           onClose={() => setShowGoToScene(false)}
           onGoTo={navigateToSceneByNumber}
           maxScene={outline.length}
-          darkMode={darkMode}
-        />
-      )}
-      
-      {/* Writing Goals Modal */}
-      {showWritingGoals && (
-        <WritingGoalsModal
-          goal={writingGoal}
-          onUpdate={setWritingGoal}
-          onClose={() => setShowWritingGoals(false)}
-          currentWords={stats.words}
           darkMode={darkMode}
         />
       )}
@@ -5554,6 +5506,45 @@ export default function ScreenplayEditor() {
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Mots/heure</span>
                 <span style={{ color: darkMode ? 'white' : 'black' }}>{timerSeconds > 60 ? Math.round(sessionWordCount / (timerSeconds / 3600)) : '—'}</span>
+              </div>
+            </div>
+            
+            {/* Daily Goal Section */}
+            <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: 12, marginTop: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: '#6b7280' }}>🎯 Objectif du jour</span>
+                <span style={{ fontSize: 11, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : (darkMode ? 'white' : '#374151') }}>
+                  {writingGoal.todayWords} / {writingGoal.daily}
+                </span>
+              </div>
+              <div style={{ height: 6, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                <div style={{ 
+                  height: '100%', 
+                  width: `${Math.min(100, Math.round((writingGoal.todayWords / writingGoal.daily) * 100))}%`, 
+                  background: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : '#3b82f6', 
+                  borderRadius: 3, 
+                  transition: 'width 0.3s' 
+                }} />
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[500, 1000, 1500, 2000].map(preset => (
+                  <button
+                    key={preset}
+                    onClick={() => setWritingGoal(g => ({ ...g, daily: preset }))}
+                    style={{ 
+                      flex: 1, 
+                      padding: '4px', 
+                      background: writingGoal.daily === preset ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), 
+                      border: 'none', 
+                      borderRadius: 4, 
+                      color: writingGoal.daily === preset ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'), 
+                      cursor: 'pointer', 
+                      fontSize: 9 
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
