@@ -2360,7 +2360,7 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlightedContent, onTextSelect, onHighlightClick, onSuggestionClick }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlightedContent, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset }) => {
   const editRef = useRef(null);
   const displayRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
@@ -2369,47 +2369,70 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [autoType, setAutoType] = useState(null);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
   const wasActiveRef = useRef(false);
-  const clickOffsetRef = useRef(null); // Store click position for cursor placement
+
+  // Helper to place cursor at specific offset in contenteditable
+  const placeCursorAtOffset = (el, offset) => {
+    if (!el) return;
+    
+    const sel = window.getSelection();
+    const range = document.createRange();
+    
+    // Find the text node and place cursor
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    let currentOffset = 0;
+    let node = walker.nextNode();
+    
+    while (node) {
+      const nodeLength = node.textContent.length;
+      if (currentOffset + nodeLength >= offset) {
+        // Found the right node
+        const localOffset = offset - currentOffset;
+        range.setStart(node, Math.min(localOffset, nodeLength));
+        range.setEnd(node, Math.min(localOffset, nodeLength));
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+      currentOffset += nodeLength;
+      node = walker.nextNode();
+    }
+    
+    // Fallback: place at end
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  };
 
   // Initialize content when becoming active, focus and place cursor at click position
   useEffect(() => { 
     if (isActive && editRef.current) {
       // Only set content when transitioning from inactive to active
       if (!wasActiveRef.current) {
-        editRef.current.innerText = element.content || '';
+        const content = element.content || '';
+        editRef.current.innerText = content;
         wasActiveRef.current = true;
         
-        // Focus
+        // Focus first
         editRef.current.focus();
         
-        // Place cursor at click position or end
-        const range = document.createRange();
-        const sel = window.getSelection();
-        
-        if (editRef.current.firstChild) {
-          const textNode = editRef.current.firstChild;
-          const textLength = textNode.textContent?.length || 0;
-          
-          if (clickOffsetRef.current !== null && clickOffsetRef.current <= textLength) {
-            // Place cursor at click position
-            range.setStart(textNode, clickOffsetRef.current);
-            range.setEnd(textNode, clickOffsetRef.current);
-          } else {
-            // Place cursor at end
-            range.setStart(textNode, textLength);
-            range.setEnd(textNode, textLength);
+        // Place cursor after animation frame to ensure DOM is ready
+        requestAnimationFrame(() => {
+          if (editRef.current) {
+            if (initialCursorOffset !== null && initialCursorOffset !== undefined && initialCursorOffset >= 0 && initialCursorOffset <= content.length) {
+              placeCursorAtOffset(editRef.current, initialCursorOffset);
+            } else {
+              // Place at end
+              placeCursorAtOffset(editRef.current, content.length);
+            }
           }
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-        
-        clickOffsetRef.current = null; // Reset for next time
+        });
       }
     } else {
       wasActiveRef.current = false;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive]); // Only depend on isActive, not content
+  }, [isActive, initialCursorOffset]); // Depend on isActive and initialCursorOffset
   
   // Character autocomplete
   useEffect(() => {
@@ -2520,36 +2543,36 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
             }
             
             // Calculate click position (character offset) for cursor placement
+            let clickOffset = null;
             try {
-              const selection = window.getSelection();
-              if (selection && selection.rangeCount > 0) {
-                // Get caret position from click
-                if (document.caretRangeFromPoint) {
-                  const clickRange = document.caretRangeFromPoint(e.clientX, e.clientY);
-                  if (clickRange && displayRef.current) {
-                    const preCaretRange = document.createRange();
-                    preCaretRange.selectNodeContents(displayRef.current);
-                    preCaretRange.setEnd(clickRange.startContainer, clickRange.startOffset);
-                    clickOffsetRef.current = preCaretRange.toString().length;
-                  }
-                } else if (document.caretPositionFromPoint) {
-                  // Firefox
-                  const caretPos = document.caretPositionFromPoint(e.clientX, e.clientY);
-                  if (caretPos && displayRef.current) {
-                    const preCaretRange = document.createRange();
-                    preCaretRange.selectNodeContents(displayRef.current);
-                    preCaretRange.setEnd(caretPos.offsetNode, caretPos.offset);
-                    clickOffsetRef.current = preCaretRange.toString().length;
-                  }
+              // Get caret position from click coordinates
+              let clickRange = null;
+              if (document.caretRangeFromPoint) {
+                clickRange = document.caretRangeFromPoint(e.clientX, e.clientY);
+              } else if (document.caretPositionFromPoint) {
+                // Firefox
+                const caretPos = document.caretPositionFromPoint(e.clientX, e.clientY);
+                if (caretPos) {
+                  clickRange = document.createRange();
+                  clickRange.setStart(caretPos.offsetNode, caretPos.offset);
+                  clickRange.setEnd(caretPos.offsetNode, caretPos.offset);
                 }
+              }
+              
+              if (clickRange) {
+                // Calculate total offset from start of element
+                const preCaretRange = document.createRange();
+                preCaretRange.selectNodeContents(e.currentTarget);
+                preCaretRange.setEnd(clickRange.startContainer, clickRange.startOffset);
+                clickOffset = preCaretRange.toString().length;
               }
             } catch (err) {
               // Fallback: cursor at end
-              clickOffsetRef.current = null;
+              clickOffset = null;
             }
             
-            // Normal click - activate for editing
-            onFocus(index);
+            // Normal click - activate for editing with cursor offset
+            onFocus(index, clickOffset);
           }}
           onMouseUp={(e) => {
             const selection = window.getSelection();
@@ -2870,6 +2893,7 @@ export default function ScreenplayEditor() {
   const [title, setTitle] = useState('SANS TITRE');
   const [elements, setElements] = useState([{ id: generateId(), type: 'scene', content: '' }]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [cursorOffset, setCursorOffset] = useState(null); // For click-to-cursor positioning
   const [characters, setCharacters] = useState([]);
   const [comments, setComments] = useState([]);
   const [suggestions, setSuggestions] = useState([]); // { id, elementId, elementIndex, originalText, suggestedText, startOffset, endOffset, userName, userColor, createdAt, status: 'pending'|'accepted'|'rejected' }
@@ -4193,6 +4217,16 @@ export default function ScreenplayEditor() {
     } catch (err) { console.error(err); }
   };
 
+  // Handle focus with optional cursor offset for click-to-cursor
+  const handleFocus = useCallback((index, offset = null) => {
+    setActiveIndex(index);
+    setCursorOffset(offset);
+    // Reset cursor offset after it's been applied
+    if (offset !== null) {
+      setTimeout(() => setCursorOffset(null), 100);
+    }
+  }, []);
+
   const handleKeyDown = useCallback((e, index) => {
     if (!canEdit) return;
     const el = elements[index];
@@ -5292,7 +5326,7 @@ export default function ScreenplayEditor() {
                       index={index} 
                       isActive={activeIndex === index} 
                       onUpdate={updateElement} 
-                      onFocus={setActiveIndex} 
+                      onFocus={handleFocus} 
                       onKeyDown={handleKeyDown} 
                       characters={extractedCharacters}
                       locations={extractedLocations}
@@ -5307,6 +5341,7 @@ export default function ScreenplayEditor() {
                       note={notes[element.id]}
                       onNoteClick={(id) => setShowNoteFor(id)}
                       highlightedContent={renderTextWithHighlights(element.content, element.id)}
+                      initialCursorOffset={activeIndex === index ? cursorOffset : null}
                       onTextSelect={(selection) => {
                         if (canComment) {
                           setTextSelection(selection);
