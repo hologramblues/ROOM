@@ -3381,7 +3381,28 @@ export default function ScreenplayEditor() {
   const handleKeyDown = useCallback((e, index) => {
     if (!canEdit) return;
     const el = elements[index];
-    const textarea = e.target;
+    const target = e.target;
+    
+    // Helper to get cursor position in contenteditable
+    const getCursorPosition = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return { pos: 0, atStart: true, atEnd: true };
+      
+      const range = selection.getRangeAt(0);
+      const preCaretRange = range.cloneRange();
+      preCaretRange.selectNodeContents(target);
+      preCaretRange.setEnd(range.startContainer, range.startOffset);
+      const pos = preCaretRange.toString().length;
+      
+      const text = target.innerText || '';
+      return {
+        pos,
+        atStart: pos === 0,
+        atEnd: pos >= text.length,
+        textBefore: text.substring(0, pos),
+        textAfter: text.substring(pos)
+      };
+    };
     
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (el.type === 'parenthetical' && el.content.trim()) { let c = el.content.trim(); if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } insertElement(index, getNextType(el.type)); }
     if (e.key === 'Tab') {
@@ -3398,10 +3419,8 @@ export default function ScreenplayEditor() {
     
     // Smart arrow navigation: move to next/prev element when at last/first line
     if (e.key === 'ArrowDown' && !e.metaKey && !e.ctrlKey) {
-      const cursorPos = textarea.selectionStart;
-      const textBeforeCursor = el.content.substring(0, cursorPos);
-      const textAfterCursor = el.content.substring(cursorPos);
-      const isOnLastLine = !textAfterCursor.includes('\n');
+      const cursor = getCursorPosition();
+      const isOnLastLine = !cursor.textAfter || !cursor.textAfter.includes('\n');
       
       if (isOnLastLine && index < elements.length - 1) {
         e.preventDefault();
@@ -3409,9 +3428,8 @@ export default function ScreenplayEditor() {
       }
     }
     if (e.key === 'ArrowUp' && !e.metaKey && !e.ctrlKey) {
-      const cursorPos = textarea.selectionStart;
-      const textBeforeCursor = el.content.substring(0, cursorPos);
-      const isOnFirstLine = !textBeforeCursor.includes('\n');
+      const cursor = getCursorPosition();
+      const isOnFirstLine = !cursor.textBefore || !cursor.textBefore.includes('\n');
       
       if (isOnFirstLine && index > 0) {
         e.preventDefault();
