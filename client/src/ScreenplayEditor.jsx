@@ -873,20 +873,32 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   }, [sortedIndices, elementPositions, cardHeights]);
 
   // Navigation functions
+  // Get filtered indices based on current filter
+  const filteredSortedIndices = useMemo(() => {
+    if (filter === 'all') return sortedIndices;
+    if (filter === 'comments') {
+      return Object.keys(commentsByElementIndex).map(Number).sort((a, b) => a - b);
+    }
+    if (filter === 'suggestions') {
+      return Object.keys(suggestionsByElementIndex).map(Number).sort((a, b) => a - b);
+    }
+    return sortedIndices;
+  }, [filter, sortedIndices, commentsByElementIndex, suggestionsByElementIndex]);
+
   const navigateToComment = (direction) => {
-    if (sortedIndices.length === 0) return;
+    if (filteredSortedIndices.length === 0) return;
     
-    // Find current position in sortedIndices based on activeIndex
-    const currentPos = sortedIndices.findIndex(idx => idx >= activeIndex);
+    // Find current position in filteredSortedIndices based on activeIndex
+    const currentPos = filteredSortedIndices.findIndex(idx => idx >= activeIndex);
     let targetPos;
     
     if (direction === 'next') {
-      targetPos = currentPos === -1 ? 0 : Math.min(currentPos + 1, sortedIndices.length - 1);
+      targetPos = currentPos === -1 ? 0 : Math.min(currentPos + 1, filteredSortedIndices.length - 1);
     } else {
       targetPos = currentPos <= 0 ? 0 : currentPos - 1;
     }
     
-    const targetIdx = sortedIndices[targetPos];
+    const targetIdx = filteredSortedIndices[targetPos];
     if (targetIdx !== undefined && onNavigateToElement) {
       onNavigateToElement(targetIdx);
     }
@@ -960,35 +972,35 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
           {/* Navigation arrows */}
           <button 
             onClick={() => navigateToComment('prev')}
-            disabled={sortedIndices.length === 0}
+            disabled={filteredSortedIndices.length === 0}
             style={{ 
               background: 'none', 
               border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
               borderRadius: 4,
-              color: sortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#374151'), 
-              cursor: sortedIndices.length === 0 ? 'not-allowed' : 'pointer', 
+              color: filteredSortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#374151'), 
+              cursor: filteredSortedIndices.length === 0 ? 'not-allowed' : 'pointer', 
               fontSize: 14, 
               padding: '4px 8px',
               lineHeight: 1
             }}
-            title="Commentaire précédent"
+            title={filter === 'suggestions' ? 'Suggestion précédente' : 'Commentaire précédent'}
           >
             ↑
           </button>
           <button 
             onClick={() => navigateToComment('next')}
-            disabled={sortedIndices.length === 0}
+            disabled={filteredSortedIndices.length === 0}
             style={{ 
               background: 'none', 
               border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
               borderRadius: 4,
-              color: sortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#374151'), 
-              cursor: sortedIndices.length === 0 ? 'not-allowed' : 'pointer', 
+              color: filteredSortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#374151'), 
+              cursor: filteredSortedIndices.length === 0 ? 'not-allowed' : 'pointer', 
               fontSize: 14, 
               padding: '4px 8px',
               lineHeight: 1
             }}
-            title="Commentaire suivant"
+            title={filter === 'suggestions' ? 'Suggestion suivante' : 'Commentaire suivant'}
           >
             ↓
           </button>
@@ -1327,6 +1339,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                     .map(s => (
                       <div 
                         key={s.id}
+                        data-suggestion-id={s.id}
                         style={{
                           background: darkMode ? '#1f2937' : 'white',
                           border: '2px solid #10b981',
@@ -1983,7 +1996,7 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlightedContent, onTextSelect, onHighlightClick }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlightedContent, onTextSelect, onHighlightClick, onSuggestionClick }) => {
   const textareaRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
@@ -2123,12 +2136,19 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           // Clear selection popup when leaving
         }}
         onClick={(e) => {
-          // Check if clicked on a highlight span
+          // Check if clicked on a highlight span (comment or suggestion)
           const target = e.target;
+          // Check for comment
           if (target.dataset && target.dataset.commentId) {
-            // Clicked on a highlight - open the comment
             if (typeof onHighlightClick === 'function') {
               onHighlightClick(target.dataset.commentId);
+            }
+          }
+          // Check for suggestion (could be the parent span or child spans)
+          const suggestionSpan = target.closest('[data-suggestion-id]');
+          if (suggestionSpan && suggestionSpan.dataset.suggestionId) {
+            if (typeof onSuggestionClick === 'function') {
+              onSuggestionClick(suggestionSpan.dataset.suggestionId);
             }
           }
         }}
@@ -4717,6 +4737,13 @@ export default function ScreenplayEditor() {
                         setTimeout(() => {
                           const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
                           if (commentEl) commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 100);
+                      }}
+                      onSuggestionClick={(suggestionId) => {
+                        setShowComments(true);
+                        setTimeout(() => {
+                          const suggestionEl = document.querySelector(`[data-suggestion-id="${suggestionId}"]`);
+                          if (suggestionEl) suggestionEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         }, 100);
                       }}
                     />
