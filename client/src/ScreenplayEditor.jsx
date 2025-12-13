@@ -4264,7 +4264,52 @@ export default function ScreenplayEditor() {
     const el = elements[index];
     const target = e.target;
     
-    // Helper to get cursor position in contenteditable
+    // Helper to check if cursor is at the very start of the element
+    const isCursorAtStart = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return true;
+      
+      const range = selection.getRangeAt(0);
+      if (range.startOffset !== 0) return false;
+      
+      // Check if we're in the first text node
+      let node = range.startContainer;
+      while (node && node !== target) {
+        if (node.previousSibling) return false;
+        node = node.parentNode;
+      }
+      return true;
+    };
+    
+    // Helper to check if cursor is at the very end of the element
+    const isCursorAtEnd = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return true;
+      
+      const range = selection.getRangeAt(0);
+      const container = range.startContainer;
+      const offset = range.startOffset;
+      
+      // If in a text node, check if at end of that node
+      if (container.nodeType === Node.TEXT_NODE) {
+        if (offset < container.textContent.length) return false;
+      }
+      
+      // Check if there's any content after the cursor position
+      let node = container;
+      while (node && node !== target) {
+        if (node.nextSibling) {
+          // Check if next sibling has actual content
+          const next = node.nextSibling;
+          if (next.nodeType === Node.TEXT_NODE && next.textContent.length > 0) return false;
+          if (next.nodeType === Node.ELEMENT_NODE && next.textContent.length > 0) return false;
+        }
+        node = node.parentNode;
+      }
+      return true;
+    };
+    
+    // Helper to get cursor position for Enter key handling
     const getCursorPosition = () => {
       const selection = window.getSelection();
       if (!selection || selection.rangeCount === 0) return { pos: 0, atStart: true, atEnd: true };
@@ -4275,7 +4320,7 @@ export default function ScreenplayEditor() {
       preCaretRange.setEnd(range.startContainer, range.startOffset);
       const pos = preCaretRange.toString().length;
       
-      const text = target.innerText || '';
+      const text = (target.innerText || '').replace(/\n$/, '');
       return {
         pos,
         atStart: pos === 0,
@@ -4315,23 +4360,22 @@ export default function ScreenplayEditor() {
     }
     if (e.key === 'Backspace' && el.content === '' && elements.length > 1) { e.preventDefault(); deleteElement(index); }
     
-    // Arrow navigation: let browser handle normal cursor movement
+    // Arrow navigation: let browser handle normal cursor movement within element
     // Only intercept at element boundaries
     if (e.key === 'ArrowDown' && !e.metaKey && !e.ctrlKey) {
-      const cursor = getCursorPosition();
-      // Only move to next element if cursor is at the very end
-      if (cursor.atEnd && index < elements.length - 1) {
+      // Only move to next element if truly at the end of content
+      if (isCursorAtEnd() && index < elements.length - 1) {
         e.preventDefault();
-        handleFocus(index + 1, 0); // Move to start of next element
+        handleFocus(index + 1, 0);
       }
       // Otherwise, let browser handle normal line navigation
     }
+    
     if (e.key === 'ArrowUp' && !e.metaKey && !e.ctrlKey) {
-      const cursor = getCursorPosition();
-      // Only move to prev element if cursor is at the very start
-      if (cursor.atStart && index > 0) {
+      // Only move to prev element if truly at the start
+      if (isCursorAtStart() && index > 0) {
         e.preventDefault();
-        handleFocus(index - 1, elements[index - 1].content.length); // Move to end of prev element
+        handleFocus(index - 1, elements[index - 1].content.length);
       }
       // Otherwise, let browser handle normal line navigation
     }
