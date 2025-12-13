@@ -213,6 +213,31 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
 };
 
 // ============ INLINE COMMENT (Google Docs style) ============
+// Render text with @mentions highlighted
+const renderWithMentions = (text, darkMode) => {
+  if (!text) return '';
+  const parts = text.split(/(@\w+)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('@')) {
+      return (
+        <span 
+          key={i} 
+          style={{ 
+            color: '#3b82f6', 
+            fontWeight: 600,
+            background: darkMode ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)',
+            padding: '1px 4px',
+            borderRadius: 3
+          }}
+        >
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+};
+
 const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdit, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode, isSelected }) => {
   const replyInputRef = useRef(null);
   const editInputRef = useRef(null);
@@ -277,7 +302,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical'
             }}>
-              {comment.content}
+              {renderWithMentions(comment.content, darkMode)}
             </p>
             {comment.replies?.length > 0 && (
               <span style={{ color: '#6b7280', fontSize: 11, marginTop: 4, display: 'block' }}>
@@ -535,7 +560,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
           fontSize: 13, 
           lineHeight: 1.5
         }}>
-          {comment.content}
+          {renderWithMentions(comment.content, darkMode)}
         </p>
       )}
       
@@ -569,7 +594,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                   {new Date(reply.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                 </span>
               </div>
-              <p style={{ color: darkMode ? '#d1d5db' : '#374151', margin: '2px 0 0 0', fontSize: 12, lineHeight: 1.4 }}>{reply.content}</p>
+              <p style={{ color: darkMode ? '#d1d5db' : '#374151', margin: '2px 0 0 0', fontSize: 12, lineHeight: 1.4 }}>{renderWithMentions(reply.content, darkMode)}</p>
             </div>
           </div>
         </div>
@@ -662,7 +687,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion }) => {
+const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
@@ -670,11 +695,70 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const [inlineCommentText, setInlineCommentText] = useState('');
   const [suggestionText, setSuggestionText] = useState('');
   const [filter, setFilter] = useState('all'); // 'all', 'comments', 'suggestions'
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
   const inlineCommentInputRef = useRef(null);
   const suggestionInputRef = useRef(null);
   const sidebarRef = useRef(null);
   const commentRefs = useRef({});
   const prevActiveIndexRef = useRef(activeIndex);
+
+  // Get unique users for mentions (from connected users)
+  const mentionableUsers = useMemo(() => {
+    if (!users) return [];
+    return users.filter(u => u.name).map(u => ({ name: u.name, color: u.color }));
+  }, [users]);
+
+  // Filter users based on search
+  const filteredMentions = useMemo(() => {
+    if (!mentionSearch) return mentionableUsers;
+    return mentionableUsers.filter(u => 
+      u.name.toLowerCase().includes(mentionSearch.toLowerCase())
+    );
+  }, [mentionableUsers, mentionSearch]);
+
+  // Handle @ detection in comment text
+  const handleCommentChange = (e) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    setInlineCommentText(value);
+    
+    // Check if we're typing after @
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+    
+    if (atMatch) {
+      setShowMentions(true);
+      setMentionSearch(atMatch[1]);
+      setMentionIndex(0);
+    } else {
+      setShowMentions(false);
+      setMentionSearch('');
+    }
+  };
+
+  // Insert mention into text
+  const insertMention = (userName) => {
+    const textarea = inlineCommentInputRef.current;
+    if (!textarea) return;
+    
+    const cursorPos = textarea.selectionStart;
+    const textBeforeCursor = inlineCommentText.slice(0, cursorPos);
+    const textAfterCursor = inlineCommentText.slice(cursorPos);
+    
+    // Find the @ position
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+    if (atMatch) {
+      const beforeAt = textBeforeCursor.slice(0, -atMatch[0].length);
+      const newText = beforeAt + '@' + userName + ' ' + textAfterCursor;
+      setInlineCommentText(newText);
+    }
+    
+    setShowMentions(false);
+    setMentionSearch('');
+    textarea.focus();
+  };
 
   // Deselect comment/suggestion when clicking elsewhere in the script (activeIndex changes)
   useEffect(() => {
@@ -1069,19 +1153,42 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   "{pendingInlineComment.text.slice(0, 60)}{pendingInlineComment.text.length > 60 ? '...' : ''}"
                 </div>
                 
-                <div style={{ padding: 12 }}>
+                <div style={{ padding: 12, position: 'relative' }}>
                   <textarea
                     ref={inlineCommentInputRef}
                     value={inlineCommentText}
-                    onChange={(e) => setInlineCommentText(e.target.value)}
-                    placeholder="Ajouter un commentaire..."
+                    onChange={handleCommentChange}
+                    placeholder="Ajouter un commentaire... (@mention)"
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey && inlineCommentText.trim()) {
+                      // Handle mention navigation
+                      if (showMentions && filteredMentions.length > 0) {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          setMentionIndex(i => Math.min(i + 1, filteredMentions.length - 1));
+                          return;
+                        }
+                        if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          setMentionIndex(i => Math.max(i - 1, 0));
+                          return;
+                        }
+                        if (e.key === 'Enter' || e.key === 'Tab') {
+                          e.preventDefault();
+                          insertMention(filteredMentions[mentionIndex].name);
+                          return;
+                        }
+                        if (e.key === 'Escape') {
+                          setShowMentions(false);
+                          return;
+                        }
+                      }
+                      
+                      if (e.key === 'Enter' && !e.shiftKey && inlineCommentText.trim() && !showMentions) {
                         e.preventDefault();
                         onSubmitInlineComment(inlineCommentText);
                         setInlineCommentText('');
                       }
-                      if (e.key === 'Escape') {
+                      if (e.key === 'Escape' && !showMentions) {
                         onCancelInlineComment();
                         setInlineCommentText('');
                       }
@@ -1099,6 +1206,58 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                       boxSizing: 'border-box'
                     }}
                   />
+                  
+                  {/* Mentions dropdown */}
+                  {showMentions && filteredMentions.length > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '100%',
+                      left: 12,
+                      right: 12,
+                      marginBottom: -8,
+                      background: darkMode ? '#374151' : 'white',
+                      border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                      borderRadius: 6,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      maxHeight: 150,
+                      overflow: 'auto',
+                      zIndex: 10
+                    }}>
+                      {filteredMentions.map((user, idx) => (
+                        <div
+                          key={user.name}
+                          onClick={() => insertMention(user.name)}
+                          style={{
+                            padding: '8px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            cursor: 'pointer',
+                            background: idx === mentionIndex ? (darkMode ? '#4b5563' : '#f3f4f6') : 'transparent'
+                          }}
+                          onMouseEnter={() => setMentionIndex(idx)}
+                        >
+                          <div style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: '50%',
+                            background: user.color || '#3b82f6',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: 10,
+                            fontWeight: 'bold'
+                          }}>
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
+                          <span style={{ fontSize: 13, color: darkMode ? 'white' : '#374151' }}>
+                            {user.name}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
                     <button
                       onClick={() => {
@@ -2513,6 +2672,8 @@ export default function ScreenplayEditor() {
   const [sessionStartWords, setSessionStartWords] = useState(0);
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
   const [outlineFilter, setOutlineFilter] = useState({ status: '', assignee: '' });
+  const [outlineChapters, setOutlineChapters] = useState({}); // { sceneId: 'Acte 1' } - chapter before this scene
+  const [editingChapter, setEditingChapter] = useState(null); // sceneId being edited
   const [lastSaved, setLastSaved] = useState(null);
   const [lastModifiedBy, setLastModifiedBy] = useState(null); // { userName, timestamp }
   const [undoStack, setUndoStack] = useState([]);
@@ -4281,62 +4442,166 @@ export default function ScreenplayEditor() {
                 {outline.length === 0 ? 'Aucune scène' : 'Aucun résultat'}
               </p>
             ) : (
-              filteredOutline.map(scene => (
-                <div
-                  key={scene.id}
-                  onClick={() => navigateToScene(scene.index)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    background: currentSceneNumber === scene.number 
-                      ? (darkMode ? '#374151' : '#e5e7eb') 
-                      : 'transparent',
-                    borderRadius: 6,
-                    marginBottom: 4,
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 8,
-                    cursor: 'pointer',
-                    borderLeft: sceneStatus[scene.id] ? `3px solid ${
-                      sceneStatus[scene.id] === 'done' ? '#22c55e' : 
-                      sceneStatus[scene.id] === 'progress' ? '#f59e0b' : 
-                      sceneStatus[scene.id] === 'urgent' ? '#ef4444' : '#6b7280'
-                    }` : '3px solid transparent',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  {/* Scene number */}
-                  <span style={{ 
-                    color: '#6b7280', 
-                    fontSize: 9, 
-                    fontWeight: 'bold',
-                    minWidth: 20,
-                    padding: '2px 4px',
-                    background: darkMode ? '#4b5563' : '#d1d5db',
-                    borderRadius: 3,
-                    textAlign: 'center',
-                    flexShrink: 0
-                  }}>
-                    {scene.number}
-                  </span>
+              filteredOutline.map((scene, sceneIdx) => (
+                <React.Fragment key={scene.id}>
+                  {/* Chapter header before scene (if exists) */}
+                  {outlineChapters[scene.id] && editingChapter !== scene.id && (
+                    <div 
+                      onClick={() => setEditingChapter(scene.id)}
+                      style={{
+                        padding: '8px 12px',
+                        marginBottom: 8,
+                        marginTop: sceneIdx > 0 ? 16 : 0,
+                        background: darkMode ? '#1e3a5f' : '#dbeafe',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <span style={{ 
+                        fontSize: 12, 
+                        fontWeight: 'bold', 
+                        color: darkMode ? '#93c5fd' : '#1e40af',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        📁 {outlineChapters[scene.id]}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOutlineChapters(prev => {
+                            const updated = { ...prev };
+                            delete updated[scene.id];
+                            return updated;
+                          });
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: darkMode ? '#93c5fd' : '#1e40af',
+                          cursor: 'pointer',
+                          fontSize: 10,
+                          opacity: 0.6
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
                   
-                  {/* Scene content */}
-                  <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                  {/* Chapter editing input */}
+                  {editingChapter === scene.id && (
+                    <div style={{ padding: '8px', marginBottom: 8, marginTop: sceneIdx > 0 ? 16 : 0 }}>
+                      <input
+                        autoFocus
+                        defaultValue={outlineChapters[scene.id] || ''}
+                        placeholder="Ex: Acte 1, Partie 2..."
+                        onBlur={(e) => {
+                          const value = e.target.value.trim();
+                          if (value) {
+                            setOutlineChapters(prev => ({ ...prev, [scene.id]: value }));
+                          } else {
+                            setOutlineChapters(prev => {
+                              const updated = { ...prev };
+                              delete updated[scene.id];
+                              return updated;
+                            });
+                          }
+                          setEditingChapter(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const value = e.target.value.trim();
+                            if (value) {
+                              setOutlineChapters(prev => ({ ...prev, [scene.id]: value }));
+                            }
+                            setEditingChapter(null);
+                          }
+                          if (e.key === 'Escape') {
+                            setEditingChapter(null);
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          fontSize: 12,
+                          fontWeight: 'bold',
+                          background: darkMode ? '#1e3a5f' : '#dbeafe',
+                          border: `2px solid ${darkMode ? '#3b82f6' : '#2563eb'}`,
+                          borderRadius: 6,
+                          color: darkMode ? '#93c5fd' : '#1e40af',
+                          outline: 'none',
+                          textTransform: 'uppercase'
+                        }}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Scene card */}
+                  <div
+                    onClick={() => navigateToScene(scene.index)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      if (!outlineChapters[scene.id]) {
+                        setEditingChapter(scene.id);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      background: currentSceneNumber === scene.number 
+                        ? (darkMode ? '#374151' : '#e5e7eb') 
+                        : 'transparent',
+                      borderRadius: 6,
+                      marginBottom: 4,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      cursor: 'pointer',
+                      borderLeft: sceneStatus[scene.id] ? `3px solid ${
+                        sceneStatus[scene.id] === 'done' ? '#22c55e' : 
+                        sceneStatus[scene.id] === 'progress' ? '#f59e0b' : 
+                        sceneStatus[scene.id] === 'urgent' ? '#ef4444' : '#6b7280'
+                      }` : '3px solid transparent',
+                      boxSizing: 'border-box'
+                    }}
+                    title="Clic droit pour ajouter un chapitre"
+                  >
+                    {/* Scene number */}
                     <span style={{ 
-                      fontSize: 11, 
-                      lineHeight: 1.3,
-                      display: 'block',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      color: darkMode ? 'white' : 'black'
+                      color: '#6b7280', 
+                      fontSize: 9, 
+                      fontWeight: 'bold',
+                      minWidth: 20,
+                      padding: '2px 4px',
+                      background: darkMode ? '#4b5563' : '#d1d5db',
+                      borderRadius: 3,
+                      textAlign: 'center',
+                      flexShrink: 0
                     }}>
-                      {scene.content}
+                      {scene.number}
                     </span>
-                    <span style={{ fontSize: 9, color: '#6b7280', display: 'block', marginTop: 1 }}>
-                      {scene.wordCount}m • ~{Math.max(1, Math.round(scene.wordCount / 150))}min
-                    </span>
-                  </div>
+                    
+                    {/* Scene content */}
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                      <span style={{ 
+                        fontSize: 11, 
+                        lineHeight: 1.3,
+                        display: 'block',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: darkMode ? 'white' : 'black'
+                      }}>
+                        {scene.content}
+                      </span>
+                      <span style={{ fontSize: 9, color: '#6b7280', display: 'block', marginTop: 1 }}>
+                        {scene.wordCount}m • ~{Math.max(1, Math.round(scene.wordCount / 150))}min
+                      </span>
+                    </div>
                   
                   {/* Action buttons */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
@@ -4432,11 +4697,13 @@ export default function ScreenplayEditor() {
                     </button>
                   </div>
                 </div>
+                </React.Fragment>
               ))
             )}
           </div>
-          <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 12, color: '#6b7280', textAlign: 'center' }}>
-            {outline.length} scène{outline.length > 1 ? 's' : ''} • Position: {currentSceneNumber}/{outline.length}
+          <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', textAlign: 'center' }}>
+            <div>{outline.length} scène{outline.length > 1 ? 's' : ''} • Position: {currentSceneNumber}/{outline.length}</div>
+            <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7 }}>💡 Clic droit sur une scène = ajouter un chapitre</div>
           </div>
         </div>
       )}
@@ -4853,6 +5120,7 @@ export default function ScreenplayEditor() {
           }}
           selectedSuggestionId={selectedSuggestionId}
           onSelectSuggestion={(id) => { setSelectedSuggestionId(id); if (id) setSelectedCommentId(null); }}
+          users={users}
         />
       )}
       
