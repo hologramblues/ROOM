@@ -238,14 +238,67 @@ const renderWithMentions = (text, darkMode) => {
   });
 };
 
-const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdit, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode, isSelected }) => {
+const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdit, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode, isSelected, mentionableUsers }) => {
   const replyInputRef = useRef(null);
   const editInputRef = useRef(null);
   const [showMenu, setShowMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(comment.content);
+  const [showReplyMentions, setShowReplyMentions] = useState(false);
+  const [replyMentionSearch, setReplyMentionSearch] = useState('');
+  const [replyMentionIndex, setReplyMentionIndex] = useState(0);
+  
   useEffect(() => { if (isReplying && replyInputRef.current) replyInputRef.current.focus(); }, [isReplying]);
   useEffect(() => { if (isEditing && editInputRef.current) editInputRef.current.focus(); }, [isEditing]);
+  
+  // Filter mentions based on search
+  const filteredReplyMentions = useMemo(() => {
+    if (!mentionableUsers) return [];
+    if (!replyMentionSearch) return mentionableUsers;
+    return mentionableUsers.filter(u => 
+      u.name.toLowerCase().includes(replyMentionSearch.toLowerCase())
+    );
+  }, [mentionableUsers, replyMentionSearch]);
+
+  // Handle @ detection in reply text
+  const handleReplyChange = (e) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    onReplyChange(value);
+    
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+    
+    if (atMatch) {
+      setShowReplyMentions(true);
+      setReplyMentionSearch(atMatch[1]);
+      setReplyMentionIndex(0);
+    } else {
+      setShowReplyMentions(false);
+      setReplyMentionSearch('');
+    }
+  };
+
+  // Insert mention into reply
+  const insertReplyMention = (userName) => {
+    const textarea = replyInputRef.current;
+    if (!textarea) return;
+    
+    const cursorPos = textarea.selectionStart;
+    const textBeforeCursor = replyContent.slice(0, cursorPos);
+    const textAfterCursor = replyContent.slice(cursorPos);
+    
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+    if (atMatch) {
+      const beforeAt = textBeforeCursor.slice(0, -atMatch[0].length);
+      const newText = beforeAt + '@' + userName + ' ' + textAfterCursor;
+      onReplyChange(newText);
+    }
+    
+    setShowReplyMentions(false);
+    setReplyMentionSearch('');
+    textarea.focus();
+  };
   
   // Close menu when clicking outside
   useEffect(() => {
@@ -603,18 +656,41 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
       {/* Reply input - Google Docs style */}
       {canComment && (
         isReplying ? (
-          <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` }}>
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, position: 'relative' }}>
             <textarea 
               ref={replyInputRef} 
               value={replyContent} 
-              onChange={e => onReplyChange(e.target.value)} 
-              placeholder="Répondre..." 
+              onChange={handleReplyChange} 
+              placeholder="Répondre... (@mention)" 
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && replyContent.trim()) {
+                // Handle mention navigation
+                if (showReplyMentions && filteredReplyMentions.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setReplyMentionIndex(i => Math.min(i + 1, filteredReplyMentions.length - 1));
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setReplyMentionIndex(i => Math.max(i - 1, 0));
+                    return;
+                  }
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    insertReplyMention(filteredReplyMentions[replyMentionIndex].name);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    setShowReplyMentions(false);
+                    return;
+                  }
+                }
+                
+                if (e.key === 'Enter' && !e.shiftKey && replyContent.trim() && !showReplyMentions) {
                   e.preventDefault();
                   onSubmitReply(comment.id);
                 }
-                if (e.key === 'Escape') {
+                if (e.key === 'Escape' && !showReplyMentions) {
                   onCancelReply();
                 }
               }}
@@ -631,6 +707,70 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
               }} 
               rows={2} 
             />
+            
+            {/* Mentions dropdown for reply */}
+            {showReplyMentions && filteredReplyMentions.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: 0,
+                right: 0,
+                marginBottom: 4,
+                background: darkMode ? '#374151' : 'white',
+                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                borderRadius: 6,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                maxHeight: 120,
+                overflow: 'auto',
+                zIndex: 10
+              }}>
+                {filteredReplyMentions.map((user, idx) => (
+                  <div
+                    key={user.name}
+                    onClick={() => insertReplyMention(user.name)}
+                    style={{
+                      padding: '6px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: 'pointer',
+                      background: idx === replyMentionIndex ? (darkMode ? '#4b5563' : '#f3f4f6') : 'transparent'
+                    }}
+                    onMouseEnter={() => setReplyMentionIndex(idx)}
+                  >
+                    <div style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      background: user.color || '#3b82f6',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontSize: 9,
+                      fontWeight: 'bold',
+                      position: 'relative'
+                    }}>
+                      {user.name.charAt(0).toUpperCase()}
+                      <span style={{
+                        position: 'absolute',
+                        bottom: -1,
+                        right: -1,
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: user.online ? '#22c55e' : '#6b7280',
+                        border: `1px solid ${darkMode ? '#374151' : 'white'}`
+                      }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: darkMode ? 'white' : '#374151' }}>
+                      {user.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            
             <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
               <button 
                 onClick={() => onSubmitReply(comment.id)} 
@@ -1529,6 +1669,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                           onCancelReply={() => { setReplyTo(null); setReplyContent(''); }}
                           darkMode={darkMode}
                           isSelected={isThisCommentSelected}
+                          mentionableUsers={mentionableUsers}
                         />
                       </div>
                     );

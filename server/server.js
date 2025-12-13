@@ -209,6 +209,23 @@ io.on('connection', (socket) => {
       if (!activeRooms.has(docId)) activeRooms.set(docId, new Map());
       const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: socket.user?.color || getRandomColor(), role, cursor: null };
       activeRooms.get(docId).set(socket.id, userInfo);
+      
+      // Get collaborators with their user info
+      let collaboratorsList = [];
+      if (doc.collaborators && doc.collaborators.length > 0) {
+        const collabUserIds = doc.collaborators.map(c => c.userId);
+        const collabUsers = await User.find({ _id: { $in: collabUserIds } }).select('name color');
+        collaboratorsList = doc.collaborators.map(c => {
+          const user = collabUsers.find(u => u._id.equals(c.userId));
+          return { userId: c.userId, name: user?.name || 'Inconnu', color: user?.color || '#6b7280', role: c.role };
+        });
+      }
+      // Add owner to collaborators list
+      const owner = await User.findById(doc.ownerId).select('name color');
+      if (owner) {
+        collaboratorsList.unshift({ userId: doc.ownerId, name: owner.name, color: owner.color, role: 'owner' });
+      }
+      
       socket.emit('document-state', { 
         id: doc.shortId, 
         title: doc.title, 
@@ -218,7 +235,8 @@ io.on('connection', (socket) => {
         comments: doc.comments, 
         suggestions: doc.suggestions || [],
         users: Array.from(activeRooms.get(docId).values()), 
-        role 
+        role,
+        collaborators: collaboratorsList
       });
       socket.to(docId).emit('user-joined', { user: userInfo, users: Array.from(activeRooms.get(docId).values()) });
     } catch (error) { console.error('Join error:', error); }
