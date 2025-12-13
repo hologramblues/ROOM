@@ -256,6 +256,32 @@ io.on('connection', (socket) => {
     } catch (error) { console.error('Delete error:', error); }
   });
 
+  socket.on('comment-add', async ({ comment }) => {
+    if (!currentDocId) return;
+    try {
+      const doc = await Document.findOne({ shortId: currentDocId });
+      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) return;
+      // Use the client's ID to keep consistency
+      const newComment = {
+        id: comment.id,
+        elementId: comment.elementId,
+        elementIndex: comment.elementIndex,
+        highlight: comment.highlight || null,
+        userId: socket.user?._id,
+        userName: comment.userName || socket.user?.name || 'Anonyme',
+        userColor: comment.userColor || socket.user?.color || '#6b7280',
+        content: comment.content,
+        createdAt: new Date(),
+        replies: [],
+        resolved: false
+      };
+      doc.comments.push(newComment);
+      await doc.save();
+      // Broadcast to others (sender already has it locally)
+      socket.to(currentDocId).emit('comment-added', { comment: newComment });
+    } catch (error) { console.error('Comment add error:', error); }
+  });
+
   socket.on('cursor-move', ({ index, position }) => {
     if (!currentDocId) return;
     const room = activeRooms.get(currentDocId);
