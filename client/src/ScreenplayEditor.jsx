@@ -2371,11 +2371,14 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [filtered, setFiltered] = useState([]);
   const [autoType, setAutoType] = useState(null); // 'character' or 'location'
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
+  
+  // Ref to track if we should prevent focus (when clicking highlight)
+  const preventFocusRef = useRef(false);
 
   // Focus and set content when becoming active
   useEffect(() => { 
-    if (isActive && textareaRef.current) {
-      // Set the content via DOM since React renders null when active
+    if (isActive && textareaRef.current && !preventFocusRef.current) {
+      // Set the content via DOM since React renders simplified content when active
       textareaRef.current.innerText = element.content || '';
       textareaRef.current.focus();
       // Place cursor at end
@@ -2388,6 +2391,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         sel.addRange(range);
       }
     }
+    preventFocusRef.current = false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]); // Only run when isActive changes, not on content changes
   
@@ -2488,8 +2492,40 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         contentEditable={canEdit && !isLocked}
         suppressContentEditableWarning={true}
         onInput={handleInput}
-        onFocus={() => onFocus(index)}
+        onFocus={() => {
+          if (!preventFocusRef.current) {
+            onFocus(index);
+          }
+        }}
         onKeyDown={handleKey}
+        onMouseDown={(e) => {
+          // Check if clicked on a highlight span BEFORE focus happens
+          const target = e.target;
+          
+          // Check for comment highlight
+          if (target.dataset && target.dataset.commentId) {
+            e.preventDefault(); // Prevent focus
+            preventFocusRef.current = true;
+            if (typeof onHighlightClick === 'function') {
+              onHighlightClick(target.dataset.commentId);
+            }
+            return;
+          }
+          
+          // Check for suggestion highlight (could be nested spans)
+          const suggestionSpan = target.closest('[data-suggestion-id]');
+          if (suggestionSpan && suggestionSpan.dataset.suggestionId) {
+            e.preventDefault(); // Prevent focus
+            preventFocusRef.current = true;
+            if (typeof onSuggestionClick === 'function') {
+              onSuggestionClick(suggestionSpan.dataset.suggestionId);
+            }
+            return;
+          }
+          
+          // Normal click - allow focus
+          preventFocusRef.current = false;
+        }}
         onMouseUp={(e) => {
           // Handle text selection for inline comments
           const selection = window.getSelection();
@@ -2518,23 +2554,6 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         }}
         onBlur={() => {
           // Nothing needed here anymore
-        }}
-        onClick={(e) => {
-          // Check if clicked on a highlight span (comment or suggestion)
-          const target = e.target;
-          // Check for comment
-          if (target.dataset && target.dataset.commentId) {
-            if (typeof onHighlightClick === 'function') {
-              onHighlightClick(target.dataset.commentId);
-            }
-          }
-          // Check for suggestion (could be the parent span or child spans)
-          const suggestionSpan = target.closest('[data-suggestion-id]');
-          if (suggestionSpan && suggestionSpan.dataset.suggestionId) {
-            if (typeof onSuggestionClick === 'function') {
-              onSuggestionClick(suggestionSpan.dataset.suggestionId);
-            }
-          }
         }}
         style={{ 
           ...getElementStyle(element.type), 
