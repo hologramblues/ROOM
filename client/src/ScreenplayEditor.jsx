@@ -1257,23 +1257,17 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
         </div>
       </div>
       
-      {/* Content area - synced with document scroll (no manual scroll) */}
+      {/* Content area - allow scrolling */}
       <div 
         ref={sidebarRef}
         style={{ 
           flex: 1, 
-          overflow: 'hidden',
-          position: 'relative'
+          overflowY: 'auto',
+          position: 'relative',
+          padding: '8px 12px'
         }}
       >
-        {/* Inner container - moves with document scroll */}
-        <div style={{ 
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          transform: `translateY(${-scrollTop}px)`
-        }}>
+        <div>
           
           {/* Pending inline comment form - Google Docs style */}
           {pendingInlineComment && (() => {
@@ -1649,6 +1643,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                       <div 
                         key={cId} 
                         data-comment-id={cId}
+                        data-comment-card-id={cId}
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectComment && onSelectComment(isThisCommentSelected ? null : cId);
@@ -1688,6 +1683,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                         <div 
                           key={s.id}
                           data-suggestion-id={s.id}
+                          data-suggestion-card-id={s.id}
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectSuggestion && onSelectSuggestion(isSelected ? null : s.id);
@@ -2372,22 +2368,32 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [filtered, setFiltered] = useState([]);
   const [autoType, setAutoType] = useState(null);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
+  const wasActiveRef = useRef(false);
 
-  // Focus edit div when becoming active
+  // Initialize content when becoming active, focus and place cursor at end
   useEffect(() => { 
     if (isActive && editRef.current) {
-      editRef.current.focus();
-      // Place cursor at end
-      const range = document.createRange();
-      const sel = window.getSelection();
-      if (editRef.current.childNodes.length > 0) {
-        range.selectNodeContents(editRef.current);
-        range.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(range);
+      // Only set content when transitioning from inactive to active
+      if (!wasActiveRef.current) {
+        editRef.current.innerText = element.content || '';
+        wasActiveRef.current = true;
+        
+        // Focus and place cursor at end
+        editRef.current.focus();
+        const range = document.createRange();
+        const sel = window.getSelection();
+        if (editRef.current.childNodes.length > 0) {
+          range.selectNodeContents(editRef.current);
+          range.collapse(false); // cursor at end
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
       }
+    } else {
+      wasActiveRef.current = false;
     }
-  }, [isActive]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]); // Only depend on isActive, not content
   
   // Character autocomplete
   useEffect(() => {
@@ -2542,9 +2548,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           }}
           style={baseStyle}
           data-placeholder={getPlaceholder(element.type)}
-        >
-          {element.content || '\u200B'}
-        </div>
+        />
       )}
       
       {autoType === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
@@ -5267,37 +5271,25 @@ export default function ScreenplayEditor() {
                         setShowComments(true);
                         setSelectedCommentId(commentId);
                         setSelectedSuggestionId(null);
-                        // Find the element containing this comment and scroll to it
-                        const comment = comments.find(c => c.id === commentId);
-                        if (comment) {
-                          const elIdx = comment.elementIndex;
-                          if (elIdx !== undefined) {
-                            setActiveIndex(elIdx);
-                            setTimeout(() => {
-                              // Scroll the document to the element - this syncs the comment panel
-                              const el = document.querySelector(`[data-element-index="${elIdx}"]`);
-                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }, 50);
+                        // Scroll to the comment card in the sidebar
+                        setTimeout(() => {
+                          const commentCard = document.querySelector(`[data-comment-card-id="${commentId}"]`);
+                          if (commentCard) {
+                            commentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
                           }
-                        }
+                        }, 150);
                       }}
                       onSuggestionClick={(suggestionId) => {
                         setShowComments(true);
                         setSelectedSuggestionId(suggestionId);
                         setSelectedCommentId(null);
-                        // Find the element containing this suggestion and scroll to it
-                        const suggestion = suggestions.find(s => s.id === suggestionId);
-                        if (suggestion) {
-                          const elIdx = suggestion.elementIndex;
-                          if (elIdx !== undefined) {
-                            setActiveIndex(elIdx);
-                            setTimeout(() => {
-                              // Scroll the document to the element - this syncs the comment panel
-                              const el = document.querySelector(`[data-element-index="${elIdx}"]`);
-                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }, 50);
+                        // Scroll to the suggestion card in the sidebar
+                        setTimeout(() => {
+                          const suggestionCard = document.querySelector(`[data-suggestion-card-id="${suggestionId}"]`);
+                          if (suggestionCard) {
+                            suggestionCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
                           }
-                        }
+                        }, 150);
                       }}
                     />
                   </div>
