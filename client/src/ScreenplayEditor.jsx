@@ -2369,8 +2369,9 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [autoType, setAutoType] = useState(null);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
   const wasActiveRef = useRef(false);
+  const clickOffsetRef = useRef(null); // Store click position for cursor placement
 
-  // Initialize content when becoming active, focus and place cursor at end
+  // Initialize content when becoming active, focus and place cursor at click position
   useEffect(() => { 
     if (isActive && editRef.current) {
       // Only set content when transitioning from inactive to active
@@ -2378,16 +2379,31 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         editRef.current.innerText = element.content || '';
         wasActiveRef.current = true;
         
-        // Focus and place cursor at end
+        // Focus
         editRef.current.focus();
+        
+        // Place cursor at click position or end
         const range = document.createRange();
         const sel = window.getSelection();
-        if (editRef.current.childNodes.length > 0) {
-          range.selectNodeContents(editRef.current);
-          range.collapse(false); // cursor at end
+        
+        if (editRef.current.firstChild) {
+          const textNode = editRef.current.firstChild;
+          const textLength = textNode.textContent?.length || 0;
+          
+          if (clickOffsetRef.current !== null && clickOffsetRef.current <= textLength) {
+            // Place cursor at click position
+            range.setStart(textNode, clickOffsetRef.current);
+            range.setEnd(textNode, clickOffsetRef.current);
+          } else {
+            // Place cursor at end
+            range.setStart(textNode, textLength);
+            range.setEnd(textNode, textLength);
+          }
           sel.removeAllRanges();
           sel.addRange(range);
         }
+        
+        clickOffsetRef.current = null; // Reset for next time
       }
     } else {
       wasActiveRef.current = false;
@@ -2501,6 +2517,35 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
                 onSuggestionClick(suggestionSpan.dataset.suggestionId);
               }
               return;
+            }
+            
+            // Calculate click position (character offset) for cursor placement
+            try {
+              const selection = window.getSelection();
+              if (selection && selection.rangeCount > 0) {
+                // Get caret position from click
+                if (document.caretRangeFromPoint) {
+                  const clickRange = document.caretRangeFromPoint(e.clientX, e.clientY);
+                  if (clickRange && displayRef.current) {
+                    const preCaretRange = document.createRange();
+                    preCaretRange.selectNodeContents(displayRef.current);
+                    preCaretRange.setEnd(clickRange.startContainer, clickRange.startOffset);
+                    clickOffsetRef.current = preCaretRange.toString().length;
+                  }
+                } else if (document.caretPositionFromPoint) {
+                  // Firefox
+                  const caretPos = document.caretPositionFromPoint(e.clientX, e.clientY);
+                  if (caretPos && displayRef.current) {
+                    const preCaretRange = document.createRange();
+                    preCaretRange.selectNodeContents(displayRef.current);
+                    preCaretRange.setEnd(caretPos.offsetNode, caretPos.offset);
+                    clickOffsetRef.current = preCaretRange.toString().length;
+                  }
+                }
+              }
+            } catch (err) {
+              // Fallback: cursor at end
+              clickOffsetRef.current = null;
             }
             
             // Normal click - activate for editing
