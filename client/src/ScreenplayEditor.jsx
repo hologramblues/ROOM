@@ -662,13 +662,15 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, selectedCommentId, onSelectComment }) => {
+const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
   const [inlineCommentText, setInlineCommentText] = useState('');
+  const [suggestionText, setSuggestionText] = useState('');
   const inlineCommentInputRef = useRef(null);
+  const suggestionInputRef = useRef(null);
   const sidebarRef = useRef(null);
   const commentRefs = useRef({});
   const prevActiveIndexRef = useRef(activeIndex);
@@ -695,6 +697,21 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
       pendingCommentInitRef.current = null;
     }
   }, [pendingInlineComment]);
+
+  // Focus on suggestion input when pending suggestion appears
+  const pendingSuggestionInitRef = useRef(null);
+  useEffect(() => {
+    if (pendingSuggestion && pendingSuggestion !== pendingSuggestionInitRef.current) {
+      pendingSuggestionInitRef.current = pendingSuggestion;
+      setSuggestionText(pendingSuggestion.originalText || '');
+      setTimeout(() => {
+        suggestionInputRef.current?.focus();
+        suggestionInputRef.current?.select();
+      }, 100);
+    } else if (!pendingSuggestion) {
+      pendingSuggestionInitRef.current = null;
+    }
+  }, [pendingSuggestion]);
 
   const addReply = async (commentId) => {
     console.log('addReply called:', commentId, replyContent);
@@ -759,6 +776,7 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
   }, [commentsByElementIndex]);
 
   const unresolvedComments = comments.filter(c => !c.resolved);
+  const pendingSuggestions = suggestions ? suggestions.filter(s => s.status === 'pending') : [];
   
   // Track measured heights of each comment card
   const [cardHeights, setCardHeights] = useState({});
@@ -874,7 +892,10 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
     >
       {/* Header with navigation */}
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : '#202124' }}>💬 Commentaires ({unresolvedComments.length})</h3>
+        <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : '#202124' }}>
+          💬 {unresolvedComments.length}
+          {pendingSuggestions.length > 0 && <span style={{ marginLeft: 8, color: '#10b981' }}>✏️ {pendingSuggestions.length}</span>}
+        </h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {/* Navigation arrows */}
           <button 
@@ -1050,7 +1071,143 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
             );
           })()}
           
-          {sortedIndices.length === 0 && !pendingInlineComment ? (
+          {/* Pending suggestion form */}
+          {pendingSuggestion && (() => {
+            const pendingIdx = pendingSuggestion.elementIndex;
+            const existingCommentsForElement = sortedIndices.includes(pendingIdx);
+            let pendingTop;
+            
+            if (existingCommentsForElement) {
+              const cardTop = adjustedPositions[pendingIdx] || elementPositions[pendingIdx] || (pendingIdx * 30);
+              const cardHeight = cardHeights[pendingIdx] || 100;
+              pendingTop = cardTop + cardHeight + 10;
+            } else {
+              pendingTop = elementPositions[pendingIdx] || (pendingIdx * 30);
+            }
+            
+            return (
+              <div style={{ 
+                position: 'absolute',
+                top: pendingTop,
+                left: 8,
+                right: 8,
+                background: darkMode ? '#374151' : 'white',
+                borderRadius: 8,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                border: `2px solid #10b981`,
+                zIndex: 10,
+                overflow: 'hidden'
+              }}>
+                {/* Header */}
+                <div style={{ 
+                  background: 'rgba(16, 185, 129, 0.1)', 
+                  padding: '8px 12px',
+                  borderBottom: `1px solid ${darkMode ? '#4b5563' : '#10b981'}`,
+                  fontSize: 12,
+                  color: '#10b981',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}>
+                  ✏️ Proposer une modification
+                </div>
+                
+                <div style={{ padding: 12 }}>
+                  {/* Original text (strikethrough) */}
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: '#6b7280' }}>Texte original :</span>
+                    <div style={{ 
+                      textDecoration: 'line-through', 
+                      color: '#ef4444', 
+                      fontSize: 13,
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      padding: '4px 8px',
+                      borderRadius: 4,
+                      marginTop: 4
+                    }}>
+                      {pendingSuggestion.originalText}
+                    </div>
+                  </div>
+                  
+                  {/* Suggested text input */}
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: '#6b7280' }}>Remplacer par :</span>
+                    <textarea
+                      ref={suggestionInputRef}
+                      value={suggestionText}
+                      onChange={(e) => setSuggestionText(e.target.value)}
+                      placeholder="Tapez votre suggestion..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          onSubmitSuggestion(suggestionText);
+                          setSuggestionText('');
+                        }
+                        if (e.key === 'Escape') {
+                          onCancelSuggestion();
+                          setSuggestionText('');
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: 10,
+                        border: `2px solid #10b981`,
+                        borderRadius: 6,
+                        fontSize: 13,
+                        resize: 'none',
+                        minHeight: 50,
+                        background: darkMode ? '#1f2937' : '#f0fdf4',
+                        color: darkMode ? '#6ee7b7' : '#166534',
+                        boxSizing: 'border-box',
+                        marginTop: 4
+                      }}
+                    />
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => {
+                        onCancelSuggestion();
+                        setSuggestionText('');
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        background: 'transparent',
+                        color: darkMode ? '#9ca3af' : '#5f6368',
+                        border: 'none',
+                        borderRadius: 4,
+                        fontSize: 13,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={() => {
+                        onSubmitSuggestion(suggestionText);
+                        setSuggestionText('');
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        background: '#10b981',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 4,
+                        fontSize: 13,
+                        cursor: 'pointer',
+                        fontWeight: 500
+                      }}
+                    >
+                      Suggérer
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          
+          {sortedIndices.length === 0 && !pendingInlineComment && !pendingSuggestion ? (
             <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire</p>
           ) : sortedIndices.length > 0 ? (
             sortedIndices.map((idx, arrayIndex) => {
@@ -1103,6 +1260,99 @@ const CommentsSidebar = ({ comments, elements, activeIndex, selectedCommentIndex
                       </div>
                     );
                   })}
+                  
+                  {/* Suggestions for this element */}
+                  {suggestions && suggestions
+                    .filter(s => s.elementIndex === idx && s.status === 'pending')
+                    .map(s => (
+                      <div 
+                        key={s.id}
+                        style={{
+                          background: darkMode ? '#1f2937' : 'white',
+                          border: '2px solid #10b981',
+                          borderRadius: 8,
+                          padding: 12,
+                          marginBottom: 6,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <div style={{ 
+                            width: 28, 
+                            height: 28, 
+                            borderRadius: '50%', 
+                            background: s.userColor || '#10b981', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            color: 'white', 
+                            fontWeight: 'bold', 
+                            fontSize: 11 
+                          }}>
+                            {s.userName?.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 13 }}>{s.userName}</span>
+                            <span style={{ marginLeft: 8, color: '#10b981', fontSize: 11, fontWeight: 500 }}>✏️ Suggestion</span>
+                          </div>
+                        </div>
+                        
+                        <div style={{ fontSize: 13, marginBottom: 10 }}>
+                          <div style={{ 
+                            textDecoration: 'line-through', 
+                            color: '#ef4444', 
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            padding: '4px 8px',
+                            borderRadius: 4,
+                            marginBottom: 4
+                          }}>
+                            {s.originalText}
+                          </div>
+                          <div style={{ 
+                            color: '#16a34a', 
+                            background: 'rgba(34, 197, 94, 0.1)',
+                            padding: '4px 8px',
+                            borderRadius: 4,
+                            fontWeight: 500
+                          }}>
+                            {s.suggestedText}
+                          </div>
+                        </div>
+                        
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={() => onRejectSuggestion && onRejectSuggestion(s.id)}
+                            style={{
+                              padding: '6px 12px',
+                              background: 'transparent',
+                              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                              borderRadius: 4,
+                              color: darkMode ? '#9ca3af' : '#6b7280',
+                              fontSize: 12,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Rejeter
+                          </button>
+                          <button
+                            onClick={() => onAcceptSuggestion && onAcceptSuggestion(s.id)}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#10b981',
+                              border: 'none',
+                              borderRadius: 4,
+                              color: 'white',
+                              fontSize: 12,
+                              cursor: 'pointer',
+                              fontWeight: 500
+                            }}
+                          >
+                            ✓ Accepter
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  }
                 </div>
               );
             })
@@ -2102,8 +2352,10 @@ export default function ScreenplayEditor() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [characters, setCharacters] = useState([]);
   const [comments, setComments] = useState([]);
+  const [suggestions, setSuggestions] = useState([]); // { id, elementId, elementIndex, originalText, suggestedText, startOffset, endOffset, userName, userColor, createdAt, status: 'pending'|'accepted'|'rejected' }
   const [textSelection, setTextSelection] = useState(null); // { elementId, elementIndex, text, startOffset, endOffset, rect }
   const [pendingInlineComment, setPendingInlineComment] = useState(null); // { elementId, elementIndex, text, startOffset, endOffset }
+  const [pendingSuggestion, setPendingSuggestion] = useState(null); // { elementId, elementIndex, originalText, startOffset, endOffset }
   const [connected, setConnected] = useState(false);
   const [users, setUsers] = useState([]);
   const [myId, setMyId] = useState(null);
@@ -2329,6 +2581,7 @@ export default function ScreenplayEditor() {
             setElements(data.elements);
             setCharacters(data.characters || []);
             setComments(data.comments || []);
+            setSuggestions(data.suggestions || []);
             loadedDocRef.current = docId;
             if (data.isOwner) setMyRole('editor');
             else if (data.publicAccess?.enabled) setMyRole(data.publicAccess.role || 'viewer');
@@ -2350,7 +2603,8 @@ export default function ScreenplayEditor() {
     socket.on('disconnect', () => setConnected(false));
     socket.on('document-state', data => { 
       setUsers(data.users || []); 
-      if (data.role) setMyRole(data.role); 
+      if (data.role) setMyRole(data.role);
+      if (data.suggestions) setSuggestions(data.suggestions);
       // Use server collaborators if available, otherwise build from online users
       console.log('Received collaborators:', data.collaborators);
       if (data.collaborators && data.collaborators.length > 0) {
@@ -2371,6 +2625,11 @@ export default function ScreenplayEditor() {
     socket.on('comment-resolved', ({ commentId, resolved }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, resolved } : c)));
     socket.on('comment-deleted', ({ commentId }) => setComments(p => p.filter(c => c.id !== commentId && c._id !== commentId)));
     socket.on('comment-updated', ({ commentId, content }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, content } : c)));
+    
+    // Suggestion socket listeners
+    socket.on('suggestion-added', ({ suggestion }) => setSuggestions(p => [...p, suggestion]));
+    socket.on('suggestion-accepted', ({ suggestionId }) => setSuggestions(p => p.filter(s => s.id !== suggestionId)));
+    socket.on('suggestion-rejected', ({ suggestionId }) => setSuggestions(p => p.filter(s => s.id !== suggestionId)));
     
     // Chat messages
     socket.on('chat-message', (message) => {
@@ -2972,17 +3231,34 @@ export default function ScreenplayEditor() {
   const renderTextWithHighlights = (content, elementId) => {
     if (!content) return '';
     
-    // Find all highlights for this element
+    // Find all highlights for this element (comments)
     const elementHighlights = comments
       .filter(c => c.elementId === elementId && c.highlight && !c.resolved)
       .map(c => ({
         ...c.highlight,
+        type: 'comment',
         commentId: c.id,
         userColor: c.userColor
-      }))
+      }));
+    
+    // Find all suggestions for this element
+    const elementSuggestions = suggestions
+      .filter(s => s.elementId === elementId && s.status === 'pending')
+      .map(s => ({
+        startOffset: s.startOffset,
+        endOffset: s.endOffset,
+        type: 'suggestion',
+        suggestionId: s.id,
+        originalText: s.originalText,
+        suggestedText: s.suggestedText,
+        userColor: s.userColor
+      }));
+    
+    // Combine and sort by startOffset
+    const allHighlights = [...elementHighlights, ...elementSuggestions]
       .sort((a, b) => a.startOffset - b.startOffset);
     
-    if (elementHighlights.length === 0) {
+    if (allHighlights.length === 0) {
       return content;
     }
     
@@ -2990,7 +3266,7 @@ export default function ScreenplayEditor() {
     const segments = [];
     let lastIndex = 0;
     
-    elementHighlights.forEach((highlight, idx) => {
+    allHighlights.forEach((highlight) => {
       // Add text before this highlight
       if (highlight.startOffset > lastIndex) {
         segments.push({
@@ -2999,13 +3275,24 @@ export default function ScreenplayEditor() {
         });
       }
       
-      // Add highlighted text
-      segments.push({
-        type: 'highlight',
-        content: content.slice(highlight.startOffset, highlight.endOffset),
-        commentId: highlight.commentId,
-        userColor: highlight.userColor
-      });
+      if (highlight.type === 'comment') {
+        // Comment highlight
+        segments.push({
+          type: 'highlight',
+          content: content.slice(highlight.startOffset, highlight.endOffset),
+          commentId: highlight.commentId,
+          userColor: highlight.userColor
+        });
+      } else if (highlight.type === 'suggestion') {
+        // Suggestion: show original (strikethrough) + suggested (green)
+        segments.push({
+          type: 'suggestion',
+          originalContent: content.slice(highlight.startOffset, highlight.endOffset),
+          suggestedContent: highlight.suggestedText,
+          suggestionId: highlight.suggestionId,
+          userColor: highlight.userColor
+        });
+      }
       
       lastIndex = highlight.endOffset;
     });
@@ -3034,6 +3321,36 @@ export default function ScreenplayEditor() {
             title="Cliquer pour voir le commentaire"
           >
             {seg.content}
+          </span>
+        );
+      }
+      if (seg.type === 'suggestion') {
+        return (
+          <span key={idx} data-suggestion-id={seg.suggestionId}>
+            <span
+              style={{
+                background: 'rgba(239, 68, 68, 0.2)',
+                textDecoration: 'line-through',
+                color: '#dc2626',
+                borderRadius: 2,
+                padding: '0 1px'
+              }}
+              title="Texte à supprimer"
+            >
+              {seg.originalContent}
+            </span>
+            <span
+              style={{
+                background: 'rgba(34, 197, 94, 0.3)',
+                color: '#16a34a',
+                borderRadius: 2,
+                padding: '0 2px',
+                fontWeight: 500
+              }}
+              title="Texte suggéré"
+            >
+              {seg.suggestedContent}
+            </span>
           </span>
         );
       }
@@ -4355,6 +4672,7 @@ export default function ScreenplayEditor() {
       {showComments && (
         <CommentsSidebar 
           comments={comments} 
+          suggestions={suggestions}
           elements={elements} 
           activeIndex={activeIndex}
           selectedCommentIndex={selectedCommentIndex}
@@ -4365,7 +4683,7 @@ export default function ScreenplayEditor() {
           token={token} 
           docId={docId} 
           canComment={canComment}
-          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setSelectedCommentId(null); setPendingInlineComment(null); }}
+          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setSelectedCommentId(null); setPendingInlineComment(null); setPendingSuggestion(null); }}
           darkMode={darkMode}
           onNavigateToElement={(idx) => {
             setActiveIndex(idx);
@@ -4406,6 +4724,60 @@ export default function ScreenplayEditor() {
             }
           }}
           onCancelInlineComment={() => setPendingInlineComment(null)}
+          pendingSuggestion={pendingSuggestion}
+          onSubmitSuggestion={(suggestedText) => {
+            if (pendingSuggestion) {
+              const newSuggestion = {
+                id: 'suggestion-' + Date.now(),
+                elementId: pendingSuggestion.elementId,
+                elementIndex: pendingSuggestion.elementIndex,
+                originalText: pendingSuggestion.originalText,
+                suggestedText: suggestedText,
+                startOffset: pendingSuggestion.startOffset,
+                endOffset: pendingSuggestion.endOffset,
+                userName: currentUser?.name || 'Anonyme',
+                userColor: currentUser?.color || '#6b7280',
+                createdAt: new Date().toISOString(),
+                status: 'pending'
+              };
+              
+              setSuggestions(prev => [...prev, newSuggestion]);
+              
+              // Sync to server
+              if (socketRef.current) {
+                socketRef.current.emit('suggestion-add', { suggestion: newSuggestion });
+              }
+              
+              setPendingSuggestion(null);
+            }
+          }}
+          onCancelSuggestion={() => setPendingSuggestion(null)}
+          onAcceptSuggestion={(suggestionId) => {
+            const suggestion = suggestions.find(s => s.id === suggestionId);
+            if (suggestion) {
+              // Apply the suggestion to the element
+              const elementIndex = elements.findIndex(el => el.id === suggestion.elementId);
+              if (elementIndex !== -1) {
+                const element = elements[elementIndex];
+                const newContent = 
+                  element.content.substring(0, suggestion.startOffset) + 
+                  suggestion.suggestedText + 
+                  element.content.substring(suggestion.endOffset);
+                updateElement(elementIndex, { ...element, content: newContent });
+              }
+              // Remove the suggestion
+              setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+              if (socketRef.current) {
+                socketRef.current.emit('suggestion-accept', { suggestionId });
+              }
+            }
+          }}
+          onRejectSuggestion={(suggestionId) => {
+            setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+            if (socketRef.current) {
+              socketRef.current.emit('suggestion-reject', { suggestionId });
+            }
+          }}
         />
       )}
       
@@ -4603,52 +4975,102 @@ export default function ScreenplayEditor() {
       )}
       
       {/* Text Selection Comment Button - Google Docs style side button */}
+      {/* Text selection toolbar - Comment & Suggestion buttons */}
       {textSelection && canComment && textSelection.rect && (
-        <button 
+        <div 
           className="text-selection-popup"
-          onClick={() => {
-            // Open comments panel with pending inline comment
-            setPendingInlineComment({
-              elementId: textSelection.elementId,
-              elementIndex: textSelection.elementIndex,
-              text: textSelection.text,
-              startOffset: textSelection.startOffset,
-              endOffset: textSelection.endOffset
-            });
-            setShowComments(true);
-            setTextSelection(null);
-          }}
           style={{
             position: 'fixed',
             right: showComments ? 340 : 20,
             top: textSelection.rect.top || 100,
-            width: 32,
-            height: 32,
-            background: '#f59e0b',
-            border: 'none',
-            borderRadius: '50%',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-            zIndex: 1000,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: 16,
-            color: 'white',
-            transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+            flexDirection: 'column',
+            gap: 6,
+            zIndex: 1000
           }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'scale(1.1)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.4)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-          }}
-          title="Ajouter un commentaire"
         >
-          💬
-        </button>
+          {/* Comment button */}
+          <button 
+            onClick={() => {
+              setPendingInlineComment({
+                elementId: textSelection.elementId,
+                elementIndex: textSelection.elementIndex,
+                text: textSelection.text,
+                startOffset: textSelection.startOffset,
+                endOffset: textSelection.endOffset
+              });
+              setShowComments(true);
+              setTextSelection(null);
+            }}
+            style={{
+              width: 36,
+              height: 36,
+              background: '#1a73e8',
+              border: 'none',
+              borderRadius: 8,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: 16,
+              color: 'white',
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'scale(1.1)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.4)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+            }}
+            title="Ajouter un commentaire"
+          >
+            💬
+          </button>
+          
+          {/* Suggestion button */}
+          <button 
+            onClick={() => {
+              setPendingSuggestion({
+                elementId: textSelection.elementId,
+                elementIndex: textSelection.elementIndex,
+                originalText: textSelection.text,
+                startOffset: textSelection.startOffset,
+                endOffset: textSelection.endOffset
+              });
+              setShowComments(true);
+              setTextSelection(null);
+            }}
+            style={{
+              width: 36,
+              height: 36,
+              background: '#10b981',
+              border: 'none',
+              borderRadius: 8,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: 16,
+              color: 'white',
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'scale(1.1)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.4)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+            }}
+            title="Proposer une modification"
+          >
+            ✏️
+          </button>
+        </div>
       )}
 
       {/* Drag overlay - prevents blue selection during panel drag */}

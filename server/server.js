@@ -63,7 +63,17 @@ app.get('/api/documents/:shortId', optionalAuthMiddleware, async (req, res) => {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc) return res.status(404).json({ error: 'Document non trouve' });
     if (!checkDocumentAccess(doc, req.user, 'viewer')) return res.status(403).json({ error: 'Acces refuse' });
-    res.json({ id: doc.shortId, title: doc.title, elements: doc.elements, characters: doc.characters, locations: doc.locations, comments: doc.comments, isOwner: req.user && doc.ownerId.equals(req.user._id), publicAccess: doc.publicAccess });
+    res.json({ 
+      id: doc.shortId, 
+      title: doc.title, 
+      elements: doc.elements, 
+      characters: doc.characters, 
+      locations: doc.locations, 
+      comments: doc.comments, 
+      suggestions: doc.suggestions || [],
+      isOwner: req.user && doc.ownerId.equals(req.user._id), 
+      publicAccess: doc.publicAccess 
+    });
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
@@ -88,6 +98,8 @@ app.post('/api/documents/:shortId/restore/:historyId', authMiddleware, async (re
     res.json({ success: true });
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
+
+// ============ COMMENT ROUTES ============
 
 app.post('/api/documents/:shortId/comments', authMiddleware, async (req, res) => {
   try {
@@ -175,6 +187,8 @@ app.put('/api/documents/:shortId/comments/:commentId', authMiddleware, async (re
   } catch (error) { console.error(error); res.status(500).json({ error: 'Erreur' }); }
 });
 
+// ============ SOCKET.IO ============
+
 const activeRooms = new Map();
 io.use(socketAuthMiddleware);
 
@@ -195,7 +209,17 @@ io.on('connection', (socket) => {
       if (!activeRooms.has(docId)) activeRooms.set(docId, new Map());
       const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: socket.user?.color || getRandomColor(), role, cursor: null };
       activeRooms.get(docId).set(socket.id, userInfo);
-      socket.emit('document-state', { id: doc.shortId, title: doc.title, elements: doc.elements, characters: doc.characters, locations: doc.locations, comments: doc.comments, users: Array.from(activeRooms.get(docId).values()), role });
+      socket.emit('document-state', { 
+        id: doc.shortId, 
+        title: doc.title, 
+        elements: doc.elements, 
+        characters: doc.characters, 
+        locations: doc.locations, 
+        comments: doc.comments, 
+        suggestions: doc.suggestions || [],
+        users: Array.from(activeRooms.get(docId).values()), 
+        role 
+      });
       socket.to(docId).emit('user-joined', { user: userInfo, users: Array.from(activeRooms.get(docId).values()) });
     } catch (error) { console.error('Join error:', error); }
   });
@@ -256,12 +280,13 @@ io.on('connection', (socket) => {
     } catch (error) { console.error('Delete error:', error); }
   });
 
+  // ============ COMMENT SOCKET HANDLERS ============
+
   socket.on('comment-add', async ({ comment }) => {
     if (!currentDocId) return;
     try {
       const doc = await Document.findOne({ shortId: currentDocId });
       if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) return;
-      // Use the client's ID to keep consistency
       const newComment = {
         id: comment.id,
         elementId: comment.elementId,
@@ -277,10 +302,99 @@ io.on('connection', (socket) => {
       };
       doc.comments.push(newComment);
       await doc.save();
-      // Broadcast to others (sender already has it locally)
       socket.to(currentDocId).emit('comment-added', { comment: newComment });
     } catch (error) { console.error('Comment add error:', error); }
   });
+
+  // ============ SUGGESTION SOCKET HANDLERS ============
+
+  socket.on('suggestion-add', async ({ suggestion }) => {
+    if (!currentDocId) return;
+    try {
+      const doc = await Document.findOne({ shortId: currentDocId });
+      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) return;
+      
+      const newSuggestion = {
+        id: suggestion.id,
+        elementId: suggestion.elementId,
+        elementIndex: suggestion.elementIndex,
+        originalText: suggestion.originalText,
+        suggestedText: suggestion.suggestedText,
+        startOffset: suggestion.startOffset,
+        endOffset: suggestion.endOffset,
+        userId: socket.user?._id,
+        userName: suggestion.userName || socket.user?.name || 'Anonyme',
+        userColor: suggestion.userColor || socket.user?.color || '#10b981',
+        status: 'pending',
+        createdAt: new Date()
+      };
+      
+      if (!doc.suggestions) doc.suggestions = [];
+      doc.suggestions.push(newSuggestion);
+      doc.markModified('suggestions');
+      await doc.save();
+      
+      socket.to(currentDocId).emit('suggestion-added', { suggestion: newSuggestion });
+      console.log('Suggestion added:', newSuggestion.id);
+    } catch (error) { console.error('Suggestion add error:', error); }
+  });
+
+  socket.on('suggestion-accept', async ({ suggestionId }) => {
+    if (!currentDocId) return;
+    try {
+      const doc = await Document.findOne({ shortId: currentDocId });
+      if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
+      
+      const suggestionIndex = doc.suggestions?.findIndex(s => s.id === suggestionId);
+      if (suggestionIndex !== -1 && suggestionIndex !== undefined) {
+        const suggestion = doc.suggestions[suggestionIndex];
+        
+        // Apply the suggestion to the element
+        const elementIndex = doc.elements.findIndex(el => el.id === suggestion.elementId);
+        if (elementIndex !== -1) {
+          const element = doc.elements[elementIndex];
+          const newContent = 
+            element.content.substring(0, suggestion.startOffset) + 
+            suggestion.suggestedText + 
+            element.content.substring(suggestion.endOffset);
+          doc.elements[elementIndex].content = newContent;
+          doc.markModified('elements');
+          
+          // Broadcast element update
+          socket.to(currentDocId).emit('element-updated', { index: elementIndex, element: doc.elements[elementIndex] });
+        }
+        
+        // Remove the suggestion
+        doc.suggestions.splice(suggestionIndex, 1);
+        doc.markModified('suggestions');
+        await doc.save();
+        
+        // Broadcast suggestion acceptance
+        io.to(currentDocId).emit('suggestion-accepted', { suggestionId });
+        console.log('Suggestion accepted:', suggestionId);
+      }
+    } catch (error) { console.error('Suggestion accept error:', error); }
+  });
+
+  socket.on('suggestion-reject', async ({ suggestionId }) => {
+    if (!currentDocId) return;
+    try {
+      const doc = await Document.findOne({ shortId: currentDocId });
+      if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
+      
+      const suggestionIndex = doc.suggestions?.findIndex(s => s.id === suggestionId);
+      if (suggestionIndex !== -1 && suggestionIndex !== undefined) {
+        doc.suggestions.splice(suggestionIndex, 1);
+        doc.markModified('suggestions');
+        await doc.save();
+        
+        io.to(currentDocId).emit('suggestion-rejected', { suggestionId });
+        console.log('Suggestion rejected:', suggestionId);
+      }
+    } catch (error) { console.error('Suggestion reject error:', error); }
+  });
+
+  // ============ CURSOR & DISCONNECT ============
 
   socket.on('cursor-move', ({ index, position }) => {
     if (!currentDocId) return;
