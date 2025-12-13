@@ -2371,29 +2371,12 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [filtered, setFiltered] = useState([]);
   const [autoType, setAutoType] = useState(null); // 'character' or 'location'
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
-  
-  // Track if we're currently editing to prevent React from overwriting DOM
-  const isEditingRef = useRef(false);
-  const lastContentRef = useRef(element.content);
 
-  // Sync content from parent only when not editing (for remote updates)
-  useEffect(() => {
-    if (textareaRef.current && !isEditingRef.current && !isActive) {
-      if (textareaRef.current.innerText !== element.content) {
-        textareaRef.current.innerText = element.content || '';
-      }
-    }
-    lastContentRef.current = element.content;
-  }, [element.content, isActive]);
-  
-  // Set content when becoming active
+  // Focus and set content when becoming active
   useEffect(() => { 
     if (isActive && textareaRef.current) {
-      // Set content if different
-      const currentText = textareaRef.current.innerText.replace(/\u200B/g, '');
-      if (currentText !== element.content) {
-        textareaRef.current.innerText = element.content || '';
-      }
+      // Set the content via DOM since React renders null when active
+      textareaRef.current.innerText = element.content || '';
       textareaRef.current.focus();
       // Place cursor at end
       const range = document.createRange();
@@ -2405,12 +2388,10 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         sel.addRange(range);
       }
     }
-    if (!isActive) {
-      isEditingRef.current = false;
-    }
-  }, [isActive]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]); // Only run when isActive changes, not on content changes
   
-  // Auto-resize textarea - use setTimeout to ensure DOM is ready when switching from div to textarea
+  // Auto-resize
   useEffect(() => { 
     const adjustHeight = () => {
       if (textareaRef.current) { 
@@ -2419,7 +2400,6 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       }
     };
     adjustHeight();
-    // Also adjust after a small delay to handle the div->textarea switch
     if (isActive) {
       const timer = setTimeout(adjustHeight, 10);
       return () => clearTimeout(timer);
@@ -2433,7 +2413,6 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       const f = characters.filter(c => c.toUpperCase().startsWith(q) && c.toUpperCase() !== q);
       setFiltered(f); setShowAuto(f.length > 0); setAutoIdx(0); setAutoType('character');
     } else if (element.type === 'scene' && isActive && element.content.length > 4) {
-      // Location autocomplete after INT. or EXT.
       const match = element.content.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*(.*)$/i);
       if (match && match[2] && match[2].length > 0) {
         const q = match[2].toUpperCase();
@@ -2460,6 +2439,13 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       if (e.key === 'Escape') { setShowAuto(false); return; }
     }
     onKeyDown(e, index);
+  };
+  
+  // Handle input - just update the content, no cursor management needed
+  const handleInput = (e) => {
+    if (!canEdit) return;
+    const text = e.currentTarget.innerText;
+    onUpdate(index, { ...element, content: text });
   };
   
   // Check if content has highlights
@@ -2501,14 +2487,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         ref={textareaRef}
         contentEditable={canEdit && !isLocked}
         suppressContentEditableWarning={true}
-        onInput={(e) => {
-          if (canEdit) {
-            isEditingRef.current = true;
-            // Extract plain text from contenteditable
-            const text = e.currentTarget.innerText;
-            onUpdate(index, { ...element, content: text });
-          }
-        }}
+        onInput={handleInput}
         onFocus={() => onFocus(index)}
         onKeyDown={handleKey}
         onMouseUp={(e) => {
@@ -2538,8 +2517,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           }
         }}
         onBlur={() => {
-          isEditingRef.current = false;
-          // Clear selection popup when leaving
+          // Nothing needed here anymore
         }}
         onClick={(e) => {
           // Check if clicked on a highlight span (comment or suggestion)
@@ -2569,8 +2547,8 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         }}
         data-placeholder={isActive ? getPlaceholder(element.type) : ''}
       >
-        {/* When active, content is managed by DOM via refs. When inactive, show highlights or plain text */}
-        {!isActive && (hasHighlights ? highlightedContent : (element.content || '\u200B'))}
+        {/* When inactive: show highlights or plain content. When active: empty - content set via ref */}
+        {!isActive ? (hasHighlights ? highlightedContent : (element.content || '\u200B')) : null}
       </div>
       
       {/* Character autocomplete */}
