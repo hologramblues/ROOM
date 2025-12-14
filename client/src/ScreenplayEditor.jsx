@@ -2555,29 +2555,13 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           data-element-id={element.id}
           style={baseStyle}
           onMouseDown={(e) => {
-            // Check if clicked on a highlight using position detection
-            const clickedHighlight = getHighlightAtPosition(e);
-            if (clickedHighlight) {
-              if (clickedHighlight.type === 'comment') {
-                e.preventDefault();
-                e.stopPropagation();
-                if (typeof onHighlightClick === 'function') {
-                  onHighlightClick(clickedHighlight.id);
-                }
-                return;
-              } else if (clickedHighlight.type === 'suggestion') {
-                e.preventDefault();
-                e.stopPropagation();
-                if (typeof onSuggestionClick === 'function') {
-                  onSuggestionClick(clickedHighlight.id);
-                }
-                return;
-              }
-            }
-            
             // Store mousedown position to detect drag vs click
             displayRef.current._mouseDownX = e.clientX;
             displayRef.current._mouseDownY = e.clientY;
+            
+            // Check if clicked on a highlight - store it for mouseUp
+            const clickedHighlight = getHighlightAtPosition(e);
+            displayRef.current._clickedHighlight = clickedHighlight;
           }}
           onMouseUp={(e) => {
             const selection = window.getSelection();
@@ -2587,6 +2571,10 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
             const dx = Math.abs(e.clientX - (displayRef.current?._mouseDownX || 0));
             const dy = Math.abs(e.clientY - (displayRef.current?._mouseDownY || 0));
             const wasDrag = dx > 5 || dy > 5;
+            
+            // Get the highlight that was clicked (if any)
+            const clickedHighlight = displayRef.current?._clickedHighlight;
+            displayRef.current._clickedHighlight = null;
             
             if (hasSelection) {
               // User selected text - show selection menu, don't activate element
@@ -2635,6 +2623,16 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
                 clickOffset = null;
               }
               
+              // If clicked on a highlight, also open the comment/suggestion panel
+              if (clickedHighlight) {
+                if (clickedHighlight.type === 'comment' && typeof onHighlightClick === 'function') {
+                  onHighlightClick(clickedHighlight.id);
+                } else if (clickedHighlight.type === 'suggestion' && typeof onSuggestionClick === 'function') {
+                  onSuggestionClick(clickedHighlight.id);
+                }
+              }
+              
+              // Activate element and place cursor
               onFocus(index, clickOffset);
             }
           }}
