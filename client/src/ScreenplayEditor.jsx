@@ -1637,8 +1637,8 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                 >
                   {/* Comments for this element */}
                   {(filter === 'all' || filter === 'comments') && elementComments.map(c => {
-                    const cId = c.id || c._id;
-                    const isThisCommentSelected = selectedCommentId === cId || (selectedCommentIndex === idx && elementComments.length === 1);
+                    const cId = String(c.id || c._id);
+                    const isThisCommentSelected = String(selectedCommentId) === cId || (selectedCommentIndex === idx && elementComments.length === 1);
                     return (
                       <div 
                         key={cId} 
@@ -1676,17 +1676,18 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   {(filter === 'all' || filter === 'suggestions') && suggestions && suggestions
                     .filter(s => s.elementIndex === idx && s.status === 'pending')
                     .map(s => {
-                      const isSelected = selectedSuggestionId === s.id;
+                      const sId = String(s.id || s._id);
+                      const isSelected = String(selectedSuggestionId) === sId;
                       const timeAgo = s.createdAt ? new Date(s.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '';
                       
                       return (
                         <div 
-                          key={s.id}
-                          data-suggestion-id={s.id}
-                          data-suggestion-card-id={s.id}
+                          key={sId}
+                          data-suggestion-id={sId}
+                          data-suggestion-card-id={sId}
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelectSuggestion && onSelectSuggestion(isSelected ? null : s.id);
+                            onSelectSuggestion && onSelectSuggestion(isSelected ? null : sId);
                           }}
                           style={{
                             background: darkMode ? '#1f2937' : '#f0fdf4',
@@ -2623,7 +2624,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
                 clickOffset = null;
               }
               
-              // If clicked on a highlight, also open the comment/suggestion panel
+              // If clicked on a highlight, open the comment/suggestion panel first
               if (clickedHighlight) {
                 if (clickedHighlight.type === 'comment' && typeof onHighlightClick === 'function') {
                   onHighlightClick(clickedHighlight.id);
@@ -2632,7 +2633,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
                 }
               }
               
-              // Activate element and place cursor
+              // Activate element and place cursor (after highlight handler)
               onFocus(index, clickOffset);
             }
           }}
@@ -3831,7 +3832,7 @@ export default function ScreenplayEditor() {
         startOffset: c.highlight.startOffset,
         endOffset: c.highlight.endOffset,
         type: 'comment',
-        id: c.id,
+        id: String(c.id || c._id), // Stringify for consistent comparison
         userColor: c.userColor
       }));
     
@@ -3842,7 +3843,7 @@ export default function ScreenplayEditor() {
         startOffset: s.startOffset,
         endOffset: s.endOffset,
         type: 'suggestion',
-        id: s.id,
+        id: String(s.id || s._id), // Stringify for consistent comparison
         originalText: s.originalText,
         suggestedText: s.suggestedText,
         userColor: s.userColor
