@@ -5773,27 +5773,34 @@ export default function ScreenplayEditor() {
           }}
           onCancelSuggestion={() => setPendingSuggestion(null)}
           onAcceptSuggestion={(suggestionId) => {
-            const suggestion = suggestions.find(s => s.id === suggestionId);
+            console.log('Accept suggestion:', suggestionId, 'All suggestions:', suggestions.map(s => ({ id: s.id, _id: s._id })));
+            const suggestion = suggestions.find(s => String(s.id) === String(suggestionId) || String(s._id) === String(suggestionId));
+            console.log('Found suggestion:', suggestion);
             if (suggestion) {
               // Apply the suggestion to the element
               const elementIndex = elements.findIndex(el => el.id === suggestion.elementId);
+              console.log('Element index:', elementIndex, 'elementId:', suggestion.elementId);
               if (elementIndex !== -1) {
                 const element = elements[elementIndex];
+                console.log('Current content:', element.content);
+                console.log('Offsets:', suggestion.startOffset, suggestion.endOffset);
+                console.log('Suggested text:', suggestion.suggestedText);
                 const newContent = 
                   element.content.substring(0, suggestion.startOffset) + 
                   suggestion.suggestedText + 
                   element.content.substring(suggestion.endOffset);
+                console.log('New content:', newContent);
                 updateElement(elementIndex, { ...element, content: newContent });
               }
               // Remove the suggestion
-              setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+              setSuggestions(prev => prev.filter(s => String(s.id) !== String(suggestionId) && String(s._id) !== String(suggestionId)));
               if (socketRef.current) {
                 socketRef.current.emit('suggestion-accept', { suggestionId });
               }
             }
           }}
           onRejectSuggestion={(suggestionId) => {
-            setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+            setSuggestions(prev => prev.filter(s => String(s.id) !== String(suggestionId) && String(s._id) !== String(suggestionId)));
             if (socketRef.current) {
               socketRef.current.emit('suggestion-reject', { suggestionId });
             }
