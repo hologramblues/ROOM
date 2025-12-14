@@ -2360,7 +2360,7 @@ const RemoteCursor = ({ user }) => (
 );
 
 // ============ SCENE LINE ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlightedContent, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset }) => {
   const editRef = useRef(null);
   const displayRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
@@ -2369,6 +2369,41 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [autoType, setAutoType] = useState(null);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
   const wasActiveRef = useRef(false);
+
+  // Helper to check if click is on a highlight and return it
+  const getHighlightAtPosition = (e) => {
+    if (!highlights || highlights.length === 0) return null;
+    
+    try {
+      let clickRange = null;
+      if (document.caretRangeFromPoint) {
+        clickRange = document.caretRangeFromPoint(e.clientX, e.clientY);
+      } else if (document.caretPositionFromPoint) {
+        const caretPos = document.caretPositionFromPoint(e.clientX, e.clientY);
+        if (caretPos) {
+          clickRange = document.createRange();
+          clickRange.setStart(caretPos.offsetNode, caretPos.offset);
+        }
+      }
+      
+      if (clickRange) {
+        const preCaretRange = document.createRange();
+        preCaretRange.selectNodeContents(e.currentTarget);
+        preCaretRange.setEnd(clickRange.startContainer, clickRange.startOffset);
+        const clickOffset = preCaretRange.toString().length;
+        
+        // Find which highlight contains this offset
+        for (const h of highlights) {
+          if (clickOffset >= h.startOffset && clickOffset <= h.endOffset) {
+            return h;
+          }
+        }
+      }
+    } catch (err) {
+      // Ignore errors
+    }
+    return null;
+  };
 
   // Helper to place cursor at specific offset in contenteditable
   const placeCursorAtOffset = (el, offset) => {
@@ -2475,7 +2510,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     onUpdate(index, { ...element, content: text });
   };
   
-  const hasHighlights = highlightedContent && typeof highlightedContent !== 'string' && Array.isArray(highlightedContent);
+  const hasHighlights = highlights && highlights.length > 0;
 
   const baseStyle = {
     ...getElementStyle(element.type), 
@@ -2513,33 +2548,31 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       
       {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       
-      {/* DISPLAY DIV - Shows highlights, visible when NOT active */}
+      {/* DISPLAY DIV - CSS Highlight API styles the text, visible when NOT active */}
       {!isActive && (
         <div
           ref={displayRef}
+          data-element-id={element.id}
           style={baseStyle}
           onMouseDown={(e) => {
-            const target = e.target;
-            
-            // Check for comment highlight click
-            if (target.dataset && target.dataset.commentId) {
-              e.preventDefault();
-              e.stopPropagation();
-              if (typeof onHighlightClick === 'function') {
-                onHighlightClick(target.dataset.commentId);
+            // Check if clicked on a highlight using position detection
+            const clickedHighlight = getHighlightAtPosition(e);
+            if (clickedHighlight) {
+              if (clickedHighlight.type === 'comment') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof onHighlightClick === 'function') {
+                  onHighlightClick(clickedHighlight.id);
+                }
+                return;
+              } else if (clickedHighlight.type === 'suggestion') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof onSuggestionClick === 'function') {
+                  onSuggestionClick(clickedHighlight.id);
+                }
+                return;
               }
-              return;
-            }
-            
-            // Check for suggestion highlight click
-            const suggestionSpan = target.closest('[data-suggestion-id]');
-            if (suggestionSpan && suggestionSpan.dataset.suggestionId) {
-              e.preventDefault();
-              e.stopPropagation();
-              if (typeof onSuggestionClick === 'function') {
-                onSuggestionClick(suggestionSpan.dataset.suggestionId);
-              }
-              return;
             }
             
             // Store mousedown position to detect drag vs click
@@ -2606,14 +2639,15 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
             }
           }}
         >
-          {hasHighlights ? highlightedContent : (element.content || '\u200B')}
+          {element.content || '\u200B'}
         </div>
       )}
       
-      {/* EDIT DIV - Plain text editing, visible when active */}
+      {/* EDIT DIV - Plain text editing with CSS Highlight API, visible when active */}
       {isActive && (
         <div
           ref={editRef}
+          data-element-id={element.id}
           contentEditable={canEdit && !isLocked}
           suppressContentEditableWarning={true}
           onInput={handleInput}
@@ -3790,8 +3824,128 @@ export default function ScreenplayEditor() {
     };
   }, [showComments, elements.length]);
 
+  // Get highlight data for an element (for CSS Highlight API)
+  const getElementHighlights = useCallback((elementId) => {
+    // Find all highlights for this element (comments)
+    const elementHighlights = comments
+      .filter(c => c.elementId === elementId && c.highlight && !c.resolved)
+      .map(c => ({
+        startOffset: c.highlight.startOffset,
+        endOffset: c.highlight.endOffset,
+        type: 'comment',
+        id: c.id,
+        userColor: c.userColor
+      }));
+    
+    // Find all suggestions for this element
+    const elementSuggestions = suggestions
+      .filter(s => s.elementId === elementId && s.status === 'pending')
+      .map(s => ({
+        startOffset: s.startOffset,
+        endOffset: s.endOffset,
+        type: 'suggestion',
+        id: s.id,
+        originalText: s.originalText,
+        suggestedText: s.suggestedText,
+        userColor: s.userColor
+      }));
+    
+    // Combine and sort by startOffset
+    return [...elementHighlights, ...elementSuggestions]
+      .sort((a, b) => a.startOffset - b.startOffset);
+  }, [comments, suggestions]);
+
+  // Apply CSS Highlights globally
+  useEffect(() => {
+    // Check if CSS Highlight API is supported
+    if (typeof CSS === 'undefined' || !CSS.highlights) {
+      return;
+    }
+    
+    // Clear all existing highlights
+    CSS.highlights.delete('comment-highlight');
+    CSS.highlights.delete('suggestion-highlight');
+    
+    const commentRanges = [];
+    const suggestionRanges = [];
+    
+    // Find all elements with highlights
+    elements.forEach(element => {
+      const highlights = getElementHighlights(element.id);
+      if (highlights.length === 0) return;
+      
+      // Find the DOM element
+      const domEl = document.querySelector(`[data-element-id="${element.id}"]`);
+      if (!domEl) return;
+      
+      highlights.forEach(h => {
+        try {
+          // Find the correct text node and offsets using TreeWalker
+          const walker = document.createTreeWalker(domEl, NodeFilter.SHOW_TEXT, null, false);
+          let currentOffset = 0;
+          let startNode = null, startOffset = 0;
+          let endNode = null, endOffset = 0;
+          
+          let node = walker.nextNode();
+          
+          while (node) {
+            const nodeLength = node.textContent.length;
+            
+            // Check if start is in this node
+            if (!startNode && currentOffset + nodeLength > h.startOffset) {
+              startNode = node;
+              startOffset = h.startOffset - currentOffset;
+            }
+            
+            // Check if end is in this node
+            if (!endNode && currentOffset + nodeLength >= h.endOffset) {
+              endNode = node;
+              endOffset = h.endOffset - currentOffset;
+              break;
+            }
+            
+            currentOffset += nodeLength;
+            node = walker.nextNode();
+          }
+          
+          if (startNode && endNode) {
+            const range = new Range();
+            range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
+            range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
+            
+            if (h.type === 'comment') {
+              commentRanges.push(range);
+            } else if (h.type === 'suggestion') {
+              suggestionRanges.push(range);
+            }
+          }
+        } catch (err) {
+          // Silently ignore highlight errors
+        }
+      });
+    });
+    
+    // Create and register the highlights
+    if (commentRanges.length > 0) {
+      const commentHighlight = new Highlight(...commentRanges);
+      CSS.highlights.set('comment-highlight', commentHighlight);
+    }
+    if (suggestionRanges.length > 0) {
+      const suggestionHighlight = new Highlight(...suggestionRanges);
+      CSS.highlights.set('suggestion-highlight', suggestionHighlight);
+    }
+    
+    // Cleanup function
+    return () => {
+      if (typeof CSS !== 'undefined' && CSS.highlights) {
+        CSS.highlights.delete('comment-highlight');
+        CSS.highlights.delete('suggestion-highlight');
+      }
+    };
+  }, [elements, comments, suggestions, activeIndex, getElementHighlights]);
+
   // Get initials from a name (e.g. "Jeremie Goldstein" -> "JG", "RomainV" -> "RV")
-  // Render text content with highlighted comments
+  // Render text content with highlighted comments (legacy fallback)
   const renderTextWithHighlights = (content, elementId) => {
     if (!content) return '';
     
@@ -5418,7 +5572,7 @@ export default function ScreenplayEditor() {
                       showSceneNumbers={showSceneNumbers}
                       note={notes[element.id]}
                       onNoteClick={(id) => setShowNoteFor(id)}
-                      highlightedContent={renderTextWithHighlights(element.content, element.id)}
+                      highlights={getElementHighlights(element.id)}
                       initialCursorOffset={activeIndex === index ? cursorOffset : null}
                       onTextSelect={(selection) => {
                         if (canComment) {
@@ -6590,6 +6744,18 @@ export default function ScreenplayEditor() {
           </div>
         </div>
       )}
+      
+      {/* CSS Highlight API styles for comments and suggestions */}
+      <style>{`
+        ::highlight(comment-highlight) {
+          background-color: rgba(251, 191, 36, 0.4);
+          border-radius: 2px;
+        }
+        ::highlight(suggestion-highlight) {
+          background-color: rgba(34, 197, 94, 0.3);
+          text-decoration: underline wavy #16a34a;
+        }
+      `}</style>
       
       {/* Focus Mode Overlay - dims everything except current element */}
       {focusMode && (
