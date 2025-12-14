@@ -1,53 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { io } from 'socket.io-client';
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import { Mark, mergeAttributes } from '@tiptap/core';
-
-// V135 - TipTap Integration (surgical approach)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
-
-// ============ TIPTAP CUSTOM MARKS ============
-const CommentMark = Mark.create({
-  name: 'comment',
-  addAttributes() {
-    return { commentId: { default: null } };
-  },
-  parseHTML() {
-    return [{ tag: 'span[data-comment-id]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes, {
-      'data-comment-id': HTMLAttributes.commentId,
-      style: 'background-color: rgba(251, 191, 36, 0.4); border-radius: 2px; cursor: pointer;',
-    }), 0];
-  },
-});
-
-const SuggestionMark = Mark.create({
-  name: 'suggestion',
-  inclusive: false,
-  addAttributes() {
-    return {
-      suggestionId: { default: null },
-      suggestedText: { default: '' },
-    };
-  },
-  parseHTML() {
-    return [{ tag: 'span[data-suggestion-id]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes({
-      'data-suggestion-id': HTMLAttributes.suggestionId,
-      'data-suggested-text': HTMLAttributes.suggestedText,
-      style: 'cursor: pointer;',
-    }),
-      ['span', { style: 'text-decoration: line-through; color: #dc2626; background: rgba(220, 38, 38, 0.1);' }, 0],
-      ['span', { style: 'color: #16a34a; background: rgba(22, 163, 74, 0.1); margin-left: 2px;', contenteditable: 'false' }, HTMLAttributes.suggestedText || ''],
-    ];
-  },
-});
 
 // UUID fallback for browsers that don't support crypto.randomUUID
 const generateId = () => {
@@ -2482,201 +2436,147 @@ const renderContentWithHighlights = (content, highlights) => {
   return parts.length > 0 ? parts : content;
 };
 
-// ============ SCENE LINE (TIPTAP VERSION) ============
+// ============ SCENE LINE ============
 const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset }) => {
-  const containerRef = useRef(null);
+  const editRef = useRef(null);
+  const displayRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
   const [filtered, setFiltered] = useState([]);
   const [autoType, setAutoType] = useState(null);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
   const wasActiveRef = useRef(false);
-  const skipNextUpdateRef = useRef(false);
-  
-  // Separate comments and suggestions
-  const commentHighlights = useMemo(() => (highlights || []).filter(h => h.type === 'comment'), [highlights]);
-  const suggestionHighlights = useMemo(() => (highlights || []).filter(h => h.type === 'suggestion'), [highlights]);
-  
-  // Build HTML content with marks
-  const buildContent = useCallback(() => {
+
+  // Helper to check if click is on a highlight and return it
+  const getHighlightAtPosition = (e) => {
+    if (!highlights || highlights.length === 0) return null;
+    
+    // First check if clicked directly on a highlight span
+    const target = e.target;
+    
+    // Check for comment
+    const commentEl = target.closest('[data-comment-id]');
+    if (commentEl) {
+      const commentId = commentEl.getAttribute('data-comment-id');
+      const found = highlights.find(h => String(h.id || h._id) === String(commentId));
+      if (found) return found;
+    }
+    
+    // Check for suggestion
+    const suggestionEl = target.closest('[data-suggestion-id]');
+    if (suggestionEl) {
+      const suggestionId = suggestionEl.getAttribute('data-suggestion-id');
+      const found = highlights.find(h => String(h.id || h._id) === String(suggestionId));
+      if (found) return found;
+    }
+    
+    return null;
+  };
+
+  // Helper to calculate cursor offset in original content, accounting for suggestion display text
+  const calculateOriginalOffset = (displayElement, visualOffset) => {
+    if (!highlights || highlights.length === 0) return visualOffset;
+    
+    const suggestionHighlights = highlights.filter(h => h.type === 'suggestion');
+    if (suggestionHighlights.length === 0) return visualOffset;
+    
+    // Calculate how much extra text is displayed before this offset
+    let extraChars = 0;
     const content = element.content || '';
-    if (!content) return '<p>\u200B</p>';
     
-    const allMarks = [...commentHighlights, ...suggestionHighlights].sort((a, b) => a.startOffset - b.startOffset);
-    if (allMarks.length === 0) return `<p>${escapeHtmlTipTap(content)}</p>`;
-    
-    let html = '';
-    let lastEnd = 0;
-    
-    for (const mark of allMarks) {
-      if (mark.startOffset < 0 || mark.endOffset > content.length || mark.startOffset >= mark.endOffset) continue;
-      if (mark.startOffset > lastEnd) {
-        html += escapeHtmlTipTap(content.slice(lastEnd, mark.startOffset));
+    for (const s of suggestionHighlights) {
+      // Each suggestion adds its suggestedText after the original
+      const suggestionEnd = s.endOffset;
+      const extraLength = (s.suggestedText || '').length;
+      
+      // If the visual offset is past where this suggestion ends (in visual space)
+      const visualSuggestionEnd = s.endOffset + extraChars + extraLength;
+      
+      if (visualOffset > s.endOffset + extraChars) {
+        // We're past the start of this suggestion's display
+        if (visualOffset <= visualSuggestionEnd) {
+          // We're inside the suggestion display area
+          // Return the end of the original marked text
+          return s.endOffset;
+        } else {
+          // We're past this suggestion entirely
+          extraChars += extraLength;
+        }
       }
-      const markedText = escapeHtmlTipTap(content.slice(mark.startOffset, mark.endOffset));
-      if (mark.type === 'comment') {
-        html += `<span data-comment-id="${String(mark.id || mark._id)}" style="background-color: rgba(251, 191, 36, 0.4); border-radius: 2px; cursor: pointer;">${markedText}</span>`;
-      } else if (mark.type === 'suggestion') {
-        html += `<span data-suggestion-id="${String(mark.id || mark._id)}" data-suggested-text="${escapeHtmlTipTap(mark.suggestedText || '')}" style="cursor: pointer;"><span style="text-decoration: line-through; color: #dc2626; background: rgba(220, 38, 38, 0.1);">${markedText}</span><span contenteditable="false" style="color: #16a34a; background: rgba(22, 163, 74, 0.1); margin-left: 2px;">${escapeHtmlTipTap(mark.suggestedText || '')}</span></span>`;
-      }
-      lastEnd = mark.endOffset;
     }
-    if (lastEnd < content.length) {
-      html += escapeHtmlTipTap(content.slice(lastEnd));
-    }
-    return `<p>${html || '\u200B'}</p>`;
-  }, [element.content, commentHighlights, suggestionHighlights]);
-  
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        paragraph: { HTMLAttributes: { style: 'margin: 0; padding: 0;' } },
-        heading: false, bulletList: false, orderedList: false, blockquote: false, codeBlock: false, horizontalRule: false,
-        history: false, // Disable TipTap history, we use our own
-      }),
-      CommentMark,
-      SuggestionMark,
-    ],
-    content: buildContent(),
-    editable: canEdit && !isLocked,
-    editorProps: {
-      attributes: {
-        style: `${styleToString(getElementStyle(element.type))}; outline: none; min-height: 1.5em; white-space: pre-wrap; cursor: ${canEdit ? 'text' : 'default'}; opacity: ${canEdit ? 1 : 0.7}; background: ${isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent'};`,
-        'data-element-id': element.id,
-        'data-placeholder': getPlaceholder(element.type),
-      },
-      handleKeyDown: (view, event) => {
-        // Handle autocomplete navigation first
-        if (showAuto && filtered.length > 0) {
-          if (event.key === 'ArrowDown') { event.preventDefault(); setAutoIdx(i => (i + 1) % filtered.length); return true; }
-          if (event.key === 'ArrowUp') { event.preventDefault(); setAutoIdx(i => (i - 1 + filtered.length) % filtered.length); return true; }
-          if (event.key === 'Enter' && !event.shiftKey) { 
-            event.preventDefault(); 
-            if (autoType === 'character') onSelectCharacter(index, filtered[autoIdx]); 
-            else if (autoType === 'location') onSelectLocation(index, filtered[autoIdx]);
-            setShowAuto(false); 
-            return true; 
-          }
-          if (event.key === 'Escape') { setShowAuto(false); return true; }
-        }
-        
-        // Handle navigation keys
-        const { from, to } = view.state.selection;
-        const docSize = view.state.doc.content.size;
-        const atStart = from <= 1;
-        const atEnd = to >= docSize - 1;
-        
-        if (event.key === 'ArrowUp' && atStart) { onKeyDown(event, index); return true; }
-        if (event.key === 'ArrowDown' && atEnd) { onKeyDown(event, index); return true; }
-        if (event.key === 'Backspace' && atStart && from === to) { onKeyDown(event, index); return true; }
-        if (event.key === 'Enter' || event.key === 'Tab') { onKeyDown(event, index); return true; }
-        
-        return false;
-      },
-      handleClick: (view, pos, event) => {
-        // Handle click on comment/suggestion marks
-        const target = event.target;
-        const commentEl = target.closest('[data-comment-id]');
-        if (commentEl && onHighlightClick) {
-          setTimeout(() => onHighlightClick(commentEl.getAttribute('data-comment-id')), 0);
-        }
-        const suggestionEl = target.closest('[data-suggestion-id]');
-        if (suggestionEl && onSuggestionClick) {
-          setTimeout(() => onSuggestionClick(suggestionEl.getAttribute('data-suggestion-id')), 0);
-        }
-        return false;
-      },
-    },
-    onUpdate: ({ editor }) => {
-      if (skipNextUpdateRef.current) {
-        skipNextUpdateRef.current = false;
+    
+    return Math.min(visualOffset - extraChars, content.length);
+  };
+  const placeCursorAtOffset = (el, offset) => {
+    if (!el) return;
+    
+    const sel = window.getSelection();
+    const range = document.createRange();
+    
+    // Find the text node and place cursor
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    let currentOffset = 0;
+    let node = walker.nextNode();
+    
+    while (node) {
+      const nodeLength = node.textContent.length;
+      if (currentOffset + nodeLength >= offset) {
+        // Found the right node
+        const localOffset = offset - currentOffset;
+        range.setStart(node, Math.min(localOffset, nodeLength));
+        range.setEnd(node, Math.min(localOffset, nodeLength));
+        sel.removeAllRanges();
+        sel.addRange(range);
         return;
       }
-      // Extract plain text (excluding suggestion display text)
-      const text = extractTextFromTipTap(editor);
-      if (text !== element.content) {
-        onUpdate(index, { ...element, content: text });
-      }
-    },
-    onSelectionUpdate: ({ editor }) => {
-      const { from, to } = editor.state.selection;
-      if (from !== to && onTextSelect) {
-        const selectedText = editor.state.doc.textBetween(from, to);
-        if (selectedText.trim()) {
-          const rect = containerRef.current?.getBoundingClientRect();
-          onTextSelect({
-            elementId: element.id,
-            elementIndex: index,
-            text: selectedText,
-            startOffset: from - 1,
-            endOffset: to - 1,
-            rect,
-          });
-        }
-      }
-    },
-    onFocus: () => {
-      if (!isActive) {
-        onFocus(index, null);
-      }
-    },
-  }, [element.id]); // Only recreate when element.id changes
-  
-  // Update content when highlights change (without losing cursor)
-  useEffect(() => {
-    if (!editor) return;
+      currentOffset += nodeLength;
+      node = walker.nextNode();
+    }
     
-    // Only update if we have new highlights to show
-    const currentHtml = editor.getHTML();
-    const newHtml = buildContent();
-    
-    // Simple check: if no highlights, just compare text
-    if (commentHighlights.length === 0 && suggestionHighlights.length === 0) {
-      const currentText = extractTextFromTipTap(editor);
-      if (currentText !== element.content) {
-        skipNextUpdateRef.current = true;
-        editor.commands.setContent(newHtml);
+    // Fallback: place at end
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  };
+
+  // Initialize content when becoming active, focus and place cursor at click position
+  useEffect(() => { 
+    if (isActive && editRef.current) {
+      // Only set content when transitioning from inactive to active
+      if (!wasActiveRef.current) {
+        const content = element.content || '';
+        editRef.current.innerText = content;
+        wasActiveRef.current = true;
+        
+        // Focus first
+        editRef.current.focus();
+        
+        // Place cursor after animation frame to ensure DOM is ready
+        requestAnimationFrame(() => {
+          if (editRef.current) {
+            if (initialCursorOffset !== null && initialCursorOffset !== undefined && initialCursorOffset >= 0 && initialCursorOffset <= content.length) {
+              placeCursorAtOffset(editRef.current, initialCursorOffset);
+            } else {
+              // Place at end
+              placeCursorAtOffset(editRef.current, content.length);
+            }
+          }
+        });
       }
     } else {
-      // With highlights, we need to update if content or highlights changed
-      // But only if editor is not focused to avoid cursor jump
-      if (!editor.isFocused) {
-        skipNextUpdateRef.current = true;
-        editor.commands.setContent(newHtml);
-      }
-    }
-  }, [editor, element.content, commentHighlights, suggestionHighlights, buildContent]);
-  
-  // Handle focus/activation
-  useEffect(() => {
-    if (!editor) return;
-    
-    if (isActive && !wasActiveRef.current) {
-      editor.commands.focus();
-      if (initialCursorOffset !== null && initialCursorOffset !== undefined && initialCursorOffset >= 0) {
-        // Calculate position accounting for suggestion display text
-        const pos = calculateTipTapPosition(editor, initialCursorOffset, suggestionHighlights);
-        setTimeout(() => {
-          try {
-            editor.commands.setTextSelection(pos);
-          } catch (e) {
-            editor.commands.focus('end');
-          }
-        }, 0);
-      }
-      wasActiveRef.current = true;
-    } else if (!isActive && wasActiveRef.current) {
       wasActiveRef.current = false;
     }
-  }, [editor, isActive, initialCursorOffset, suggestionHighlights]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, initialCursorOffset]); // Depend on isActive and initialCursorOffset
   
-  // Character/Location autocomplete
+  // Character autocomplete
   useEffect(() => {
-    if (element.type === 'character' && isActive && element.content && element.content.length > 0) {
+    if (element.type === 'character' && isActive && element.content.length > 0) {
       const q = element.content.toUpperCase();
       const f = characters.filter(c => c.toUpperCase().startsWith(q) && c.toUpperCase() !== q);
       setFiltered(f); setShowAuto(f.length > 0); setAutoIdx(0); setAutoType('character');
-    } else if (element.type === 'scene' && isActive && element.content && element.content.length > 4) {
+    } else if (element.type === 'scene' && isActive && element.content.length > 4) {
       const match = element.content.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*(.*)$/i);
       if (match && match[2] && match[2].length > 0) {
         const q = match[2].toUpperCase();
@@ -2685,6 +2585,33 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       } else { setShowAuto(false); setFiltered([]); }
     } else { setShowAuto(false); setFiltered([]); }
   }, [element.content, element.type, isActive, characters, locations]);
+
+  const handleKey = (e) => {
+    if (showAuto && filtered.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setAutoIdx(i => (i + 1) % filtered.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setAutoIdx(i => (i - 1 + filtered.length) % filtered.length); return; }
+      if (e.key === 'Enter' && !e.shiftKey) { 
+        e.preventDefault(); 
+        if (autoType === 'character') {
+          onSelectCharacter(index, filtered[autoIdx]); 
+        } else if (autoType === 'location') {
+          onSelectLocation(index, filtered[autoIdx]);
+        }
+        setShowAuto(false); 
+        return; 
+      }
+      if (e.key === 'Escape') { setShowAuto(false); return; }
+    }
+    onKeyDown(e, index);
+  };
+  
+  const handleInput = (e) => {
+    if (!canEdit) return;
+    const text = e.currentTarget.innerText;
+    onUpdate(index, { ...element, content: text });
+  };
+  
+  const hasHighlights = highlights && highlights.length > 0;
 
   const baseStyle = {
     ...getElementStyle(element.type), 
@@ -2697,7 +2624,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   };
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
+    <div style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
       {usersOnLine.map(u => <RemoteCursor key={u.id} user={u} />)}
       
       {element.type === 'scene' && isLocked && (
@@ -2722,8 +2649,145 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       
       {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       
-      {/* TipTap Editor - always visible, handles both display and edit */}
-      {editor && <EditorContent editor={editor} />}
+      {/* DISPLAY DIV - CSS Highlight API styles the text, visible when NOT active */}
+      {!isActive && (
+        <div
+          ref={displayRef}
+          data-element-id={element.id}
+          style={baseStyle}
+          onMouseDown={(e) => {
+            // Store mousedown position to detect drag vs click
+            displayRef.current._mouseDownX = e.clientX;
+            displayRef.current._mouseDownY = e.clientY;
+            
+            // Check if clicked on a highlight - store it for mouseUp
+            const clickedHighlight = getHighlightAtPosition(e);
+            displayRef.current._clickedHighlight = clickedHighlight;
+          }}
+          onMouseUp={(e) => {
+            const selection = window.getSelection();
+            const hasSelection = selection && !selection.isCollapsed && selection.toString().trim();
+            
+            // Check if this was a drag selection (mouse moved significantly)
+            const dx = Math.abs(e.clientX - (displayRef.current?._mouseDownX || 0));
+            const dy = Math.abs(e.clientY - (displayRef.current?._mouseDownY || 0));
+            const wasDrag = dx > 5 || dy > 5;
+            
+            // Get the highlight that was clicked (if any)
+            const clickedHighlight = displayRef.current?._clickedHighlight;
+            displayRef.current._clickedHighlight = null;
+            
+            if (hasSelection) {
+              // User selected text - show selection menu, don't activate element
+              const selectedText = selection.toString();
+              const range = selection.getRangeAt(0);
+              const preSelectionRange = range.cloneRange();
+              preSelectionRange.selectNodeContents(e.currentTarget);
+              preSelectionRange.setEnd(range.startContainer, range.startOffset);
+              const startOffset = preSelectionRange.toString().length;
+              const endOffset = startOffset + selectedText.length;
+              
+              const rect = e.currentTarget.getBoundingClientRect();
+              if (onTextSelect) {
+                onTextSelect({
+                  elementId: element.id,
+                  elementIndex: index,
+                  text: selectedText,
+                  startOffset,
+                  endOffset,
+                  rect
+                });
+              }
+            } else if (!wasDrag) {
+              // Simple click - activate for editing with cursor at click position
+              let clickOffset = null;
+              try {
+                let clickRange = null;
+                if (document.caretRangeFromPoint) {
+                  clickRange = document.caretRangeFromPoint(e.clientX, e.clientY);
+                } else if (document.caretPositionFromPoint) {
+                  const caretPos = document.caretPositionFromPoint(e.clientX, e.clientY);
+                  if (caretPos) {
+                    clickRange = document.createRange();
+                    clickRange.setStart(caretPos.offsetNode, caretPos.offset);
+                    clickRange.setEnd(caretPos.offsetNode, caretPos.offset);
+                  }
+                }
+                
+                if (clickRange) {
+                  const preCaretRange = document.createRange();
+                  preCaretRange.selectNodeContents(e.currentTarget);
+                  preCaretRange.setEnd(clickRange.startContainer, clickRange.startOffset);
+                  const visualOffset = preCaretRange.toString().length;
+                  // Adjust for suggestion display text
+                  clickOffset = calculateOriginalOffset(e.currentTarget, visualOffset);
+                }
+              } catch (err) {
+                clickOffset = null;
+              }
+              
+              // Activate element and place cursor first
+              onFocus(index, clickOffset);
+              
+              // If clicked on a highlight, open the comment/suggestion panel AFTER focus is set
+              if (clickedHighlight) {
+                console.log('SceneLine: clicked highlight:', clickedHighlight);
+                setTimeout(() => {
+                  if (clickedHighlight.type === 'comment' && typeof onHighlightClick === 'function') {
+                    onHighlightClick(clickedHighlight.id);
+                  } else if (clickedHighlight.type === 'suggestion' && typeof onSuggestionClick === 'function') {
+                    onSuggestionClick(clickedHighlight.id);
+                  }
+                }, 50);
+              }
+            }
+          }}
+        >
+          {renderContentWithHighlights(element.content, highlights)}
+        </div>
+      )}
+      
+      {/* EDIT DIV - Plain text editing with CSS Highlight API, visible when active */}
+      {isActive && (
+        <div
+          ref={editRef}
+          data-element-id={element.id}
+          contentEditable={canEdit && !isLocked}
+          suppressContentEditableWarning={true}
+          onInput={handleInput}
+          onKeyDown={handleKey}
+          onMouseUp={(e) => {
+            // Handle text selection for inline comments
+            const selection = window.getSelection();
+            if (selection && !selection.isCollapsed && onTextSelect) {
+              const selectedText = selection.toString();
+              if (selectedText.trim()) {
+                const range = selection.getRangeAt(0);
+                const preSelectionRange = range.cloneRange();
+                preSelectionRange.selectNodeContents(e.currentTarget);
+                preSelectionRange.setEnd(range.startContainer, range.startOffset);
+                const startOffset = preSelectionRange.toString().length;
+                const endOffset = startOffset + selectedText.length;
+                
+                const rect = e.currentTarget.getBoundingClientRect();
+                onTextSelect({
+                  elementId: element.id,
+                  elementIndex: index,
+                  text: selectedText,
+                  startOffset,
+                  endOffset,
+                  rect
+                });
+              }
+            }
+          }}
+          onBlur={() => {
+            // Could deactivate here if needed
+          }}
+          style={baseStyle}
+          data-placeholder={getPlaceholder(element.type)}
+        />
+      )}
       
       {autoType === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
       
@@ -2731,52 +2795,6 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     </div>
   );
 });
-
-// ============ TIPTAP HELPER FUNCTIONS ============
-function escapeHtmlTipTap(text) {
-  return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function styleToString(obj) {
-  return Object.entries(obj || {}).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ');
-}
-
-function extractTextFromTipTap(editor) {
-  // Get only the original text, not suggestion display text
-  let text = '';
-  editor.state.doc.descendants((node, pos, parent) => {
-    if (node.isText) {
-      // Check if we're inside a suggestion's display span (the green text)
-      // The suggestion mark applies to the ORIGINAL text, not the display
-      const hasSuggestion = node.marks.some(m => m.type.name === 'suggestion');
-      if (hasSuggestion) {
-        // This is the original text with the suggestion mark - include it
-        text += node.text;
-      } else {
-        // Check if this node is a child of a contenteditable=false span (suggestion display)
-        // We can detect this by checking if the parent node has the suggestion mark
-        // Actually in TipTap, the green text is inserted as non-editable content
-        // and is NOT part of the document model, so we just get all text nodes
-        text += node.text;
-      }
-    }
-  });
-  return text;
-}
-
-function calculateTipTapPosition(editor, originalOffset, suggestions) {
-  if (!suggestions || suggestions.length === 0) return originalOffset + 1;
-  
-  // Account for suggestion display text that comes BEFORE this offset
-  let extra = 0;
-  for (const s of suggestions) {
-    if (s.endOffset <= originalOffset) {
-      extra += (s.suggestedText || '').length;
-    }
-  }
-  
-  return Math.min(originalOffset + extra + 1, editor.state.doc.content.size - 1);
-}
 
 // ============ USER AVATAR ============
 // ============ LOGO ============
