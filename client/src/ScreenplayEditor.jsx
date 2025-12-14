@@ -1639,6 +1639,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   {(filter === 'all' || filter === 'comments') && elementComments.map(c => {
                     const cId = String(c.id || c._id);
                     const isThisCommentSelected = String(selectedCommentId) === cId || (selectedCommentIndex === idx && elementComments.length === 1);
+                    console.log('Comment card render:', { cId, selectedCommentId, isThisCommentSelected, comparison: String(selectedCommentId) === cId });
                     return (
                       <div 
                         key={cId} 
@@ -2626,6 +2627,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
               
               // If clicked on a highlight, open the comment/suggestion panel first
               if (clickedHighlight) {
+                console.log('SceneLine: clicked highlight:', clickedHighlight);
                 if (clickedHighlight.type === 'comment' && typeof onHighlightClick === 'function') {
                   onHighlightClick(clickedHighlight.id);
                 } else if (clickedHighlight.type === 'suggestion' && typeof onSuggestionClick === 'function') {
@@ -5581,18 +5583,22 @@ export default function ScreenplayEditor() {
                         }
                       }}
                       onHighlightClick={(commentId) => {
+                        console.log('onHighlightClick called with:', commentId);
                         setShowComments(true);
                         setSelectedCommentId(commentId);
                         setSelectedSuggestionId(null);
                         // Scroll to the comment card in the sidebar
                         setTimeout(() => {
+                          console.log('Scrolling to comment:', commentId, 'selectedCommentId is now:', commentId);
                           const commentCard = document.querySelector(`[data-comment-card-id="${commentId}"]`);
+                          console.log('Found card:', commentCard);
                           if (commentCard) {
                             commentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
                           }
                         }, 150);
                       }}
                       onSuggestionClick={(suggestionId) => {
+                        console.log('onSuggestionClick called with:', suggestionId);
                         setShowComments(true);
                         setSelectedSuggestionId(suggestionId);
                         setSelectedCommentId(null);
