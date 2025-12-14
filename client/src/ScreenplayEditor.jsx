@@ -2625,18 +2625,20 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
                 clickOffset = null;
               }
               
-              // If clicked on a highlight, open the comment/suggestion panel first
+              // Activate element and place cursor first
+              onFocus(index, clickOffset);
+              
+              // If clicked on a highlight, open the comment/suggestion panel AFTER focus is set
               if (clickedHighlight) {
                 console.log('SceneLine: clicked highlight:', clickedHighlight);
-                if (clickedHighlight.type === 'comment' && typeof onHighlightClick === 'function') {
-                  onHighlightClick(clickedHighlight.id);
-                } else if (clickedHighlight.type === 'suggestion' && typeof onSuggestionClick === 'function') {
-                  onSuggestionClick(clickedHighlight.id);
-                }
+                setTimeout(() => {
+                  if (clickedHighlight.type === 'comment' && typeof onHighlightClick === 'function') {
+                    onHighlightClick(clickedHighlight.id);
+                  } else if (clickedHighlight.type === 'suggestion' && typeof onSuggestionClick === 'function') {
+                    onSuggestionClick(clickedHighlight.id);
+                  }
+                }, 50);
               }
-              
-              // Activate element and place cursor (after highlight handler)
-              onFocus(index, clickOffset);
             }
           }}
         >
