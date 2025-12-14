@@ -1639,7 +1639,6 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   {(filter === 'all' || filter === 'comments') && elementComments.map(c => {
                     const cId = String(c.id || c._id);
                     const isThisCommentSelected = String(selectedCommentId) === cId || (selectedCommentIndex === idx && elementComments.length === 1);
-                    console.log('Comment card render:', { cId, selectedCommentId, isThisCommentSelected, comparison: String(selectedCommentId) === cId });
                     return (
                       <div 
                         key={cId} 
@@ -2372,6 +2371,83 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
   const wasActiveRef = useRef(false);
 
+  // Render content with suggestions as <del>original</del><ins>suggestion</ins>
+  // Comments use CSS Highlight API, suggestions use DOM spans in display mode
+  const renderContentWithSuggestions = () => {
+    const content = element.content || '';
+    if (!content) return '\u200B';
+    
+    // Get only suggestions from highlights
+    const suggestionHighlights = (highlights || [])
+      .filter(h => h.type === 'suggestion')
+      .sort((a, b) => a.startOffset - b.startOffset);
+    
+    if (suggestionHighlights.length === 0) {
+      return content;
+    }
+    
+    // Build segments
+    const segments = [];
+    let lastIndex = 0;
+    
+    suggestionHighlights.forEach((s, idx) => {
+      // Text before this suggestion
+      if (s.startOffset > lastIndex) {
+        segments.push({
+          type: 'text',
+          content: content.slice(lastIndex, s.startOffset)
+        });
+      }
+      
+      // The suggestion itself
+      segments.push({
+        type: 'suggestion',
+        id: s.id,
+        originalText: content.slice(s.startOffset, s.endOffset),
+        suggestedText: s.suggestedText,
+        userColor: s.userColor
+      });
+      
+      lastIndex = s.endOffset;
+    });
+    
+    // Remaining text after last suggestion
+    if (lastIndex < content.length) {
+      segments.push({
+        type: 'text',
+        content: content.slice(lastIndex)
+      });
+    }
+    
+    return segments.map((seg, idx) => {
+      if (seg.type === 'suggestion') {
+        return (
+          <span 
+            key={idx} 
+            data-suggestion-id={seg.id}
+            style={{ cursor: 'pointer' }}
+          >
+            <span style={{ 
+              textDecoration: 'line-through', 
+              color: '#dc2626',
+              background: 'rgba(220, 38, 38, 0.1)'
+            }}>
+              {seg.originalText}
+            </span>
+            <span style={{ 
+              color: '#16a34a',
+              background: 'rgba(22, 163, 74, 0.1)',
+              marginLeft: 2
+            }}>
+              {seg.suggestedText}
+            </span>
+          </span>
+        );
+      }
+      return <span key={idx}>{seg.content}</span>;
+    });
+  };
+
   // Helper to check if click is on a highlight and return it
   const getHighlightAtPosition = (e) => {
     if (!highlights || highlights.length === 0) return null;
@@ -2550,143 +2626,149 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       
       {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
       
-      {/* DISPLAY DIV - CSS Highlight API styles the text, visible when NOT active */}
-      {!isActive && (
-        <div
-          ref={displayRef}
-          data-element-id={element.id}
-          style={baseStyle}
-          onMouseDown={(e) => {
-            // Store mousedown position to detect drag vs click
-            displayRef.current._mouseDownX = e.clientX;
-            displayRef.current._mouseDownY = e.clientY;
-            
-            // Check if clicked on a highlight - store it for mouseUp
-            const clickedHighlight = getHighlightAtPosition(e);
-            displayRef.current._clickedHighlight = clickedHighlight;
-          }}
-          onMouseUp={(e) => {
-            const selection = window.getSelection();
-            const hasSelection = selection && !selection.isCollapsed && selection.toString().trim();
-            
-            // Check if this was a drag selection (mouse moved significantly)
-            const dx = Math.abs(e.clientX - (displayRef.current?._mouseDownX || 0));
-            const dy = Math.abs(e.clientY - (displayRef.current?._mouseDownY || 0));
-            const wasDrag = dx > 5 || dy > 5;
-            
-            // Get the highlight that was clicked (if any)
-            const clickedHighlight = displayRef.current?._clickedHighlight;
-            displayRef.current._clickedHighlight = null;
-            
-            if (hasSelection) {
-              // User selected text - show selection menu, don't activate element
-              const selectedText = selection.toString();
-              const range = selection.getRangeAt(0);
-              const preSelectionRange = range.cloneRange();
-              preSelectionRange.selectNodeContents(e.currentTarget);
-              preSelectionRange.setEnd(range.startContainer, range.startOffset);
-              const startOffset = preSelectionRange.toString().length;
-              const endOffset = startOffset + selectedText.length;
-              
-              const rect = e.currentTarget.getBoundingClientRect();
-              if (onTextSelect) {
-                onTextSelect({
-                  elementId: element.id,
-                  elementIndex: index,
-                  text: selectedText,
-                  startOffset,
-                  endOffset,
-                  rect
-                });
-              }
-            } else if (!wasDrag) {
-              // Simple click - activate for editing with cursor at click position
-              let clickOffset = null;
-              try {
-                let clickRange = null;
-                if (document.caretRangeFromPoint) {
-                  clickRange = document.caretRangeFromPoint(e.clientX, e.clientY);
-                } else if (document.caretPositionFromPoint) {
-                  const caretPos = document.caretPositionFromPoint(e.clientX, e.clientY);
-                  if (caretPos) {
-                    clickRange = document.createRange();
-                    clickRange.setStart(caretPos.offsetNode, caretPos.offset);
-                    clickRange.setEnd(caretPos.offsetNode, caretPos.offset);
+      {/* Check if element has suggestions */}
+      {(() => {
+        const hasSuggestions = (highlights || []).some(h => h.type === 'suggestion');
+        
+        if (!isActive) {
+          // NOT ACTIVE: Display div with suggestions as spans
+          return (
+            <div
+              ref={displayRef}
+              data-element-id={element.id}
+              style={baseStyle}
+              onMouseDown={(e) => {
+                displayRef.current._mouseDownX = e.clientX;
+                displayRef.current._mouseDownY = e.clientY;
+                
+                // Check for suggestion spans first
+                const suggestionSpan = e.target.closest('[data-suggestion-id]');
+                if (suggestionSpan) {
+                  displayRef.current._clickedHighlight = {
+                    type: 'suggestion',
+                    id: suggestionSpan.dataset.suggestionId
+                  };
+                } else {
+                  const clickedHighlight = getHighlightAtPosition(e);
+                  displayRef.current._clickedHighlight = clickedHighlight;
+                }
+              }}
+              onMouseUp={(e) => {
+                const selection = window.getSelection();
+                const hasSelection = selection && !selection.isCollapsed && selection.toString().trim();
+                const dx = Math.abs(e.clientX - (displayRef.current?._mouseDownX || 0));
+                const dy = Math.abs(e.clientY - (displayRef.current?._mouseDownY || 0));
+                const wasDrag = dx > 5 || dy > 5;
+                const clickedHighlight = displayRef.current?._clickedHighlight;
+                displayRef.current._clickedHighlight = null;
+                
+                if (hasSelection) {
+                  const selectedText = selection.toString();
+                  const range = selection.getRangeAt(0);
+                  const preSelectionRange = range.cloneRange();
+                  preSelectionRange.selectNodeContents(e.currentTarget);
+                  preSelectionRange.setEnd(range.startContainer, range.startOffset);
+                  const startOffset = preSelectionRange.toString().length;
+                  const endOffset = startOffset + selectedText.length;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  if (onTextSelect) {
+                    onTextSelect({ elementId: element.id, elementIndex: index, text: selectedText, startOffset, endOffset, rect });
+                  }
+                } else if (!wasDrag) {
+                  let clickOffset = null;
+                  try {
+                    let clickRange = document.caretRangeFromPoint ? document.caretRangeFromPoint(e.clientX, e.clientY) : null;
+                    if (!clickRange && document.caretPositionFromPoint) {
+                      const caretPos = document.caretPositionFromPoint(e.clientX, e.clientY);
+                      if (caretPos) {
+                        clickRange = document.createRange();
+                        clickRange.setStart(caretPos.offsetNode, caretPos.offset);
+                      }
+                    }
+                    if (clickRange) {
+                      const preCaretRange = document.createRange();
+                      preCaretRange.selectNodeContents(e.currentTarget);
+                      preCaretRange.setEnd(clickRange.startContainer, clickRange.startOffset);
+                      clickOffset = preCaretRange.toString().length;
+                    }
+                  } catch (err) { clickOffset = null; }
+                  
+                  onFocus(index, clickOffset);
+                  if (clickedHighlight) {
+                    setTimeout(() => {
+                      if (clickedHighlight.type === 'comment' && typeof onHighlightClick === 'function') {
+                        onHighlightClick(clickedHighlight.id);
+                      } else if (clickedHighlight.type === 'suggestion' && typeof onSuggestionClick === 'function') {
+                        onSuggestionClick(clickedHighlight.id);
+                      }
+                    }, 50);
                   }
                 }
-                
-                if (clickRange) {
-                  const preCaretRange = document.createRange();
-                  preCaretRange.selectNodeContents(e.currentTarget);
-                  preCaretRange.setEnd(clickRange.startContainer, clickRange.startOffset);
-                  clickOffset = preCaretRange.toString().length;
-                }
-              } catch (err) {
-                clickOffset = null;
-              }
-              
-              // Activate element and place cursor first
-              onFocus(index, clickOffset);
-              
-              // If clicked on a highlight, open the comment/suggestion panel AFTER focus is set
-              if (clickedHighlight) {
-                console.log('SceneLine: clicked highlight:', clickedHighlight);
-                setTimeout(() => {
-                  if (clickedHighlight.type === 'comment' && typeof onHighlightClick === 'function') {
-                    onHighlightClick(clickedHighlight.id);
-                  } else if (clickedHighlight.type === 'suggestion' && typeof onSuggestionClick === 'function') {
-                    onSuggestionClick(clickedHighlight.id);
+              }}
+            >
+              {renderContentWithSuggestions()}
+            </div>
+          );
+        }
+        
+        // ACTIVE: Edit div (+ overlay if has suggestions)
+        return (
+          <div style={{ position: 'relative' }}>
+            {/* Edit div - receives input */}
+            <div
+              ref={editRef}
+              data-element-id={element.id}
+              contentEditable={canEdit && !isLocked}
+              suppressContentEditableWarning={true}
+              onInput={handleInput}
+              onKeyDown={handleKey}
+              onMouseUp={(e) => {
+                const selection = window.getSelection();
+                if (selection && !selection.isCollapsed && onTextSelect) {
+                  const selectedText = selection.toString();
+                  if (selectedText.trim()) {
+                    const range = selection.getRangeAt(0);
+                    const preSelectionRange = range.cloneRange();
+                    preSelectionRange.selectNodeContents(e.currentTarget);
+                    preSelectionRange.setEnd(range.startContainer, range.startOffset);
+                    const startOffset = preSelectionRange.toString().length;
+                    const endOffset = startOffset + selectedText.length;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    onTextSelect({ elementId: element.id, elementIndex: index, text: selectedText, startOffset, endOffset, rect });
                   }
-                }, 50);
-              }
-            }
-          }}
-        >
-          {element.content || '\u200B'}
-        </div>
-      )}
-      
-      {/* EDIT DIV - Plain text editing with CSS Highlight API, visible when active */}
-      {isActive && (
-        <div
-          ref={editRef}
-          data-element-id={element.id}
-          contentEditable={canEdit && !isLocked}
-          suppressContentEditableWarning={true}
-          onInput={handleInput}
-          onKeyDown={handleKey}
-          onMouseUp={(e) => {
-            // Handle text selection for inline comments
-            const selection = window.getSelection();
-            if (selection && !selection.isCollapsed && onTextSelect) {
-              const selectedText = selection.toString();
-              if (selectedText.trim()) {
-                const range = selection.getRangeAt(0);
-                const preSelectionRange = range.cloneRange();
-                preSelectionRange.selectNodeContents(e.currentTarget);
-                preSelectionRange.setEnd(range.startContainer, range.startOffset);
-                const startOffset = preSelectionRange.toString().length;
-                const endOffset = startOffset + selectedText.length;
-                
-                const rect = e.currentTarget.getBoundingClientRect();
-                onTextSelect({
-                  elementId: element.id,
-                  elementIndex: index,
-                  text: selectedText,
-                  startOffset,
-                  endOffset,
-                  rect
-                });
-              }
-            }
-          }}
-          onBlur={() => {
-            // Could deactivate here if needed
-          }}
-          style={baseStyle}
-          data-placeholder={getPlaceholder(element.type)}
-        />
-      )}
+                }
+              }}
+              onBlur={() => {}}
+              style={{
+                ...baseStyle,
+                position: 'relative',
+                zIndex: 1,
+                // If has suggestions, make text transparent but keep caret visible
+                color: hasSuggestions ? 'transparent' : baseStyle.color,
+                caretColor: hasSuggestions ? (baseStyle.color || '#1a1a1a') : undefined
+              }}
+              data-placeholder={getPlaceholder(element.type)}
+            />
+            
+            {/* Overlay div - shows suggestions, only when has suggestions */}
+            {hasSuggestions && (
+              <div
+                style={{
+                  ...baseStyle,
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  pointerEvents: 'none',
+                  zIndex: 2
+                }}
+              >
+                {renderContentWithSuggestions()}
+              </div>
+            )}
+          </div>
+        );
+      })()}
       
       {autoType === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
       
@@ -3858,30 +3940,30 @@ export default function ScreenplayEditor() {
       .sort((a, b) => a.startOffset - b.startOffset);
   }, [comments, suggestions]);
 
-  // Apply CSS Highlights globally
+  // Apply CSS Highlights globally (only for comments - suggestions use DOM spans)
   useEffect(() => {
     // Check if CSS Highlight API is supported
     if (typeof CSS === 'undefined' || !CSS.highlights) {
       return;
     }
     
-    // Clear all existing highlights
+    // Clear existing comment highlights
     CSS.highlights.delete('comment-highlight');
-    CSS.highlights.delete('suggestion-highlight');
     
     const commentRanges = [];
-    const suggestionRanges = [];
     
-    // Find all elements with highlights
-    elements.forEach(element => {
+    // Find all elements with comment highlights
+    elements.forEach((element, idx) => {
       const highlights = getElementHighlights(element.id);
-      if (highlights.length === 0) return;
+      // Only get comments, not suggestions
+      const commentHighlights = highlights.filter(h => h.type === 'comment');
+      if (commentHighlights.length === 0) return;
       
       // Find the DOM element
       const domEl = document.querySelector(`[data-element-id="${element.id}"]`);
       if (!domEl) return;
       
-      highlights.forEach(h => {
+      commentHighlights.forEach(h => {
         try {
           // Find the correct text node and offsets using TreeWalker
           const walker = document.createTreeWalker(domEl, NodeFilter.SHOW_TEXT, null, false);
@@ -3915,12 +3997,7 @@ export default function ScreenplayEditor() {
             const range = new Range();
             range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
             range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
-            
-            if (h.type === 'comment') {
-              commentRanges.push(range);
-            } else if (h.type === 'suggestion') {
-              suggestionRanges.push(range);
-            }
+            commentRanges.push(range);
           }
         } catch (err) {
           // Silently ignore highlight errors
@@ -3928,23 +4005,17 @@ export default function ScreenplayEditor() {
       });
     });
     
-    // Create and register the highlights
+    // Create and register the comment highlights
     if (commentRanges.length > 0) {
       // eslint-disable-next-line no-undef
       const commentHighlight = new Highlight(...commentRanges);
       CSS.highlights.set('comment-highlight', commentHighlight);
-    }
-    if (suggestionRanges.length > 0) {
-      // eslint-disable-next-line no-undef
-      const suggestionHighlight = new Highlight(...suggestionRanges);
-      CSS.highlights.set('suggestion-highlight', suggestionHighlight);
     }
     
     // Cleanup function
     return () => {
       if (typeof CSS !== 'undefined' && CSS.highlights) {
         CSS.highlights.delete('comment-highlight');
-        CSS.highlights.delete('suggestion-highlight');
       }
     };
   }, [elements, comments, suggestions, activeIndex, getElementHighlights]);
@@ -5585,22 +5656,18 @@ export default function ScreenplayEditor() {
                         }
                       }}
                       onHighlightClick={(commentId) => {
-                        console.log('onHighlightClick called with:', commentId);
                         setShowComments(true);
                         setSelectedCommentId(commentId);
                         setSelectedSuggestionId(null);
                         // Scroll to the comment card in the sidebar
                         setTimeout(() => {
-                          console.log('Scrolling to comment:', commentId, 'selectedCommentId is now:', commentId);
                           const commentCard = document.querySelector(`[data-comment-card-id="${commentId}"]`);
-                          console.log('Found card:', commentCard);
                           if (commentCard) {
                             commentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
                           }
                         }, 150);
                       }}
                       onSuggestionClick={(suggestionId) => {
-                        console.log('onSuggestionClick called with:', suggestionId);
                         setShowComments(true);
                         setSelectedSuggestionId(suggestionId);
                         setSelectedCommentId(null);
@@ -6759,10 +6826,6 @@ export default function ScreenplayEditor() {
         ::highlight(comment-highlight) {
           background-color: rgba(251, 191, 36, 0.4);
           border-radius: 2px;
-        }
-        ::highlight(suggestion-highlight) {
-          background-color: rgba(34, 197, 94, 0.3);
-          text-decoration: underline wavy #16a34a;
         }
       `}</style>
       
