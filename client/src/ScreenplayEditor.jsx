@@ -3927,10 +3927,12 @@ export default function ScreenplayEditor() {
     
     // Create and register the highlights
     if (commentRanges.length > 0) {
+      // eslint-disable-next-line no-undef
       const commentHighlight = new Highlight(...commentRanges);
       CSS.highlights.set('comment-highlight', commentHighlight);
     }
     if (suggestionRanges.length > 0) {
+      // eslint-disable-next-line no-undef
       const suggestionHighlight = new Highlight(...suggestionRanges);
       CSS.highlights.set('suggestion-highlight', suggestionHighlight);
     }
