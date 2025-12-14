@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V131 - TipTap Integration for Comments & Suggestions
+// V132 - TipTap Integration for Comments & Suggestions
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
