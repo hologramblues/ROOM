@@ -4,50 +4,9 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V137 - TipTap Integration with error handling
+// V140 - TipTap Step 1: Basic editing (no marks yet)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
-
-// ============ TIPTAP CUSTOM MARKS ============
-const CommentMark = Mark.create({
-  name: 'comment',
-  addAttributes() {
-    return { commentId: { default: null } };
-  },
-  parseHTML() {
-    return [{ tag: 'span[data-comment-id]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes, {
-      'data-comment-id': HTMLAttributes.commentId,
-      style: 'background-color: rgba(251, 191, 36, 0.4); border-radius: 2px; cursor: pointer;',
-    }), 0];
-  },
-});
-
-const SuggestionMark = Mark.create({
-  name: 'suggestion',
-  inclusive: false,
-  addAttributes() {
-    return {
-      suggestionId: { default: null },
-      suggestedText: { default: '' },
-    };
-  },
-  parseHTML() {
-    return [{ tag: 'span[data-suggestion-id]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes({
-      'data-suggestion-id': HTMLAttributes.suggestionId,
-      'data-suggested-text': HTMLAttributes.suggestedText,
-      style: 'cursor: pointer;',
-    }),
-      ['span', { style: 'text-decoration: line-through; color: #dc2626; background: rgba(220, 38, 38, 0.1);' }, 0],
-      ['span', { style: 'color: #16a34a; background: rgba(22, 163, 74, 0.1); margin-left: 2px;', contenteditable: 'false' }, HTMLAttributes.suggestedText || ''],
-    ];
-  },
-});
 
 // UUID fallback for browsers that don't support crypto.randomUUID
 const generateId = () => {
@@ -2490,258 +2449,226 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [filtered, setFiltered] = useState([]);
   const [autoType, setAutoType] = useState(null);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
-  const wasActiveRef = useRef(false);
-  const skipNextUpdateRef = useRef(false);
+  const lastContentRef = useRef(element.content);
   
-  // Separate comments and suggestions
-  const commentHighlights = useMemo(() => (highlights || []).filter(h => h.type === 'comment'), [highlights]);
-  const suggestionHighlights = useMemo(() => (highlights || []).filter(h => h.type === 'suggestion'), [highlights]);
-  
-  // Build HTML content with marks
-  const buildContent = useCallback(() => {
-    const content = element.content || '';
-    if (!content) return '<p>\u200B</p>';
-    
-    const allMarks = [...commentHighlights, ...suggestionHighlights].sort((a, b) => a.startOffset - b.startOffset);
-    if (allMarks.length === 0) return `<p>${escapeHtmlTipTap(content)}</p>`;
-    
-    let html = '';
-    let lastEnd = 0;
-    
-    for (const mark of allMarks) {
-      if (mark.startOffset < 0 || mark.endOffset > content.length || mark.startOffset >= mark.endOffset) continue;
-      if (mark.startOffset > lastEnd) {
-        html += escapeHtmlTipTap(content.slice(lastEnd, mark.startOffset));
-      }
-      const markedText = escapeHtmlTipTap(content.slice(mark.startOffset, mark.endOffset));
-      if (mark.type === 'comment') {
-        html += `<span data-comment-id="${String(mark.id || mark._id)}" style="background-color: rgba(251, 191, 36, 0.4); border-radius: 2px; cursor: pointer;">${markedText}</span>`;
-      } else if (mark.type === 'suggestion') {
-        html += `<span data-suggestion-id="${String(mark.id || mark._id)}" data-suggested-text="${escapeHtmlTipTap(mark.suggestedText || '')}" style="cursor: pointer;"><span style="text-decoration: line-through; color: #dc2626; background: rgba(220, 38, 38, 0.1);">${markedText}</span><span contenteditable="false" style="color: #16a34a; background: rgba(22, 163, 74, 0.1); margin-left: 2px;">${escapeHtmlTipTap(mark.suggestedText || '')}</span></span>`;
-      }
-      lastEnd = mark.endOffset;
-    }
-    if (lastEnd < content.length) {
-      html += escapeHtmlTipTap(content.slice(lastEnd));
-    }
-    return `<p>${html || '\u200B'}</p>`;
-  }, [element.content, commentHighlights, suggestionHighlights]);
-  
+  // TipTap editor instance
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        paragraph: { HTMLAttributes: { style: 'margin: 0; padding: 0;' } },
-        heading: false, bulletList: false, orderedList: false, blockquote: false, codeBlock: false, horizontalRule: false,
-        history: false, // Disable TipTap history, we use our own
+        // Disable block-level elements we don't need
+        heading: false,
+        bulletList: false,
+        orderedList: false,
+        blockquote: false,
+        codeBlock: false,
+        horizontalRule: false,
+        hardBreak: false,
+        // Keep paragraph but style it
+        paragraph: {
+          HTMLAttributes: { style: 'margin: 0; padding: 0;' },
+        },
       }),
-      CommentMark,
-      SuggestionMark,
     ],
-    content: buildContent(),
+    content: `<p>${element.content || ''}</p>`,
     editable: canEdit && !isLocked,
+    
+    // Editor props for styling and keyboard handling
     editorProps: {
       attributes: {
-        style: `${styleToString(getElementStyle(element.type))}; outline: none; min-height: 1.5em; white-space: pre-wrap; cursor: ${canEdit ? 'text' : 'default'}; opacity: ${canEdit ? 1 : 0.7}; background: ${isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent'};`,
         'data-element-id': element.id,
         'data-placeholder': getPlaceholder(element.type),
+        style: buildStyleString(element.type, canEdit, isLocked),
       },
+      
+      // Handle keyboard events
       handleKeyDown: (view, event) => {
-        if (!view) return false;
-        try {
-          // Handle autocomplete navigation first
-          if (showAuto && filtered.length > 0) {
-            if (event.key === 'ArrowDown') { event.preventDefault(); setAutoIdx(i => (i + 1) % filtered.length); return true; }
-            if (event.key === 'ArrowUp') { event.preventDefault(); setAutoIdx(i => (i - 1 + filtered.length) % filtered.length); return true; }
-            if (event.key === 'Enter' && !event.shiftKey) { 
-              event.preventDefault(); 
-              if (autoType === 'character') onSelectCharacter(index, filtered[autoIdx]); 
-              else if (autoType === 'location') onSelectLocation(index, filtered[autoIdx]);
-              setShowAuto(false); 
-              return true; 
-            }
-            if (event.key === 'Escape') { setShowAuto(false); return true; }
+        // Autocomplete navigation
+        if (showAuto && filtered.length > 0) {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            setAutoIdx(i => (i + 1) % filtered.length);
+            return true;
           }
-          
-          // Handle navigation keys
-          const { from, to } = view.state.selection;
-          const docSize = view.state.doc.content.size;
-          const atStart = from <= 1;
-          const atEnd = to >= docSize - 1;
-          
-          if (event.key === 'ArrowUp' && atStart) { onKeyDown(event, index); return true; }
-          if (event.key === 'ArrowDown' && atEnd) { onKeyDown(event, index); return true; }
-          if (event.key === 'Backspace' && atStart && from === to) { onKeyDown(event, index); return true; }
-          if (event.key === 'Enter' || event.key === 'Tab') { onKeyDown(event, index); return true; }
-        } catch (e) {
-          console.warn('TipTap handleKeyDown error:', e);
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setAutoIdx(i => (i - 1 + filtered.length) % filtered.length);
+            return true;
+          }
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            if (autoType === 'character') onSelectCharacter(index, filtered[autoIdx]);
+            else if (autoType === 'location') onSelectLocation(index, filtered[autoIdx]);
+            setShowAuto(false);
+            return true;
+          }
+          if (event.key === 'Escape') {
+            setShowAuto(false);
+            return true;
+          }
         }
-        return false;
-      },
-      handleClick: (view, pos, event) => {
-        if (!view) return false;
-        try {
-          // Handle click on comment/suggestion marks
-          const target = event.target;
-          const commentEl = target.closest('[data-comment-id]');
-          if (commentEl && onHighlightClick) {
-            setTimeout(() => onHighlightClick(commentEl.getAttribute('data-comment-id')), 0);
-          }
-          const suggestionEl = target.closest('[data-suggestion-id]');
-          if (suggestionEl && onSuggestionClick) {
-            setTimeout(() => onSuggestionClick(suggestionEl.getAttribute('data-suggestion-id')), 0);
-          }
-        } catch (e) {
-          console.warn('TipTap handleClick error:', e);
+        
+        // Navigation between elements
+        const { from, to } = view.state.selection;
+        const docSize = view.state.doc.content.size;
+        const atStart = from <= 1;
+        const atEnd = to >= docSize - 1;
+        
+        // Arrow up at start -> previous element
+        if (event.key === 'ArrowUp' && atStart) {
+          event.preventDefault();
+          onKeyDown(event, index);
+          return true;
         }
+        
+        // Arrow down at end -> next element
+        if (event.key === 'ArrowDown' && atEnd) {
+          event.preventDefault();
+          onKeyDown(event, index);
+          return true;
+        }
+        
+        // Backspace at start -> merge with previous
+        if (event.key === 'Backspace' && atStart && from === to) {
+          event.preventDefault();
+          onKeyDown(event, index);
+          return true;
+        }
+        
+        // Enter -> create new element
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          onKeyDown(event, index);
+          return true;
+        }
+        
+        // Tab -> cycle element type
+        if (event.key === 'Tab') {
+          event.preventDefault();
+          onKeyDown(event, index);
+          return true;
+        }
+        
         return false;
       },
     },
+    
+    // Sync content changes back to parent
     onUpdate: ({ editor }) => {
-      if (!editor || !editor.view) return;
-      try {
-        if (skipNextUpdateRef.current) {
-          skipNextUpdateRef.current = false;
-          return;
-        }
-        // Extract plain text (excluding suggestion display text)
-        const text = extractTextFromTipTap(editor);
-        if (text !== element.content) {
-          onUpdate(index, { ...element, content: text });
-        }
-      } catch (e) {
-        console.warn('TipTap onUpdate error:', e);
+      const text = editor.getText();
+      if (text !== lastContentRef.current) {
+        lastContentRef.current = text;
+        onUpdate(index, { ...element, content: text });
       }
     },
+    
+    // Handle text selection for comments/suggestions
     onSelectionUpdate: ({ editor }) => {
-      if (!editor || !editor.view) return;
-      try {
-        const { from, to } = editor.state.selection;
-        if (from !== to && onTextSelect) {
-          const selectedText = editor.state.doc.textBetween(from, to);
-          if (selectedText.trim()) {
-            const rect = containerRef.current?.getBoundingClientRect();
-            onTextSelect({
-              elementId: element.id,
-              elementIndex: index,
-              text: selectedText,
-              startOffset: from - 1,
-              endOffset: to - 1,
-              rect,
-            });
-          }
+      if (!onTextSelect) return;
+      const { from, to } = editor.state.selection;
+      if (from !== to) {
+        const selectedText = editor.state.doc.textBetween(from, to);
+        if (selectedText.trim()) {
+          const rect = containerRef.current?.getBoundingClientRect();
+          onTextSelect({
+            elementId: element.id,
+            elementIndex: index,
+            text: selectedText,
+            startOffset: from - 1, // -1 because of paragraph wrapper
+            endOffset: to - 1,
+            rect,
+          });
         }
-      } catch (e) {
-        console.warn('TipTap onSelectionUpdate error:', e);
       }
     },
-    onFocus: ({ editor }) => {
-      if (!editor || !editor.view) return;
-      try {
-        if (!isActive) {
-          onFocus(index, null);
-        }
-      } catch (e) {
-        console.warn('TipTap onFocus error:', e);
+    
+    // When editor gets focus, notify parent
+    onFocus: () => {
+      if (!isActive) {
+        onFocus(index, null);
       }
     },
-  }, [element.id]); // Only recreate when element.id changes
+  });
   
-  // Update content when highlights change (without losing cursor)
+  // Sync content from parent when it changes externally
   useEffect(() => {
-    if (!editor || !editor.view) return; // Check view exists
-    
-    try {
-      // Simple check: if no highlights, just compare text
-      if (commentHighlights.length === 0 && suggestionHighlights.length === 0) {
-        const currentText = extractTextFromTipTap(editor);
-        if (currentText !== element.content) {
-          skipNextUpdateRef.current = true;
-          editor.commands.setContent(buildContent());
-        }
-      } else {
-        // With highlights, we need to update if content or highlights changed
-        // But only if editor is not focused to avoid cursor jump
-        if (!editor.isFocused) {
-          skipNextUpdateRef.current = true;
-          editor.commands.setContent(buildContent());
-        }
-      }
-    } catch (e) {
-      // Editor not ready yet, skip
+    if (!editor) return;
+    const editorText = editor.getText();
+    if (element.content !== editorText && element.content !== lastContentRef.current) {
+      lastContentRef.current = element.content;
+      editor.commands.setContent(`<p>${element.content || ''}</p>`, false);
     }
-  }, [editor, element.content, commentHighlights, suggestionHighlights, buildContent]);
+  }, [editor, element.content]);
   
-  // Handle focus/activation
+  // Focus editor when becoming active
   useEffect(() => {
-    if (!editor || !editor.view) return; // Check view exists
-    
-    if (isActive && !wasActiveRef.current) {
-      try {
-        editor.commands.focus();
-        if (initialCursorOffset !== null && initialCursorOffset !== undefined && initialCursorOffset >= 0) {
-          // Calculate position accounting for suggestion display text
-          const pos = calculateTipTapPosition(editor, initialCursorOffset, suggestionHighlights);
-          setTimeout(() => {
-            try {
-              if (editor.view) {
-                editor.commands.setTextSelection(pos);
-              }
-            } catch (e) {
-              try { editor.commands.focus('end'); } catch (e2) { /* ignore */ }
-            }
-          }, 0);
-        }
-        wasActiveRef.current = true;
-      } catch (e) {
-        // Editor not ready
+    if (!editor) return;
+    if (isActive) {
+      editor.commands.focus();
+      // Place cursor at specific position if provided
+      if (initialCursorOffset !== null && initialCursorOffset !== undefined && initialCursorOffset >= 0) {
+        const pos = Math.min(initialCursorOffset + 1, editor.state.doc.content.size - 1);
+        editor.commands.setTextSelection(pos);
       }
-    } else if (!isActive && wasActiveRef.current) {
-      wasActiveRef.current = false;
     }
-  }, [editor, isActive, initialCursorOffset, suggestionHighlights]);
+  }, [editor, isActive, initialCursorOffset]);
   
-  // Character/Location autocomplete
+  // Autocomplete for characters and locations
   useEffect(() => {
-    if (element.type === 'character' && isActive && element.content && element.content.length > 0) {
+    if (!element.content) {
+      setShowAuto(false);
+      setFiltered([]);
+      return;
+    }
+    
+    if (element.type === 'character' && isActive && element.content.length > 0) {
       const q = element.content.toUpperCase();
       const f = characters.filter(c => c.toUpperCase().startsWith(q) && c.toUpperCase() !== q);
-      setFiltered(f); setShowAuto(f.length > 0); setAutoIdx(0); setAutoType('character');
-    } else if (element.type === 'scene' && isActive && element.content && element.content.length > 4) {
+      setFiltered(f);
+      setShowAuto(f.length > 0);
+      setAutoIdx(0);
+      setAutoType('character');
+    } else if (element.type === 'scene' && isActive && element.content.length > 4) {
       const match = element.content.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*(.*)$/i);
       if (match && match[2] && match[2].length > 0) {
         const q = match[2].toUpperCase();
         const f = locations.filter(l => l.startsWith(q) && l !== q);
-        setFiltered(f); setShowAuto(f.length > 0); setAutoIdx(0); setAutoType('location');
-      } else { setShowAuto(false); setFiltered([]); }
-    } else { setShowAuto(false); setFiltered([]); }
+        setFiltered(f);
+        setShowAuto(f.length > 0);
+        setAutoIdx(0);
+        setAutoType('location');
+      } else {
+        setShowAuto(false);
+        setFiltered([]);
+      }
+    } else {
+      setShowAuto(false);
+      setFiltered([]);
+    }
   }, [element.content, element.type, isActive, characters, locations]);
-
-  const baseStyle = {
-    ...getElementStyle(element.type), 
-    cursor: canEdit ? 'text' : 'default', 
-    opacity: canEdit ? 1 : 0.7, 
-    background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
-    whiteSpace: 'pre-wrap',
-    minHeight: '1.5em',
-    outline: 'none'
-  };
+  
+  const hasHighlights = highlights && highlights.length > 0;
 
   return (
     <div ref={containerRef} style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
+      {/* Remote cursors */}
       {usersOnLine.map(u => <RemoteCursor key={u.id} user={u} />)}
       
+      {/* Lock icon for locked scenes */}
       {element.type === 'scene' && isLocked && (
         <span style={{ position: 'absolute', left: showSceneNumbers ? -65 : -30, top: 4, fontSize: 14, color: '#f59e0b' }} title="Scène verrouillée">🔒</span>
       )}
       
+      {/* Scene number left */}
       {element.type === 'scene' && showSceneNumbers && sceneNumber && (
         <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
       )}
       
+      {/* Scene number right */}
       {element.type === 'scene' && showSceneNumbers && sceneNumber && (
         <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
       )}
       
+      {/* Note indicator */}
       {note && (
         <div 
           onClick={() => onNoteClick(element.id)} 
@@ -2750,61 +2677,64 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         >📝</div>
       )}
       
-      {isActive && <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>{isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}</span>}
+      {/* Element type label when active */}
+      {isActive && (
+        <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>
+          {isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}
+        </span>
+      )}
       
-      {/* TipTap Editor - always visible, handles both display and edit */}
-      {editor && <EditorContent editor={editor} />}
+      {/* TipTap Editor */}
+      <EditorContent editor={editor} />
       
-      {autoType === 'character' && showAuto && <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
+      {/* Character autocomplete dropdown */}
+      {autoType === 'character' && showAuto && (
+        <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>
+          {filtered.map((s, i) => (
+            <div 
+              key={s} 
+              onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} 
+              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
+            >
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
       
-      {autoType === 'location' && showAuto && <div style={{ position: 'absolute', top: '100%', left: 0, background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 250 }}>{filtered.map((s, i) => <div key={s} onClick={() => { onSelectLocation(index, s); setShowAuto(false); }} style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}>{s}</div>)}</div>}
+      {/* Location autocomplete dropdown */}
+      {autoType === 'location' && showAuto && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 250 }}>
+          {filtered.map((s, i) => (
+            <div 
+              key={s} 
+              onClick={() => { onSelectLocation(index, s); setShowAuto(false); }} 
+              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
+            >
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 });
 
-// ============ TIPTAP HELPER FUNCTIONS ============
-function escapeHtmlTipTap(text) {
-  return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function styleToString(obj) {
-  return Object.entries(obj || {}).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ');
-}
-
-function extractTextFromTipTap(editor) {
-  if (!editor || !editor.state || !editor.state.doc) return '';
-  try {
-    // Get only the original text, not suggestion display text
-    let text = '';
-    editor.state.doc.descendants((node, pos, parent) => {
-      if (node.isText) {
-        text += node.text;
-      }
-    });
-    return text;
-  } catch (e) {
-    console.warn('extractTextFromTipTap error:', e);
-    return '';
-  }
-}
-
-function calculateTipTapPosition(editor, originalOffset, suggestions) {
-  if (!editor || !editor.state || !editor.state.doc) return originalOffset + 1;
-  if (!suggestions || suggestions.length === 0) return originalOffset + 1;
-  
-  try {
-    // Account for suggestion display text that comes BEFORE this offset
-    let extra = 0;
-    for (const s of suggestions) {
-      if (s.endOffset <= originalOffset) {
-        extra += (s.suggestedText || '').length;
-      }
-    }
-    
-    return Math.min(originalOffset + extra + 1, editor.state.doc.content.size - 1);
-  } catch (e) {
-    return originalOffset + 1;
-  }
+// Helper to build style string for TipTap editor
+function buildStyleString(elementType, canEdit, isLocked) {
+  const base = getElementStyle(elementType);
+  const styles = {
+    ...base,
+    cursor: canEdit ? 'text' : 'default',
+    opacity: canEdit ? 1 : 0.7,
+    background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+    whiteSpace: 'pre-wrap',
+    minHeight: '1.5em',
+    outline: 'none',
+  };
+  return Object.entries(styles)
+    .map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`)
+    .join('; ');
 }
 
 // ============ USER AVATAR ============
