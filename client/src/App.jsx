@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V153 - Flex layout for sidebars (no more fixed positioning)
+// V154 - Elegant outline style (borderLeft status, badge number, no bulky buttons)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -5610,35 +5610,64 @@ export default function ScreenplayEditor() {
                       }
                     }}
                     style={{ 
-                      padding: '10px 12px', 
+                      padding: '8px 10px',
+                      margin: '0 8px 4px 8px', 
                       cursor: 'pointer', 
                       background: activeIndex === scene.elementIndex 
-                        ? (darkMode ? '#374151' : '#f3f4f6')
+                        ? (darkMode ? '#374151' : '#e5e7eb')
                         : 'transparent',
-                      borderBottom: `1px solid ${darkMode ? '#374151' : '#f3f4f6'}`,
+                      borderRadius: 6,
                       display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      borderLeft: sceneStatus[scene.id] ? `3px solid ${
+                        sceneStatus[scene.id] === 'done' ? '#22c55e' : 
+                        sceneStatus[scene.id] === 'progress' ? '#f59e0b' : 
+                        sceneStatus[scene.id] === 'urgent' ? '#ef4444' : '#6b7280'
+                      }` : '3px solid transparent'
                     }}
+                    title="Clic droit pour ajouter un chapitre"
                   >
-                    <span style={{ 
-                      fontSize: 10, 
-                      color: '#6b7280', 
-                      minWidth: 20,
-                      textAlign: 'center'
-                    }}>{sceneIdx + 1}</span>
+                    <span 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const statuses = ['', 'progress', 'done', 'urgent'];
+                        const currentIdx = statuses.indexOf(sceneStatus[scene.id] || '');
+                        setSceneStatus(prev => ({ ...prev, [scene.id]: statuses[(currentIdx + 1) % 4] }));
+                      }}
+                      style={{ 
+                        color: darkMode ? '#d1d5db' : '#6b7280', 
+                        fontSize: 9, 
+                        fontWeight: 'bold',
+                        minWidth: 20,
+                        padding: '2px 4px',
+                        background: darkMode ? '#4b5563' : '#d1d5db',
+                        borderRadius: 3,
+                        textAlign: 'center',
+                        flexShrink: 0,
+                        cursor: 'pointer'
+                      }}
+                      title="Cliquer pour changer le statut"
+                    >
+                      {sceneIdx + 1}
+                    </span>
                     <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                      <div style={{ 
-                        fontSize: 12, 
-                        fontWeight: 500, 
-                        color: darkMode ? 'white' : 'black',
-                        whiteSpace: 'nowrap',
+                      <span style={{ 
+                        fontSize: 11, 
+                        lineHeight: 1.3,
+                        display: 'block',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>{scene.content || 'Scène vide'}</div>
-                      <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>{scene.duration}m • ~1min</div>
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: darkMode ? 'white' : 'black'
+                      }}>
+                        {scene.content || 'Scène vide'}
+                      </span>
+                      <span style={{ fontSize: 9, color: '#6b7280', display: 'block', marginTop: 1 }}>
+                        {scene.duration}m • ~1min
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -5661,70 +5690,6 @@ export default function ScreenplayEditor() {
                         title={lockedScenes.has(scene.id) ? 'Déverrouiller' : 'Verrouiller'}
                       >
                         {lockedScenes.has(scene.id) ? '🔒' : '🔓'}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const statuses = ['', 'progress', 'done', 'urgent'];
-                          const currentIdx = statuses.indexOf(sceneStatus[scene.id] || '');
-                          setSceneStatus(prev => ({ ...prev, [scene.id]: statuses[(currentIdx + 1) % 4] }));
-                        }}
-                        style={{ 
-                          minWidth: 22,
-                          height: 18, 
-                          borderRadius: 4, 
-                          border: !sceneStatus[scene.id] ? '1px dashed #6b7280' : 'none',
-                          background: sceneStatus[scene.id] === 'done' ? '#22c55e' 
-                            : sceneStatus[scene.id] === 'progress' ? '#f59e0b' 
-                            : sceneStatus[scene.id] === 'urgent' ? '#ef4444'
-                            : 'transparent',
-                          cursor: 'pointer', 
-                          padding: '0 4px',
-                          fontSize: 10,
-                          fontWeight: 'bold',
-                          color: 'white',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title={sceneStatus[scene.id] === 'done' ? 'Validé' 
-                          : sceneStatus[scene.id] === 'progress' ? 'En cours' 
-                          : sceneStatus[scene.id] === 'urgent' ? 'Urgent'
-                          : 'Pas commencé'}
-                      >
-                        {sceneStatus[scene.id] === 'done' ? '✓' 
-                          : sceneStatus[scene.id] === 'progress' ? '…' 
-                          : sceneStatus[scene.id] === 'urgent' ? '!'
-                          : ''}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setAssignmentMenu({
-                            sceneId: scene.id,
-                            x: rect.left,
-                            y: rect.bottom + 4
-                          });
-                        }}
-                        style={{ 
-                          minWidth: 22,
-                          height: 18, 
-                          borderRadius: 4, 
-                          border: sceneAssignments[scene.id] ? 'none' : '1px dashed #6b7280', 
-                          background: sceneAssignments[scene.id]?.userColor || 'transparent', 
-                          cursor: 'pointer', 
-                          padding: '0 4px',
-                          fontSize: 9,
-                          fontWeight: 'bold',
-                          color: 'white',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner'}
-                      >
-                        {getInitials(sceneAssignments[scene.id]?.userName) || ''}
                       </button>
                     </div>
                   </div>
