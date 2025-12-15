@@ -5591,7 +5591,13 @@ export default function ScreenplayEditor() {
                     </div>
                   )}
                   <div 
-                    onClick={() => handleNavigateToElement(scene.elementIndex)}
+                    onClick={() => {
+                      setActiveIndex(scene.elementIndex);
+                      setTimeout(() => {
+                        const el = document.querySelector(`[data-element-index="${scene.elementIndex}"]`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 50);
+                    }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       const chapterName = prompt('Nom du chapitre/acte à insérer avant cette scène:', outlineChapters[scene.id] || '');
