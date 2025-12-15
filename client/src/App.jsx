@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V143 - TipTap Step 4: Suggestion marks (strikethrough + green text)
+// V144 - TipTap Step 5: Scroll sync between script and comments panel
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -936,6 +936,13 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const commentRefs = useRef({});
   const prevActiveIndexRef = useRef(activeIndex);
 
+  // Sync sidebar scroll with document scroll
+  useEffect(() => {
+    if (sidebarRef.current && scrollTop !== undefined) {
+      sidebarRef.current.scrollTop = scrollTop;
+    }
+  }, [scrollTop]);
+
   // Get unique users for mentions (online users + offline collaborators)
   const mentionableUsers = useMemo(() => {
     const allUsers = [];
@@ -1210,6 +1217,28 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
     
     return positions;
   }, [sortedIndices, elementPositions, cardHeights]);
+
+  // Calculate max content height for scroll spacer
+  const maxContentHeight = useMemo(() => {
+    let maxBottom = 0;
+    sortedIndices.forEach(idx => {
+      const top = adjustedPositions[idx] || 0;
+      const height = cardHeights[idx] || 150;
+      maxBottom = Math.max(maxBottom, top + height + 50);
+    });
+    // Also consider pending forms
+    if (pendingInlineComment) {
+      const pendingIdx = pendingInlineComment.elementIndex;
+      const pendingTop = elementPositions[pendingIdx] || (pendingIdx * 30);
+      maxBottom = Math.max(maxBottom, pendingTop + 200);
+    }
+    if (pendingSuggestion) {
+      const pendingIdx = pendingSuggestion.elementIndex;
+      const pendingTop = elementPositions[pendingIdx] || (pendingIdx * 30);
+      maxBottom = Math.max(maxBottom, pendingTop + 200);
+    }
+    return maxBottom;
+  }, [sortedIndices, adjustedPositions, cardHeights, pendingInlineComment, pendingSuggestion, elementPositions]);
 
   // Navigation functions
   // Get filtered indices based on current filter
@@ -1886,6 +1915,9 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
               );
             })
           ) : null}
+          
+          {/* Spacer to ensure sidebar can scroll to full document height */}
+          <div style={{ height: maxContentHeight, pointerEvents: 'none' }} />
         </div>
       </div>
     </div>
