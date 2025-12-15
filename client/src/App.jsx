@@ -4,9 +4,48 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V141 - TipTap Step 2: Line breaks within elements
+// V142 - TipTap Step 3: Comment marks (yellow highlights)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
+
+// ============ TIPTAP COMMENT MARK ============
+const CommentMark = Mark.create({
+  name: 'comment',
+  
+  addAttributes() {
+    return {
+      commentId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-comment-id'),
+        renderHTML: attributes => {
+          if (!attributes.commentId) return {};
+          return { 'data-comment-id': attributes.commentId };
+        },
+      },
+    };
+  },
+  
+  parseHTML() {
+    return [{ tag: 'span[data-comment-id]' }];
+  },
+  
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, {
+      style: 'background-color: rgba(251, 191, 36, 0.4); border-radius: 2px; cursor: pointer;',
+    }), 0];
+  },
+});
+
+// Helper to escape HTML entities
+const escapeHtml = (text) => {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
 
 // UUID fallback for browsers that don't support crypto.randomUUID
 const generateId = () => {
@@ -2451,6 +2490,43 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [editorReady, setEditorReady] = useState(false);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
   const lastContentRef = useRef(element.content);
+  const lastHighlightsRef = useRef(null);
+  
+  // Build HTML content with comment marks applied
+  const buildContentWithMarks = useCallback((content, highlightsList) => {
+    if (!content) return '<p></p>';
+    
+    const comments = (highlightsList || []).filter(h => h.type === 'comment');
+    if (comments.length === 0) return `<p>${escapeHtml(content)}</p>`;
+    
+    // Sort by startOffset
+    const sorted = [...comments].sort((a, b) => a.startOffset - b.startOffset);
+    
+    let html = '';
+    let lastEnd = 0;
+    
+    for (const c of sorted) {
+      if (c.startOffset < 0 || c.endOffset > content.length || c.startOffset >= c.endOffset) continue;
+      
+      // Text before this comment
+      if (c.startOffset > lastEnd) {
+        html += escapeHtml(content.slice(lastEnd, c.startOffset));
+      }
+      
+      // Comment mark
+      const commentText = escapeHtml(content.slice(c.startOffset, c.endOffset));
+      html += `<span data-comment-id="${c.id || c._id}">${commentText}</span>`;
+      
+      lastEnd = c.endOffset;
+    }
+    
+    // Remaining text
+    if (lastEnd < content.length) {
+      html += escapeHtml(content.slice(lastEnd));
+    }
+    
+    return `<p>${html}</p>`;
+  }, []);
   
   // TipTap editor instance
   const editor = useEditor({
@@ -2477,8 +2553,9 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           HTMLAttributes: { style: 'margin: 0; padding: 0;' },
         },
       }),
+      CommentMark,
     ],
-    content: `<p>${element.content || ''}</p>`,
+    content: buildContentWithMarks(element.content, highlights),
     editable: canEdit && !isLocked,
     
     // Editor props for styling and keyboard handling
@@ -2569,6 +2646,22 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           return false;
         }
       },
+      
+      // Handle click on comment marks
+      handleClick: (view, pos, event) => {
+        if (!view) return false;
+        try {
+          const target = event.target;
+          const commentEl = target.closest('[data-comment-id]');
+          if (commentEl && onHighlightClick) {
+            const commentId = commentEl.getAttribute('data-comment-id');
+            setTimeout(() => onHighlightClick(commentId), 0);
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+        return false;
+      },
     },
     
     // Sync content changes back to parent
@@ -2629,12 +2722,31 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       const editorText = editor.getText();
       if (element.content !== editorText && element.content !== lastContentRef.current) {
         lastContentRef.current = element.content;
-        editor.commands.setContent(`<p>${element.content || ''}</p>`, false);
+        editor.commands.setContent(buildContentWithMarks(element.content, highlights), false);
       }
     } catch (e) {
       // Editor not ready yet
     }
-  }, [editorReady, editor, element.content]);
+  }, [editorReady, editor, element.content, buildContentWithMarks, highlights]);
+  
+  // Sync highlights when they change (without changing text)
+  useEffect(() => {
+    if (!editorReady || !editor) return;
+    
+    // Check if highlights actually changed
+    const highlightsJson = JSON.stringify(highlights || []);
+    if (highlightsJson === lastHighlightsRef.current) return;
+    lastHighlightsRef.current = highlightsJson;
+    
+    try {
+      // Only update if editor is not focused to avoid cursor jump
+      if (!editor.isFocused) {
+        editor.commands.setContent(buildContentWithMarks(element.content, highlights), false);
+      }
+    } catch (e) {
+      // Editor not ready yet
+    }
+  }, [editorReady, editor, highlights, element.content, buildContentWithMarks]);
   
   // Focus editor when becoming active
   useEffect(() => {
