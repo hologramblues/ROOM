@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V148 - Fix FDX import with setTimeout + remove console spam
+// V153 - Flex layout for sidebars (no more fixed positioning)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -1275,17 +1275,11 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   return (
     <div 
       style={{ 
-        position: 'fixed', 
-        right: 0, 
-        top: 60, 
-        bottom: 0, 
-        width: 320, 
-        background: darkMode ? '#1f2937' : '#f8f9fa', 
-        borderLeft: `1px solid ${darkMode ? '#374151' : '#dadce0'}`, 
-        zIndex: 100, 
+        flex: 1,
         display: 'flex', 
         flexDirection: 'column',
-        boxShadow: '-2px 0 8px rgba(0,0,0,0.1)'
+        background: darkMode ? '#1f2937' : '#f8f9fa', 
+        overflow: 'hidden'
       }}
       onClick={() => { onSelectComment && onSelectComment(null); onSelectSuggestion && onSelectSuggestion(null); }}
     >
@@ -4845,88 +4839,102 @@ export default function ScreenplayEditor() {
     console.log('[IMPORT] importFDX called, token:', !!token);
     if (!token) { setShowAuthModal(true); return; }
     
-    // Use setTimeout to ensure we're in a clean call stack for file picker
-    setTimeout(() => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.fdx,.xml';
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.fdx,.xml';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    
+    input.onchange = async (e) => {
+      console.log('[IMPORT] File selected');
+      const file = e.target.files?.[0];
       
-      input.onchange = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+      // Clean up input element
+      document.body.removeChild(input);
+      
+      if (!file) {
+        console.log('[IMPORT] No file selected');
+        return;
+      }
+      
+      setImporting(true);
+      console.log('[IMPORT] Starting import of:', file.name);
+    
+      try {
+        const text = await file.text();
+        console.log('[IMPORT] File size:', text.length, 'chars');
         
-        setImporting(true);
-        console.log('[IMPORT] Starting import of:', file.name);
-      
-        try {
-          const text = await file.text();
-          console.log('[IMPORT] File size:', text.length, 'chars');
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, 'application/xml');
+        
+        // Check for parse errors
+        const parseError = xml.querySelector('parsererror');
+        if (parseError) {
+          throw new Error('Fichier FDX invalide');
+        }
+        
+        const paragraphs = xml.querySelectorAll('Paragraph');
+        console.log('[IMPORT] Found', paragraphs.length, 'paragraphs');
+        
+        const newElements = [];
+        paragraphs.forEach((p, i) => {
+          const fdxType = p.getAttribute('Type');
+          const type = FDX_TO_TYPE[fdxType] || 'action';
           
-          const parser = new DOMParser();
-          const xml = parser.parseFromString(text, 'application/xml');
+          // Get ALL Text nodes and concatenate them
+          const textNodes = p.querySelectorAll('Text');
+          let content = '';
+          textNodes.forEach(t => { content += t.textContent || ''; });
           
-          // Check for parse errors
-          const parseError = xml.querySelector('parsererror');
-          if (parseError) {
-            throw new Error('Fichier FDX invalide');
+          if (content.trim() || newElements.length === 0) {
+            const id = generateId();
+            newElements.push({ id, type, content: content.trim() });
           }
-          
-          const paragraphs = xml.querySelectorAll('Paragraph');
-          console.log('[IMPORT] Found', paragraphs.length, 'paragraphs');
-          
-          const newElements = [];
-          paragraphs.forEach((p, i) => {
-            const fdxType = p.getAttribute('Type');
-            const type = FDX_TO_TYPE[fdxType] || 'action';
-            
-            // Get ALL Text nodes and concatenate them
-            const textNodes = p.querySelectorAll('Text');
-            let content = '';
-            textNodes.forEach(t => { content += t.textContent || ''; });
-            
-            if (content.trim() || newElements.length === 0) {
-              const id = generateId();
-              newElements.push({ id, type, content: content.trim() });
-            }
-          });
-          
-          if (newElements.length === 0) {
-            newElements.push({ id: generateId(), type: 'scene', content: '' });
-          }
-          
-          // Get title from filename
-          const fileName = file.name.replace(/\.fdx$/i, '').toUpperCase();
-          
-          console.log('[IMPORT] Creating document with', newElements.length, 'elements, title:', fileName);
-          
-          // Create document via API
-          const res = await fetch(SERVER_URL + '/api/documents/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-            body: JSON.stringify({ title: fileName, elements: newElements })
-          });
-          
-          console.log('[IMPORT] Server response status:', res.status);
-          
-          if (res.ok) {
-            const data = await res.json();
-            console.log('[IMPORT] Document created:', data.id, 'with', data.elementsCount, 'elements');
-            loadedDocRef.current = null;
-            window.location.hash = data.id;
-          } else {
+        });
+        
+        if (newElements.length === 0) {
+          newElements.push({ id: generateId(), type: 'scene', content: '' });
+        }
+        
+        // Get title from filename
+        const fileName = file.name.replace(/\.fdx$/i, '').toUpperCase();
+        
+        console.log('[IMPORT] Creating document with', newElements.length, 'elements, title:', fileName);
+        
+        // Create document via API
+        const res = await fetch(SERVER_URL + '/api/documents/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ title: fileName, elements: newElements })
+        });
+        
+        console.log('[IMPORT] Server response status:', res.status);
+        
+        if (res.ok) {
+          const data = await res.json();
+          console.log('[IMPORT] Document created:', data.id, 'with', data.elementsCount, 'elements');
+          loadedDocRef.current = null;
+          window.location.hash = data.id;
+        } else if (res.status === 413) {
+          alert('Erreur import: Fichier trop volumineux. Contactez l\'admin pour augmenter la limite serveur.');
+        } else {
+          try {
             const err = await res.json();
             console.error('[IMPORT] Server error:', err);
             alert('Erreur import: ' + (err.error || 'Erreur serveur'));
+          } catch {
+            alert('Erreur import: Erreur serveur ' + res.status);
           }
-        } catch (err) { 
-          console.error('[IMPORT] Error:', err);
-          alert('Erreur import: ' + err.message);
         }
-        setImporting(false);
-      };
+      } catch (err) { 
+        console.error('[IMPORT] Error:', err);
+        alert('Erreur import: ' + err.message);
+      }
+      setImporting(false);
+    };
     
+    // Click must happen synchronously with user action
     input.click();
-    }, 0);
   };
 
   // ============ BULK SAVE (for existing doc) ============
@@ -5156,7 +5164,7 @@ export default function ScreenplayEditor() {
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
 
   return (
-    <div className={focusMode ? 'focus-mode-active' : ''} style={{ minHeight: '100vh', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s', overflowX: 'auto' }}>
+    <div className={focusMode ? 'focus-mode-active' : ''} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s', overflow: 'hidden' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       
       {/* Template Selector Modal */}
@@ -5268,358 +5276,6 @@ export default function ScreenplayEditor() {
         </div>
       )}
 
-      {/* Outline Panel */}
-      {showOutline && (
-        <div style={{ 
-          position: 'fixed', 
-          left: 0, 
-          top: 60, 
-          bottom: 0, 
-          width: 300, 
-          background: darkMode ? '#1f2937' : 'white', 
-          borderRight: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
-          zIndex: 100, 
-          display: 'flex', 
-          flexDirection: 'column',
-          boxShadow: '4px 0 20px rgba(0,0,0,0.2)'
-        }}>
-          <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>📋 Outline</h3>
-            <button onClick={() => setShowOutline(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
-          </div>
-          
-          {/* Filters */}
-          <div style={{ padding: '8px 12px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', gap: 8 }}>
-            <select 
-              value={outlineFilter.status} 
-              onChange={e => setOutlineFilter(f => ({ ...f, status: e.target.value }))}
-              style={{ 
-                flex: 1,
-                minWidth: 0,
-                padding: '6px 24px 6px 10px', 
-                fontSize: 11, 
-                background: darkMode ? '#374151' : '#1f2937', 
-                border: 'none', 
-                borderRadius: 6, 
-                color: 'white',
-                cursor: 'pointer',
-                outline: 'none',
-                WebkitAppearance: 'none',
-                MozAppearance: 'none',
-                appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M3 5l3 3 3-3'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 8px center'
-              }}
-            >
-              <option value="">Statut</option>
-              <option value="progress">En cours</option>
-              <option value="done">Validé</option>
-              <option value="urgent">Urgent</option>
-            </select>
-            <select 
-              value={outlineFilter.assignee} 
-              onChange={e => setOutlineFilter(f => ({ ...f, assignee: e.target.value }))}
-              style={{ 
-                flex: 1,
-                minWidth: 0,
-                padding: '6px 24px 6px 10px', 
-                fontSize: 11, 
-                background: darkMode ? '#374151' : '#1f2937', 
-                border: 'none', 
-                borderRadius: 6, 
-                color: 'white',
-                cursor: 'pointer',
-                outline: 'none',
-                WebkitAppearance: 'none',
-                MozAppearance: 'none',
-                appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M3 5l3 3 3-3'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 8px center'
-              }}
-            >
-              <option value="">Assigné à</option>
-              {[...new Set(Object.values(sceneAssignments).map(a => a.userName))].sort().map(name => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-            {(outlineFilter.status || outlineFilter.assignee) && (
-              <button onClick={() => setOutlineFilter({ status: '', assignee: '' })} style={{ padding: '6px 10px', fontSize: 11, background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', flexShrink: 0 }}>✕</button>
-            )}
-          </div>
-          
-          <div style={{ flex: 1, overflow: 'auto', padding: 8 }}>
-            {filteredOutline.length === 0 ? (
-              <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>
-                {outline.length === 0 ? 'Aucune scène' : 'Aucun résultat'}
-              </p>
-            ) : (
-              filteredOutline.map((scene, sceneIdx) => (
-                <React.Fragment key={scene.id}>
-                  {/* Chapter header before scene (if exists) */}
-                  {outlineChapters[scene.id] && editingChapter !== scene.id && (
-                    <div 
-                      onClick={() => setEditingChapter(scene.id)}
-                      style={{
-                        padding: '8px 12px',
-                        marginBottom: 8,
-                        marginTop: sceneIdx > 0 ? 16 : 0,
-                        background: darkMode ? '#1e3a5f' : '#dbeafe',
-                        borderRadius: 6,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}
-                    >
-                      <span style={{ 
-                        fontSize: 12, 
-                        fontWeight: 'bold', 
-                        color: darkMode ? '#93c5fd' : '#1e40af',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                      }}>
-                        📁 {outlineChapters[scene.id]}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOutlineChapters(prev => {
-                            const updated = { ...prev };
-                            delete updated[scene.id];
-                            return updated;
-                          });
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: darkMode ? '#93c5fd' : '#1e40af',
-                          cursor: 'pointer',
-                          fontSize: 10,
-                          opacity: 0.6
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                  
-                  {/* Chapter editing input */}
-                  {editingChapter === scene.id && (
-                    <div style={{ padding: '8px', marginBottom: 8, marginTop: sceneIdx > 0 ? 16 : 0 }}>
-                      <input
-                        autoFocus
-                        defaultValue={outlineChapters[scene.id] || ''}
-                        placeholder="Ex: Acte 1, Partie 2..."
-                        onBlur={(e) => {
-                          const value = e.target.value.trim();
-                          if (value) {
-                            setOutlineChapters(prev => ({ ...prev, [scene.id]: value }));
-                          } else {
-                            setOutlineChapters(prev => {
-                              const updated = { ...prev };
-                              delete updated[scene.id];
-                              return updated;
-                            });
-                          }
-                          setEditingChapter(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const value = e.target.value.trim();
-                            if (value) {
-                              setOutlineChapters(prev => ({ ...prev, [scene.id]: value }));
-                            }
-                            setEditingChapter(null);
-                          }
-                          if (e.key === 'Escape') {
-                            setEditingChapter(null);
-                          }
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          fontSize: 12,
-                          fontWeight: 'bold',
-                          background: darkMode ? '#1e3a5f' : '#dbeafe',
-                          border: `2px solid ${darkMode ? '#3b82f6' : '#2563eb'}`,
-                          borderRadius: 6,
-                          color: darkMode ? '#93c5fd' : '#1e40af',
-                          outline: 'none',
-                          textTransform: 'uppercase'
-                        }}
-                      />
-                    </div>
-                  )}
-                  
-                  {/* Scene card */}
-                  <div
-                    onClick={() => navigateToScene(scene.index)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      if (!outlineChapters[scene.id]) {
-                        setEditingChapter(scene.id);
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      background: currentSceneNumber === scene.number 
-                        ? (darkMode ? '#374151' : '#e5e7eb') 
-                        : 'transparent',
-                      borderRadius: 6,
-                      marginBottom: 4,
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 8,
-                      cursor: 'pointer',
-                      borderLeft: sceneStatus[scene.id] ? `3px solid ${
-                        sceneStatus[scene.id] === 'done' ? '#22c55e' : 
-                        sceneStatus[scene.id] === 'progress' ? '#f59e0b' : 
-                        sceneStatus[scene.id] === 'urgent' ? '#ef4444' : '#6b7280'
-                      }` : '3px solid transparent',
-                      boxSizing: 'border-box'
-                    }}
-                    title="Clic droit pour ajouter un chapitre"
-                  >
-                    {/* Scene number */}
-                    <span style={{ 
-                      color: '#6b7280', 
-                      fontSize: 9, 
-                      fontWeight: 'bold',
-                      minWidth: 20,
-                      padding: '2px 4px',
-                      background: darkMode ? '#4b5563' : '#d1d5db',
-                      borderRadius: 3,
-                      textAlign: 'center',
-                      flexShrink: 0
-                    }}>
-                      {scene.number}
-                    </span>
-                    
-                    {/* Scene content */}
-                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                      <span style={{ 
-                        fontSize: 11, 
-                        lineHeight: 1.3,
-                        display: 'block',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        color: darkMode ? 'white' : 'black'
-                      }}>
-                        {scene.content}
-                      </span>
-                      <span style={{ fontSize: 9, color: '#6b7280', display: 'block', marginTop: 1 }}>
-                        {scene.wordCount}m • ~{Math.max(1, Math.round(scene.wordCount / 150))}min
-                      </span>
-                    </div>
-                  
-                  {/* Action buttons */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    {/* Lock - RED when locked */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLockedScenes(prev => {
-                          const newSet = new Set(prev);
-                          if (newSet.has(scene.id)) newSet.delete(scene.id);
-                          else newSet.add(scene.id);
-                          return newSet;
-                        });
-                      }}
-                      style={{ 
-                        background: lockedScenes.has(scene.id) ? 'rgba(239, 68, 68, 0.2)' : 'none', 
-                        border: 'none', 
-                        color: lockedScenes.has(scene.id) ? '#ef4444' : '#6b7280', 
-                        cursor: 'pointer', 
-                        fontSize: 11, 
-                        padding: '3px 4px',
-                        borderRadius: 4
-                      }}
-                      title={lockedScenes.has(scene.id) ? 'Déverrouiller' : 'Verrouiller'}
-                    >
-                      {lockedScenes.has(scene.id) ? '🔒' : '🔓'}
-                    </button>
-                    {/* Status - uniform squares */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const statuses = ['', 'progress', 'done', 'urgent'];
-                        const currentIdx = statuses.indexOf(sceneStatus[scene.id] || '');
-                        setSceneStatus(prev => ({ ...prev, [scene.id]: statuses[(currentIdx + 1) % 4] }));
-                      }}
-                      style={{ 
-                        minWidth: 22,
-                        height: 18, 
-                        borderRadius: 4, 
-                        border: !sceneStatus[scene.id] ? '1px dashed #6b7280' : 'none',
-                        background: sceneStatus[scene.id] === 'done' ? '#22c55e' 
-                          : sceneStatus[scene.id] === 'progress' ? '#f59e0b' 
-                          : sceneStatus[scene.id] === 'urgent' ? '#ef4444'
-                          : 'transparent',
-                        cursor: 'pointer', 
-                        padding: '0 4px',
-                        fontSize: 10,
-                        fontWeight: 'bold',
-                        color: 'white',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      title={sceneStatus[scene.id] === 'done' ? 'Validé' 
-                        : sceneStatus[scene.id] === 'progress' ? 'En cours' 
-                        : sceneStatus[scene.id] === 'urgent' ? 'Urgent'
-                        : 'Pas commencé'}
-                    >
-                      {sceneStatus[scene.id] === 'done' ? '✓' 
-                        : sceneStatus[scene.id] === 'progress' ? '…' 
-                        : sceneStatus[scene.id] === 'urgent' ? '!'
-                        : ''}
-                    </button>
-                    {/* User Assignment - opens context menu */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setAssignmentMenu({
-                          sceneId: scene.id,
-                          x: rect.left,
-                          y: rect.bottom + 4
-                        });
-                      }}
-                      style={{ 
-                        minWidth: 22,
-                        height: 18, 
-                        borderRadius: 4, 
-                        border: sceneAssignments[scene.id] ? 'none' : `1px dashed #6b7280`, 
-                        background: sceneAssignments[scene.id]?.userColor || 'transparent', 
-                        cursor: 'pointer', 
-                        padding: '0 4px',
-                        fontSize: 9,
-                        fontWeight: 'bold',
-                        color: 'white',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      title={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner'}
-                    >
-                      {getInitials(sceneAssignments[scene.id]?.userName) || ''}
-                    </button>
-                  </div>
-                </div>
-                </React.Fragment>
-              ))
-            )}
-          </div>
-          <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', textAlign: 'center' }}>
-            <div>{outline.length} scène{outline.length > 1 ? 's' : ''} • Position: {currentSceneNumber}/{outline.length}</div>
-            <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7 }}>💡 Clic droit sur une scène = ajouter un chapitre</div>
-          </div>
-        </div>
-      )}
       
       {/* HEADER - 3 zones: Left (menus), Center (doc info + collab), Right (quick toggles) */}
       <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 200, gap: 16 }}>
@@ -5829,45 +5485,294 @@ export default function ScreenplayEditor() {
         </div>
       </div>
       
+      {/* MAIN CONTENT AREA - Flex layout with sidebars */}
       <div style={{ 
+        flex: 1,
         display: 'flex', 
-        justifyContent: 'center', 
-        padding: 32, 
-        paddingLeft: showOutline ? 332 : 32,
-        paddingRight: showComments ? 352 : 32,
-        gap: 20,
-        transition: 'padding 0.2s ease'
+        overflow: 'auto'
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {pages.map((page) => (
-            <div key={page.number} style={{ position: 'relative' }}>
-              {/* Page content */}
-              <div style={{ 
-                background: 'white', 
-                color: '#111', 
-                width: '210mm', 
-                minHeight: '297mm',
-                padding: '20mm 25mm 25mm 38mm', 
-                boxSizing: 'border-box', 
-                boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                flexShrink: 0,
-                position: 'relative'
-              }}>
-                {/* Page number inside, top right */}
+        {/* LEFT SIDEBAR - Outline */}
+        {showOutline && (
+          <div style={{ 
+            width: 300,
+            minWidth: 200,
+            flexShrink: 1,
+            background: darkMode ? '#1f2937' : 'white', 
+            borderRight: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
+            display: 'flex', 
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>📋 Outline</h3>
+              <button onClick={() => setShowOutline(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
+            </div>
+            
+            {/* Filters */}
+            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', gap: 8 }}>
+              <select 
+                value={outlineFilter.status} 
+                onChange={e => setOutlineFilter(f => ({ ...f, status: e.target.value }))}
+                style={{ 
+                  flex: 1,
+                  minWidth: 0,
+                  padding: '6px 8px', 
+                  background: darkMode ? '#374151' : '#f3f4f6', 
+                  border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+                  borderRadius: 6, 
+                  color: darkMode ? 'white' : 'black', 
+                  fontSize: 11,
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">Statut</option>
+                <option value="progress">🟡 En cours</option>
+                <option value="done">🟢 Validé</option>
+                <option value="urgent">🔴 Urgent</option>
+                <option value="none">⚪ Non défini</option>
+              </select>
+              <select 
+                value={outlineFilter.assignee} 
+                onChange={e => setOutlineFilter(f => ({ ...f, assignee: e.target.value }))}
+                style={{ 
+                  flex: 1,
+                  minWidth: 0,
+                  padding: '6px 8px', 
+                  background: darkMode ? '#374151' : '#f3f4f6', 
+                  border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+                  borderRadius: 6, 
+                  color: darkMode ? 'white' : 'black', 
+                  fontSize: 11,
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="">Assigné à</option>
+                <option value="unassigned">Non assigné</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.name}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+            {(outlineFilter.status || outlineFilter.assignee) && (
+              <div style={{ padding: '4px 12px', background: darkMode ? '#374151' : '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 10, color: darkMode ? '#fbbf24' : '#92400e' }}>
+                  {filteredOutline.length} scène{filteredOutline.length > 1 ? 's' : ''} filtrée{filteredOutline.length > 1 ? 's' : ''}
+                </span>
+                <button onClick={() => setOutlineFilter({ status: '', assignee: '' })} style={{ padding: '6px 10px', fontSize: 11, background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+              </div>
+            )}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+              {filteredOutline.length === 0 ? (
+                <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>Aucune scène</p>
+              ) : (
+                filteredOutline.map((scene, sceneIdx) => (
+                  <React.Fragment key={scene.id}>
+                  {outlineChapters[scene.id] && (
+                    <div 
+                      style={{ 
+                        padding: '8px 12px', 
+                        background: darkMode ? '#1e3a5f' : '#dbeafe', 
+                        borderLeft: '3px solid #3b82f6',
+                        margin: '4px 8px',
+                        borderRadius: 4,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: darkMode ? '#93c5fd' : '#1e40af',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <span>📁 {outlineChapters[scene.id]}</span>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setOutlineChapters(prev => { const n = {...prev}; delete n[scene.id]; return n; }); }}
+                        style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 12, padding: 0 }}
+                      >✕</button>
+                    </div>
+                  )}
+                  <div 
+                    onClick={() => handleNavigateToElement(scene.elementIndex)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      const chapterName = prompt('Nom du chapitre/acte à insérer avant cette scène:', outlineChapters[scene.id] || '');
+                      if (chapterName !== null) {
+                        if (chapterName.trim()) {
+                          setOutlineChapters(prev => ({ ...prev, [scene.id]: chapterName.trim() }));
+                        } else {
+                          setOutlineChapters(prev => { const n = {...prev}; delete n[scene.id]; return n; });
+                        }
+                      }
+                    }}
+                    style={{ 
+                      padding: '10px 12px', 
+                      cursor: 'pointer', 
+                      background: activeIndex === scene.elementIndex 
+                        ? (darkMode ? '#374151' : '#f3f4f6')
+                        : 'transparent',
+                      borderBottom: `1px solid ${darkMode ? '#374151' : '#f3f4f6'}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}
+                  >
+                    <span style={{ 
+                      fontSize: 10, 
+                      color: '#6b7280', 
+                      minWidth: 20,
+                      textAlign: 'center'
+                    }}>{sceneIdx + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ 
+                        fontSize: 12, 
+                        fontWeight: 500, 
+                        color: darkMode ? 'white' : 'black',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>{scene.content || 'Scène vide'}</div>
+                      <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>{scene.duration}m • ~1min</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLockedScenes(prev => {
+                            const newSet = new Set(prev);
+                            if (newSet.has(scene.id)) newSet.delete(scene.id);
+                            else newSet.add(scene.id);
+                            return newSet;
+                          });
+                        }}
+                        style={{ 
+                          background: lockedScenes.has(scene.id) ? 'rgba(239, 68, 68, 0.2)' : 'none', 
+                          border: 'none', 
+                          color: lockedScenes.has(scene.id) ? '#ef4444' : '#6b7280', 
+                          cursor: 'pointer', 
+                          fontSize: 11, 
+                          padding: '3px 4px',
+                          borderRadius: 4
+                        }}
+                        title={lockedScenes.has(scene.id) ? 'Déverrouiller' : 'Verrouiller'}
+                      >
+                        {lockedScenes.has(scene.id) ? '🔒' : '🔓'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const statuses = ['', 'progress', 'done', 'urgent'];
+                          const currentIdx = statuses.indexOf(sceneStatus[scene.id] || '');
+                          setSceneStatus(prev => ({ ...prev, [scene.id]: statuses[(currentIdx + 1) % 4] }));
+                        }}
+                        style={{ 
+                          minWidth: 22,
+                          height: 18, 
+                          borderRadius: 4, 
+                          border: !sceneStatus[scene.id] ? '1px dashed #6b7280' : 'none',
+                          background: sceneStatus[scene.id] === 'done' ? '#22c55e' 
+                            : sceneStatus[scene.id] === 'progress' ? '#f59e0b' 
+                            : sceneStatus[scene.id] === 'urgent' ? '#ef4444'
+                            : 'transparent',
+                          cursor: 'pointer', 
+                          padding: '0 4px',
+                          fontSize: 10,
+                          fontWeight: 'bold',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title={sceneStatus[scene.id] === 'done' ? 'Validé' 
+                          : sceneStatus[scene.id] === 'progress' ? 'En cours' 
+                          : sceneStatus[scene.id] === 'urgent' ? 'Urgent'
+                          : 'Pas commencé'}
+                      >
+                        {sceneStatus[scene.id] === 'done' ? '✓' 
+                          : sceneStatus[scene.id] === 'progress' ? '…' 
+                          : sceneStatus[scene.id] === 'urgent' ? '!'
+                          : ''}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setAssignmentMenu({
+                            sceneId: scene.id,
+                            x: rect.left,
+                            y: rect.bottom + 4
+                          });
+                        }}
+                        style={{ 
+                          minWidth: 22,
+                          height: 18, 
+                          borderRadius: 4, 
+                          border: sceneAssignments[scene.id] ? 'none' : '1px dashed #6b7280', 
+                          background: sceneAssignments[scene.id]?.userColor || 'transparent', 
+                          cursor: 'pointer', 
+                          padding: '0 4px',
+                          fontSize: 9,
+                          fontWeight: 'bold',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner'}
+                      >
+                        {getInitials(sceneAssignments[scene.id]?.userName) || ''}
+                      </button>
+                    </div>
+                  </div>
+                  </React.Fragment>
+                ))
+              )}
+            </div>
+            <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', textAlign: 'center' }}>
+              <div>{outline.length} scène{outline.length > 1 ? 's' : ''} • Position: {currentSceneNumber}/{outline.length}</div>
+              <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7 }}>💡 Clic droit sur une scène = ajouter un chapitre</div>
+            </div>
+          </div>
+        )}
+        
+        {/* CENTER - Script content */}
+        <div style={{ 
+          flex: 1,
+          minWidth: 'fit-content',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          display: 'flex', 
+          justifyContent: 'center', 
+          padding: 32,
+          gap: 20
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {pages.map((page) => (
+              <div key={page.number} style={{ position: 'relative' }}>
+                {/* Page content */}
                 <div style={{ 
-                  position: 'absolute', 
-                  top: '12mm', 
-                  right: '25mm', 
-                  fontSize: '12pt', 
-                  fontFamily: 'Courier Prime, Courier New, monospace',
-                  color: '#111'
+                  background: 'white', 
+                  color: '#111', 
+                  width: '210mm', 
+                  minHeight: '297mm',
+                  padding: '20mm 25mm 25mm 38mm', 
+                  boxSizing: 'border-box', 
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                  position: 'relative'
                 }}>
-                  {page.number}.
-                </div>
-                
-                {page.elements.map(({ element, index }) => (
-                  <div key={element.id} data-element-index={index}>
-                    <SceneLine 
+                  {/* Page number inside, top right */}
+                  <div style={{ 
+                    position: 'absolute', 
+                    top: '12mm', 
+                    right: '25mm', 
+                    fontSize: '12pt', 
+                    fontFamily: 'Courier Prime, Courier New, monospace',
+                    color: '#111'
+                  }}>
+                    {page.number}.
+                  </div>
+                  
+                  {page.elements.map(({ element, index }) => (
+                    <div key={element.id} data-element-index={index}>
+                      <SceneLine 
                       element={element} 
                       index={index} 
                       isActive={activeIndex === index} 
@@ -5930,34 +5835,44 @@ export default function ScreenplayEditor() {
         </div>
       </div>
       
-      {/* Comments Panel (fixed position) */}
+      {/* RIGHT SIDEBAR - Comments */}
       {showComments && (
-        <CommentsSidebar 
-          comments={comments} 
-          suggestions={suggestions}
-          elements={elements} 
-          activeIndex={activeIndex}
-          selectedCommentIndex={selectedCommentIndex}
-          selectedCommentId={selectedCommentId}
-          onSelectComment={(id) => { setSelectedCommentId(id); if (id) setSelectedSuggestionId(null); }}
-          elementPositions={elementPositions}
-          scrollTop={documentScrollTop}
-          token={token} 
-          docId={docId} 
-          canComment={canComment}
-          onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setSelectedCommentId(null); setSelectedSuggestionId(null); setPendingInlineComment(null); setPendingSuggestion(null); }}
-          darkMode={darkMode}
-          onNavigateToElement={(idx) => {
-            setActiveIndex(idx);
-            setSelectedCommentIndex(idx);
-            setTimeout(() => {
-              const el = document.querySelector(`[data-element-index="${idx}"]`);
-              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 50);
-          }}
-          pendingInlineComment={pendingInlineComment}
-          onSubmitInlineComment={(commentText) => {
-            if (pendingInlineComment && commentText.trim()) {
+        <div style={{ 
+          width: 320,
+          minWidth: 250,
+          flexShrink: 1,
+          background: darkMode ? '#1f2937' : 'white', 
+          borderLeft: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
+          display: 'flex', 
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
+          <CommentsSidebar 
+            comments={comments} 
+            suggestions={suggestions}
+            elements={elements} 
+            activeIndex={activeIndex}
+            selectedCommentIndex={selectedCommentIndex}
+            selectedCommentId={selectedCommentId}
+            onSelectComment={(id) => { setSelectedCommentId(id); if (id) setSelectedSuggestionId(null); }}
+            elementPositions={elementPositions}
+            scrollTop={documentScrollTop}
+            token={token} 
+            docId={docId} 
+            canComment={canComment}
+            onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setSelectedCommentId(null); setSelectedSuggestionId(null); setPendingInlineComment(null); setPendingSuggestion(null); }}
+            darkMode={darkMode}
+            onNavigateToElement={(idx) => {
+              setActiveIndex(idx);
+              setSelectedCommentIndex(idx);
+              setTimeout(() => {
+                const el = document.querySelector(`[data-element-index="${idx}"]`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 50);
+            }}
+            pendingInlineComment={pendingInlineComment}
+            onSubmitInlineComment={(commentText) => {
+              if (pendingInlineComment && commentText.trim()) {
               const newComment = {
                 id: 'comment-' + Date.now(),
                 elementId: pendingInlineComment.elementId,
@@ -6045,7 +5960,9 @@ export default function ScreenplayEditor() {
           users={users}
           collaborators={collaborators}
         />
+        </div>
       )}
+      </div>
       
       {/* Characters Panel */}
       {showCharactersPanel && (
