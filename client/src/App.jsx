@@ -2448,11 +2448,19 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [autoIdx, setAutoIdx] = useState(0);
   const [filtered, setFiltered] = useState([]);
   const [autoType, setAutoType] = useState(null);
+  const [editorReady, setEditorReady] = useState(false);
   const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
   const lastContentRef = useRef(element.content);
   
   // TipTap editor instance
   const editor = useEditor({
+    immediatelyRender: false, // Prevent SSR-like errors
+    onCreate: () => {
+      setEditorReady(true);
+    },
+    onDestroy: () => {
+      setEditorReady(false);
+    },
     extensions: [
       StarterKit.configure({
         // Disable block-level elements we don't need
@@ -2482,6 +2490,8 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       
       // Handle keyboard events
       handleKeyDown: (view, event) => {
+        if (!view) return false;
+        try {
         // Autocomplete navigation
         if (showAuto && filtered.length > 0) {
           if (event.key === 'ArrowDown') {
@@ -2549,68 +2559,93 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         }
         
         return false;
+        } catch (e) {
+          return false;
+        }
       },
     },
     
     // Sync content changes back to parent
     onUpdate: ({ editor }) => {
-      const text = editor.getText();
-      if (text !== lastContentRef.current) {
-        lastContentRef.current = text;
-        onUpdate(index, { ...element, content: text });
+      if (!editor || !editor.view) return;
+      try {
+        const text = editor.getText();
+        if (text !== lastContentRef.current) {
+          lastContentRef.current = text;
+          onUpdate(index, { ...element, content: text });
+        }
+      } catch (e) {
+        // Editor not ready
       }
     },
     
     // Handle text selection for comments/suggestions
     onSelectionUpdate: ({ editor }) => {
-      if (!onTextSelect) return;
-      const { from, to } = editor.state.selection;
-      if (from !== to) {
-        const selectedText = editor.state.doc.textBetween(from, to);
-        if (selectedText.trim()) {
-          const rect = containerRef.current?.getBoundingClientRect();
-          onTextSelect({
-            elementId: element.id,
-            elementIndex: index,
-            text: selectedText,
-            startOffset: from - 1, // -1 because of paragraph wrapper
-            endOffset: to - 1,
-            rect,
-          });
+      if (!editor || !editor.view || !onTextSelect) return;
+      try {
+        const { from, to } = editor.state.selection;
+        if (from !== to) {
+          const selectedText = editor.state.doc.textBetween(from, to);
+          if (selectedText.trim()) {
+            const rect = containerRef.current?.getBoundingClientRect();
+            onTextSelect({
+              elementId: element.id,
+              elementIndex: index,
+              text: selectedText,
+              startOffset: from - 1, // -1 because of paragraph wrapper
+              endOffset: to - 1,
+              rect,
+            });
+          }
         }
+      } catch (e) {
+        // Editor not ready
       }
     },
     
     // When editor gets focus, notify parent
-    onFocus: () => {
-      if (!isActive) {
-        onFocus(index, null);
+    onFocus: ({ editor }) => {
+      if (!editor || !editor.view) return;
+      try {
+        if (!isActive) {
+          onFocus(index, null);
+        }
+      } catch (e) {
+        // Editor not ready
       }
     },
   });
   
   // Sync content from parent when it changes externally
   useEffect(() => {
-    if (!editor) return;
-    const editorText = editor.getText();
-    if (element.content !== editorText && element.content !== lastContentRef.current) {
-      lastContentRef.current = element.content;
-      editor.commands.setContent(`<p>${element.content || ''}</p>`, false);
+    if (!editorReady || !editor) return;
+    try {
+      const editorText = editor.getText();
+      if (element.content !== editorText && element.content !== lastContentRef.current) {
+        lastContentRef.current = element.content;
+        editor.commands.setContent(`<p>${element.content || ''}</p>`, false);
+      }
+    } catch (e) {
+      // Editor not ready yet
     }
-  }, [editor, element.content]);
+  }, [editorReady, editor, element.content]);
   
   // Focus editor when becoming active
   useEffect(() => {
-    if (!editor) return;
+    if (!editorReady || !editor) return;
     if (isActive) {
-      editor.commands.focus();
-      // Place cursor at specific position if provided
-      if (initialCursorOffset !== null && initialCursorOffset !== undefined && initialCursorOffset >= 0) {
-        const pos = Math.min(initialCursorOffset + 1, editor.state.doc.content.size - 1);
-        editor.commands.setTextSelection(pos);
+      try {
+        editor.commands.focus();
+        // Place cursor at specific position if provided
+        if (initialCursorOffset !== null && initialCursorOffset !== undefined && initialCursorOffset >= 0) {
+          const pos = Math.min(initialCursorOffset + 1, editor.state.doc.content.size - 1);
+          editor.commands.setTextSelection(pos);
+        }
+      } catch (e) {
+        // Editor not ready yet
       }
     }
-  }, [editor, isActive, initialCursorOffset]);
+  }, [editorReady, editor, isActive, initialCursorOffset]);
   
   // Autocomplete for characters and locations
   useEffect(() => {
