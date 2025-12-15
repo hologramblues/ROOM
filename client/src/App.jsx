@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V146 - Fix FDX import + scroll when both sidebars open
+// V147 - Fix FDX import + page centering with sidebars
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -4842,18 +4842,15 @@ export default function ScreenplayEditor() {
   }, [elements, insertElement, changeType, deleteElement, updateElement, canEdit, handleFocus]);
 
   // ============ IMPORT FDX - Creates new document ============
-  const importFDX = async () => {
+  const importFDX = () => {
     if (!token) { setShowAuthModal(true); return; }
     
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.fdx';
-    input.style.display = 'none';
-    document.body.appendChild(input);
     
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      document.body.removeChild(input);
+    input.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
       if (!file) return;
       
       setImporting(true);
@@ -4924,7 +4921,8 @@ export default function ScreenplayEditor() {
         alert('Erreur import: ' + err.message);
       }
       setImporting(false);
-    };
+    });
+    
     input.click();
   };
 
@@ -5155,7 +5153,7 @@ export default function ScreenplayEditor() {
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
 
   return (
-    <div className={focusMode ? 'focus-mode-active' : ''} style={{ minHeight: '100vh', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s' }}>
+    <div className={focusMode ? 'focus-mode-active' : ''} style={{ minHeight: '100vh', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s', overflowX: 'auto' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       
       {/* Template Selector Modal */}
@@ -5832,15 +5830,12 @@ export default function ScreenplayEditor() {
         display: 'flex', 
         justifyContent: 'center', 
         padding: 32, 
-        gap: 20, 
-        marginLeft: showOutline ? 300 : 0, 
-        marginRight: showComments ? 320 : 0, 
-        transition: 'margin 0.2s ease',
-        minWidth: 0,
-        overflowX: 'auto',
-        overflowY: 'visible'
+        paddingLeft: showOutline ? 332 : 32,
+        paddingRight: showComments ? 352 : 32,
+        gap: 20,
+        transition: 'padding 0.2s ease'
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, flexShrink: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {pages.map((page) => (
             <div key={page.number} style={{ position: 'relative' }}>
               {/* Page content */}
