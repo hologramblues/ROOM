@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V145 - Fix selection menu position when near bottom of screen
+// V146 - Fix FDX import + scroll when both sidebars open
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -4848,8 +4848,12 @@ export default function ScreenplayEditor() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.fdx';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    
     input.onchange = async (e) => {
       const file = e.target.files[0];
+      document.body.removeChild(input);
       if (!file) return;
       
       setImporting(true);
@@ -5824,8 +5828,19 @@ export default function ScreenplayEditor() {
         </div>
       </div>
       
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 32, gap: 20, marginLeft: showOutline ? 300 : 0, marginRight: showComments ? 320 : 0, transition: 'margin 0.2s ease' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        padding: 32, 
+        gap: 20, 
+        marginLeft: showOutline ? 300 : 0, 
+        marginRight: showComments ? 320 : 0, 
+        transition: 'margin 0.2s ease',
+        minWidth: 0,
+        overflowX: 'auto',
+        overflowY: 'visible'
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, flexShrink: 0 }}>
           {pages.map((page) => (
             <div key={page.number} style={{ position: 'relative' }}>
               {/* Page content */}
