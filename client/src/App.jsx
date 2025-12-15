@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V142 - TipTap Step 3: Comment marks (yellow highlights)
+// V143 - TipTap Step 4: Suggestion marks (strikethrough + green text)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -33,6 +33,52 @@ const CommentMark = Mark.create({
     return ['span', mergeAttributes(HTMLAttributes, {
       style: 'background-color: rgba(251, 191, 36, 0.4); border-radius: 2px; cursor: pointer;',
     }), 0];
+  },
+});
+
+// ============ TIPTAP SUGGESTION MARK ============
+const SuggestionMark = Mark.create({
+  name: 'suggestion',
+  
+  addAttributes() {
+    return {
+      suggestionId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-suggestion-id'),
+        renderHTML: attributes => {
+          if (!attributes.suggestionId) return {};
+          return { 'data-suggestion-id': attributes.suggestionId };
+        },
+      },
+      suggestedText: {
+        default: '',
+        parseHTML: element => element.getAttribute('data-suggested-text'),
+        renderHTML: attributes => {
+          return { 'data-suggested-text': attributes.suggestedText || '' };
+        },
+      },
+    };
+  },
+  
+  parseHTML() {
+    return [{ tag: 'span[data-suggestion-id]' }];
+  },
+  
+  renderHTML({ HTMLAttributes }) {
+    // Return a structure that shows strikethrough original + green suggestion
+    return ['span', mergeAttributes({
+      'data-suggestion-id': HTMLAttributes['data-suggestion-id'],
+      'data-suggested-text': HTMLAttributes['data-suggested-text'],
+      style: 'cursor: pointer;',
+    }),
+      // Wrapper for the two parts
+      ['span', { style: 'text-decoration: line-through; color: #dc2626; background: rgba(220, 38, 38, 0.1);' }, 0], // 0 = original content goes here
+      ['span', { 
+        style: 'color: #16a34a; background: rgba(22, 163, 74, 0.1); margin-left: 2px;',
+        contenteditable: 'false',
+        'data-suggestion-display': 'true',
+      }, HTMLAttributes['data-suggested-text'] || ''],
+    ];
   },
 });
 
@@ -2492,32 +2538,43 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const lastContentRef = useRef(element.content);
   const lastHighlightsRef = useRef(null);
   
-  // Build HTML content with comment marks applied
+  // Build HTML content with comment and suggestion marks applied
   const buildContentWithMarks = useCallback((content, highlightsList) => {
     if (!content) return '<p></p>';
     
-    const comments = (highlightsList || []).filter(h => h.type === 'comment');
-    if (comments.length === 0) return `<p>${escapeHtml(content)}</p>`;
+    const allHighlights = (highlightsList || []).filter(h => 
+      h.type === 'comment' || h.type === 'suggestion'
+    );
+    
+    if (allHighlights.length === 0) return `<p>${escapeHtml(content)}</p>`;
     
     // Sort by startOffset
-    const sorted = [...comments].sort((a, b) => a.startOffset - b.startOffset);
+    const sorted = [...allHighlights].sort((a, b) => a.startOffset - b.startOffset);
     
     let html = '';
     let lastEnd = 0;
     
-    for (const c of sorted) {
-      if (c.startOffset < 0 || c.endOffset > content.length || c.startOffset >= c.endOffset) continue;
+    for (const h of sorted) {
+      if (h.startOffset < 0 || h.endOffset > content.length || h.startOffset >= h.endOffset) continue;
       
-      // Text before this comment
-      if (c.startOffset > lastEnd) {
-        html += escapeHtml(content.slice(lastEnd, c.startOffset));
+      // Skip if overlapping with previous (simple approach)
+      if (h.startOffset < lastEnd) continue;
+      
+      // Text before this highlight
+      if (h.startOffset > lastEnd) {
+        html += escapeHtml(content.slice(lastEnd, h.startOffset));
       }
       
-      // Comment mark
-      const commentText = escapeHtml(content.slice(c.startOffset, c.endOffset));
-      html += `<span data-comment-id="${c.id || c._id}">${commentText}</span>`;
+      const markedText = escapeHtml(content.slice(h.startOffset, h.endOffset));
       
-      lastEnd = c.endOffset;
+      if (h.type === 'comment') {
+        html += `<span data-comment-id="${h.id || h._id}">${markedText}</span>`;
+      } else if (h.type === 'suggestion') {
+        const suggestedText = escapeHtml(h.suggestedText || '');
+        html += `<span data-suggestion-id="${h.id || h._id}" data-suggested-text="${suggestedText}">${markedText}</span>`;
+      }
+      
+      lastEnd = h.endOffset;
     }
     
     // Remaining text
@@ -2554,6 +2611,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         },
       }),
       CommentMark,
+      SuggestionMark,
     ],
     content: buildContentWithMarks(element.content, highlights),
     editable: canEdit && !isLocked,
@@ -2647,15 +2705,26 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         }
       },
       
-      // Handle click on comment marks
+      // Handle click on comment and suggestion marks
       handleClick: (view, pos, event) => {
         if (!view) return false;
         try {
           const target = event.target;
+          
+          // Check for comment click
           const commentEl = target.closest('[data-comment-id]');
           if (commentEl && onHighlightClick) {
             const commentId = commentEl.getAttribute('data-comment-id');
             setTimeout(() => onHighlightClick(commentId), 0);
+            return false;
+          }
+          
+          // Check for suggestion click
+          const suggestionEl = target.closest('[data-suggestion-id]');
+          if (suggestionEl && onSuggestionClick) {
+            const suggestionId = suggestionEl.getAttribute('data-suggestion-id');
+            setTimeout(() => onSuggestionClick(suggestionId), 0);
+            return false;
           }
         } catch (e) {
           // Ignore errors
