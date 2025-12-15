@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V155 - Fix suggestion click navigation + improve scroll fluidity
+// V156 - Performance optimizations: RAF scroll sync, memoized highlights, reduced position updates
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -936,8 +936,28 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const commentRefs = useRef({});
   const prevActiveIndexRef = useRef(activeIndex);
 
-  // Sidebar scrolls independently - no automatic sync with document
-  // Navigation happens only when user clicks on a comment/suggestion
+  // Sync sidebar scroll with document scroll - use requestAnimationFrame for smooth sync
+  const scrollFrameRef = useRef(null);
+  
+  useEffect(() => {
+    if (sidebarRef.current && scrollTop !== undefined) {
+      // Cancel any pending animation frame
+      if (scrollFrameRef.current) {
+        cancelAnimationFrame(scrollFrameRef.current);
+      }
+      // Use requestAnimationFrame for smooth scroll sync
+      scrollFrameRef.current = requestAnimationFrame(() => {
+        if (sidebarRef.current) {
+          sidebarRef.current.scrollTop = scrollTop;
+        }
+      });
+    }
+    return () => {
+      if (scrollFrameRef.current) {
+        cancelAnimationFrame(scrollFrameRef.current);
+      }
+    };
+  }, [scrollTop]);
 
   // Get unique users for mentions (online users + offline collaborators)
   const mentionableUsers = useMemo(() => {
@@ -1373,8 +1393,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
           flex: 1, 
           overflowY: 'auto',
           position: 'relative',
-          padding: '8px 12px',
-          scrollBehavior: 'smooth'
+          padding: '8px 12px'
         }}
       >
         <div>
@@ -4077,40 +4096,56 @@ export default function ScreenplayEditor() {
   };
 
   // Track element positions and scroll for comments sync (Google Docs style)
+  // Track element positions and scroll - optimized with requestAnimationFrame
+  const scrollRAFRef = useRef(null);
+  const lastScrollTop = useRef(0);
+  
   useEffect(() => {
     if (!showComments) return;
     
-    // Collect element positions
+    // Collect element positions - only update when needed
     const updatePositions = () => {
       const positions = {};
       const elementDivs = document.querySelectorAll('[data-element-index]');
       elementDivs.forEach(div => {
         const index = parseInt(div.getAttribute('data-element-index'), 10);
         if (!isNaN(index)) {
-          // Get position relative to container top
           const rect = div.getBoundingClientRect();
           const containerRect = scriptContainerRef.current?.getBoundingClientRect();
           const containerScrollTop = scriptContainerRef.current?.scrollTop || 0;
           if (containerRect) {
             positions[index] = rect.top - containerRect.top + containerScrollTop;
           } else {
-            positions[index] = rect.top + window.scrollY - 60; // Fallback
+            positions[index] = rect.top + window.scrollY - 60;
           }
         }
       });
       setElementPositions(positions);
     };
     
-    // Track scroll position
+    // Throttled scroll handler using requestAnimationFrame
     const handleScroll = () => {
-      if (scriptContainerRef.current) {
-        setDocumentScrollTop(scriptContainerRef.current.scrollTop);
-      }
+      if (scrollRAFRef.current) return; // Skip if already scheduled
+      
+      scrollRAFRef.current = requestAnimationFrame(() => {
+        if (scriptContainerRef.current) {
+          const newScrollTop = scriptContainerRef.current.scrollTop;
+          // Only update if scroll changed significantly (> 1px)
+          if (Math.abs(newScrollTop - lastScrollTop.current) > 1) {
+            lastScrollTop.current = newScrollTop;
+            setDocumentScrollTop(newScrollTop);
+          }
+        }
+        scrollRAFRef.current = null;
+      });
     };
     
     // Initial update
     updatePositions();
-    handleScroll();
+    if (scriptContainerRef.current) {
+      lastScrollTop.current = scriptContainerRef.current.scrollTop;
+      setDocumentScrollTop(scriptContainerRef.current.scrollTop);
+    }
     
     // Update on scroll and resize
     const container = scriptContainerRef.current;
@@ -4119,10 +4154,13 @@ export default function ScreenplayEditor() {
     }
     window.addEventListener('resize', updatePositions);
     
-    // Update positions periodically (elements might change height)
-    const positionInterval = setInterval(updatePositions, 1000);
+    // Update positions less frequently (elements rarely change height)
+    const positionInterval = setInterval(updatePositions, 2000);
     
     return () => {
+      if (scrollRAFRef.current) {
+        cancelAnimationFrame(scrollRAFRef.current);
+      }
       if (container) {
         container.removeEventListener('scroll', handleScroll);
       }
@@ -4131,36 +4169,52 @@ export default function ScreenplayEditor() {
     };
   }, [showComments, elements.length]);
 
-  // Get highlight data for an element (for CSS Highlight API)
-  const getElementHighlights = useCallback((elementId) => {
-    // Find all highlights for this element (comments)
-    const elementHighlights = comments
-      .filter(c => c.elementId === elementId && c.highlight && !c.resolved)
-      .map(c => ({
-        startOffset: c.highlight.startOffset,
-        endOffset: c.highlight.endOffset,
-        type: 'comment',
-        id: String(c.id || c._id), // Stringify for consistent comparison
-        userColor: c.userColor
-      }));
+  // Pre-compute highlights per element (memoized for performance)
+  const highlightsByElement = useMemo(() => {
+    const map = {};
     
-    // Find all suggestions for this element
-    const elementSuggestions = suggestions
-      .filter(s => s.elementId === elementId && s.status === 'pending')
-      .map(s => ({
-        startOffset: s.startOffset,
-        endOffset: s.endOffset,
-        type: 'suggestion',
-        id: String(s.id || s._id), // Stringify for consistent comparison
-        originalText: s.originalText,
-        suggestedText: s.suggestedText,
-        userColor: s.userColor
-      }));
+    // Process comments
+    comments.forEach(c => {
+      if (c.elementId && c.highlight && !c.resolved) {
+        if (!map[c.elementId]) map[c.elementId] = [];
+        map[c.elementId].push({
+          startOffset: c.highlight.startOffset,
+          endOffset: c.highlight.endOffset,
+          type: 'comment',
+          id: String(c.id || c._id),
+          userColor: c.userColor
+        });
+      }
+    });
     
-    // Combine and sort by startOffset
-    return [...elementHighlights, ...elementSuggestions]
-      .sort((a, b) => a.startOffset - b.startOffset);
+    // Process suggestions
+    suggestions.forEach(s => {
+      if (s.elementId && s.status === 'pending') {
+        if (!map[s.elementId]) map[s.elementId] = [];
+        map[s.elementId].push({
+          startOffset: s.startOffset,
+          endOffset: s.endOffset,
+          type: 'suggestion',
+          id: String(s.id || s._id),
+          originalText: s.originalText,
+          suggestedText: s.suggestedText,
+          userColor: s.userColor
+        });
+      }
+    });
+    
+    // Sort each element's highlights
+    Object.keys(map).forEach(key => {
+      map[key].sort((a, b) => a.startOffset - b.startOffset);
+    });
+    
+    return map;
   }, [comments, suggestions]);
+
+  // Get highlight data for an element (now just a lookup)
+  const getElementHighlights = useCallback((elementId) => {
+    return highlightsByElement[elementId] || [];
+  }, [highlightsByElement]);
 
   // Apply CSS Highlights globally
   useEffect(() => {
@@ -5779,8 +5833,7 @@ export default function ScreenplayEditor() {
             display: 'flex', 
             justifyContent: 'center', 
             padding: 32,
-            gap: 20,
-            scrollBehavior: 'smooth'
+            gap: 20
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -5838,22 +5891,18 @@ export default function ScreenplayEditor() {
                         }
                       }}
                       onHighlightClick={(commentId) => {
-                        console.log('onHighlightClick called with:', commentId);
                         setShowComments(true);
                         setSelectedCommentId(commentId);
                         setSelectedSuggestionId(null);
                         // Scroll to the comment card in the sidebar
                         setTimeout(() => {
-                          console.log('Scrolling to comment:', commentId, 'selectedCommentId is now:', commentId);
                           const commentCard = document.querySelector(`[data-comment-card-id="${commentId}"]`);
-                          console.log('Found card:', commentCard);
                           if (commentCard) {
                             commentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
                           }
                         }, 150);
                       }}
                       onSuggestionClick={(suggestionId) => {
-                        console.log('onSuggestionClick called with:', suggestionId);
                         setShowComments(true);
                         setSelectedSuggestionId(suggestionId);
                         setSelectedCommentId(null);
