@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V147 - Fix FDX import + page centering with sidebars
+// V148 - Fix FDX import with setTimeout + remove console spam
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -1758,7 +1758,6 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   {(filter === 'all' || filter === 'comments') && elementComments.map(c => {
                     const cId = String(c.id || c._id);
                     const isThisCommentSelected = String(selectedCommentId) === cId || (selectedCommentIndex === idx && elementComments.length === 1);
-                    console.log('Comment card render:', { cId, selectedCommentId, isThisCommentSelected, comparison: String(selectedCommentId) === cId });
                     return (
                       <div 
                         key={cId} 
@@ -4843,87 +4842,91 @@ export default function ScreenplayEditor() {
 
   // ============ IMPORT FDX - Creates new document ============
   const importFDX = () => {
+    console.log('[IMPORT] importFDX called, token:', !!token);
     if (!token) { setShowAuthModal(true); return; }
     
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.fdx';
-    
-    input.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+    // Use setTimeout to ensure we're in a clean call stack for file picker
+    setTimeout(() => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.fdx,.xml';
       
-      setImporting(true);
-      console.log('[IMPORT] Starting import of:', file.name);
+      input.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        
+        setImporting(true);
+        console.log('[IMPORT] Starting import of:', file.name);
       
-      try {
-        const text = await file.text();
-        console.log('[IMPORT] File size:', text.length, 'chars');
-        
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(text, 'application/xml');
-        
-        // Check for parse errors
-        const parseError = xml.querySelector('parsererror');
-        if (parseError) {
-          throw new Error('Fichier FDX invalide');
-        }
-        
-        const paragraphs = xml.querySelectorAll('Paragraph');
-        console.log('[IMPORT] Found', paragraphs.length, 'paragraphs');
-        
-        const newElements = [];
-        paragraphs.forEach((p, i) => {
-          const fdxType = p.getAttribute('Type');
-          const type = FDX_TO_TYPE[fdxType] || 'action';
+        try {
+          const text = await file.text();
+          console.log('[IMPORT] File size:', text.length, 'chars');
           
-          // Get ALL Text nodes and concatenate them
-          const textNodes = p.querySelectorAll('Text');
-          let content = '';
-          textNodes.forEach(t => { content += t.textContent || ''; });
+          const parser = new DOMParser();
+          const xml = parser.parseFromString(text, 'application/xml');
           
-          if (content.trim() || newElements.length === 0) {
-            const id = generateId();
-            newElements.push({ id, type, content: content.trim() });
+          // Check for parse errors
+          const parseError = xml.querySelector('parsererror');
+          if (parseError) {
+            throw new Error('Fichier FDX invalide');
           }
-        });
-        
-        if (newElements.length === 0) {
-          newElements.push({ id: generateId(), type: 'scene', content: '' });
+          
+          const paragraphs = xml.querySelectorAll('Paragraph');
+          console.log('[IMPORT] Found', paragraphs.length, 'paragraphs');
+          
+          const newElements = [];
+          paragraphs.forEach((p, i) => {
+            const fdxType = p.getAttribute('Type');
+            const type = FDX_TO_TYPE[fdxType] || 'action';
+            
+            // Get ALL Text nodes and concatenate them
+            const textNodes = p.querySelectorAll('Text');
+            let content = '';
+            textNodes.forEach(t => { content += t.textContent || ''; });
+            
+            if (content.trim() || newElements.length === 0) {
+              const id = generateId();
+              newElements.push({ id, type, content: content.trim() });
+            }
+          });
+          
+          if (newElements.length === 0) {
+            newElements.push({ id: generateId(), type: 'scene', content: '' });
+          }
+          
+          // Get title from filename
+          const fileName = file.name.replace(/\.fdx$/i, '').toUpperCase();
+          
+          console.log('[IMPORT] Creating document with', newElements.length, 'elements, title:', fileName);
+          
+          // Create document via API
+          const res = await fetch(SERVER_URL + '/api/documents/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ title: fileName, elements: newElements })
+          });
+          
+          console.log('[IMPORT] Server response status:', res.status);
+          
+          if (res.ok) {
+            const data = await res.json();
+            console.log('[IMPORT] Document created:', data.id, 'with', data.elementsCount, 'elements');
+            loadedDocRef.current = null;
+            window.location.hash = data.id;
+          } else {
+            const err = await res.json();
+            console.error('[IMPORT] Server error:', err);
+            alert('Erreur import: ' + (err.error || 'Erreur serveur'));
+          }
+        } catch (err) { 
+          console.error('[IMPORT] Error:', err);
+          alert('Erreur import: ' + err.message);
         }
-        
-        // Get title from filename
-        const fileName = file.name.replace(/\.fdx$/i, '').toUpperCase();
-        
-        console.log('[IMPORT] Creating document with', newElements.length, 'elements, title:', fileName);
-        
-        // Create document via API
-        const res = await fetch(SERVER_URL + '/api/documents/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-          body: JSON.stringify({ title: fileName, elements: newElements })
-        });
-        
-        console.log('[IMPORT] Server response status:', res.status);
-        
-        if (res.ok) {
-          const data = await res.json();
-          console.log('[IMPORT] Document created:', data.id, 'with', data.elementsCount, 'elements');
-          loadedDocRef.current = null;
-          window.location.hash = data.id;
-        } else {
-          const err = await res.json();
-          console.error('[IMPORT] Server error:', err);
-          alert('Erreur import: ' + (err.error || 'Erreur serveur'));
-        }
-      } catch (err) { 
-        console.error('[IMPORT] Error:', err);
-        alert('Erreur import: ' + err.message);
-      }
-      setImporting(false);
-    });
+        setImporting(false);
+      };
     
     input.click();
+    }, 0);
   };
 
   // ============ BULK SAVE (for existing doc) ============
@@ -5650,7 +5653,7 @@ export default function ScreenplayEditor() {
                       📜 Historique
                     </button>
                     <div style={{ height: 1, background: darkMode ? '#374151' : '#e5e7eb', margin: '4px 0' }} />
-                    <button onClick={() => { importFDX(); setShowDocMenu(false); }} disabled={importing || !token} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !token ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !token ? 'default' : 'pointer', fontSize: 12, textAlign: 'left' }}>
+                    <button onClick={(e) => { e.stopPropagation(); importFDX(); setShowDocMenu(false); }} disabled={importing || !token} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: !token ? '#6b7280' : (darkMode ? 'white' : 'black'), cursor: !token ? 'default' : 'pointer', fontSize: 12, textAlign: 'left' }}>
                       📥 Importer FDX
                     </button>
                     <button onClick={() => { exportFDX(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left' }}>
