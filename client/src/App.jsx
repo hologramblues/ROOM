@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V144 - TipTap Step 5: Scroll sync between script and comments panel
+// V145 - Fix selection menu position when near bottom of screen
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -6217,13 +6217,23 @@ export default function ScreenplayEditor() {
       )}
       
       {/* Text Selection Toolbar - Google Docs style */}
-      {textSelection && canComment && textSelection.rect && (
+      {textSelection && canComment && textSelection.rect && (() => {
+        // Calculate menu position - show above if near bottom of screen
+        const menuHeight = 110; // approx height of menu
+        const screenBottom = window.innerHeight;
+        const idealTop = textSelection.rect.top || 100;
+        const wouldOverflow = idealTop + menuHeight > screenBottom - 20;
+        const finalTop = wouldOverflow 
+          ? Math.max(20, textSelection.rect.top - menuHeight - 10)  // Position above
+          : idealTop;
+        
+        return (
         <div 
           className="text-selection-popup"
           style={{
             position: 'fixed',
             right: showComments ? 340 : 20,
-            top: textSelection.rect.top || 100,
+            top: finalTop,
             display: 'flex',
             flexDirection: 'column',
             gap: 0,
@@ -6367,7 +6377,8 @@ export default function ScreenplayEditor() {
             </svg>
           </button>
         </div>
-      )}
+        );
+      })()}
 
       {/* AI Rewrite Modal */}
       {showAIRewrite && aiRewriteSelection && (
