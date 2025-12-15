@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V140 - TipTap Step 1: Basic editing (no marks yet)
+// V141 - TipTap Step 2: Line breaks within elements
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -2470,7 +2470,8 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         blockquote: false,
         codeBlock: false,
         horizontalRule: false,
-        hardBreak: false,
+        // Keep hardBreak for line breaks within elements
+        hardBreak: true,
         // Keep paragraph but style it
         paragraph: {
           HTMLAttributes: { style: 'margin: 0; padding: 0;' },
@@ -2544,11 +2545,16 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
           return true;
         }
         
-        // Enter -> create new element
+        // Enter -> create new element only at end, otherwise line break
         if (event.key === 'Enter' && !event.shiftKey) {
-          event.preventDefault();
-          onKeyDown(event, index);
-          return true;
+          // Check if cursor is at the end of content
+          if (atEnd) {
+            event.preventDefault();
+            onKeyDown(event, index);
+            return true;
+          }
+          // Otherwise let TipTap handle it (creates line break)
+          return false;
         }
         
         // Tab -> cycle element type
