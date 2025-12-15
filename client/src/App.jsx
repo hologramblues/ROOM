@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V154 - Elegant filter dropdowns + fix scroll sync for flex layout
+// V155 - Fix suggestion click navigation + improve scroll fluidity
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -936,12 +936,8 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const commentRefs = useRef({});
   const prevActiveIndexRef = useRef(activeIndex);
 
-  // Sync sidebar scroll with document scroll
-  useEffect(() => {
-    if (sidebarRef.current && scrollTop !== undefined) {
-      sidebarRef.current.scrollTop = scrollTop;
-    }
-  }, [scrollTop]);
+  // Sidebar scrolls independently - no automatic sync with document
+  // Navigation happens only when user clicks on a comment/suggestion
 
   // Get unique users for mentions (online users + offline collaborators)
   const mentionableUsers = useMemo(() => {
@@ -1377,7 +1373,8 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
           flex: 1, 
           overflowY: 'auto',
           position: 'relative',
-          padding: '8px 12px'
+          padding: '8px 12px',
+          scrollBehavior: 'smooth'
         }}
       >
         <div>
@@ -1801,6 +1798,10 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectSuggestion && onSelectSuggestion(isSelected ? null : sId);
+                            // Navigate to the element in the script
+                            if (!isSelected && onNavigateToElement) {
+                              onNavigateToElement(s.elementIndex);
+                            }
                           }}
                           style={{
                             background: darkMode ? '#1f2937' : '#f0fdf4',
@@ -5778,7 +5779,8 @@ export default function ScreenplayEditor() {
             display: 'flex', 
             justifyContent: 'center', 
             padding: 32,
-            gap: 20
+            gap: 20,
+            scrollBehavior: 'smooth'
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
