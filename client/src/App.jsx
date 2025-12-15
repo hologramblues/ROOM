@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V156 - Performance optimizations: RAF scroll sync, memoized highlights, reduced position updates
+// V157 - Bidirectional scroll sync: Script ↔ Outline ↔ Comments
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -919,7 +919,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollTop, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
+const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollContainerRef, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
@@ -932,32 +932,10 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const [mentionIndex, setMentionIndex] = useState(0);
   const inlineCommentInputRef = useRef(null);
   const suggestionInputRef = useRef(null);
-  const sidebarRef = useRef(null);
+  const fallbackRef = useRef(null);
+  const sidebarRef = scrollContainerRef || fallbackRef; // Use external ref for scroll sync
   const commentRefs = useRef({});
   const prevActiveIndexRef = useRef(activeIndex);
-
-  // Sync sidebar scroll with document scroll - use requestAnimationFrame for smooth sync
-  const scrollFrameRef = useRef(null);
-  
-  useEffect(() => {
-    if (sidebarRef.current && scrollTop !== undefined) {
-      // Cancel any pending animation frame
-      if (scrollFrameRef.current) {
-        cancelAnimationFrame(scrollFrameRef.current);
-      }
-      // Use requestAnimationFrame for smooth scroll sync
-      scrollFrameRef.current = requestAnimationFrame(() => {
-        if (sidebarRef.current) {
-          sidebarRef.current.scrollTop = scrollTop;
-        }
-      });
-    }
-    return () => {
-      if (scrollFrameRef.current) {
-        cancelAnimationFrame(scrollFrameRef.current);
-      }
-    };
-  }, [scrollTop]);
 
   // Get unique users for mentions (online users + offline collaborators)
   const mentionableUsers = useMemo(() => {
@@ -3337,7 +3315,6 @@ export default function ScreenplayEditor() {
   const [sceneSynopsis, setSceneSynopsis] = useState({}); // { sceneId: 'synopsis text' }
   const [visibleElementIndex, setVisibleElementIndex] = useState(0); // For scroll sync with comments
   const [elementPositions, setElementPositions] = useState({}); // { elementIndex: topPosition }
-  const [documentScrollTop, setDocumentScrollTop] = useState(0);
   const [writingGoal, setWritingGoal] = useState(() => {
     const saved = localStorage.getItem('rooms-writing-goal');
     return saved ? JSON.parse(saved) : { daily: 1000, todayWords: 0, lastDate: null };
@@ -3369,6 +3346,8 @@ export default function ScreenplayEditor() {
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
   const scriptContainerRef = useRef(null);
+  const outlineSidebarRef = useRef(null);
+  const commentsSidebarRef = useRef(null);
   const chatEndRef = useRef(null);
   const chatNotificationSoundRef = useRef(chatNotificationSound);
   
@@ -3376,6 +3355,64 @@ export default function ScreenplayEditor() {
   useEffect(() => {
     chatNotificationSoundRef.current = chatNotificationSound;
   }, [chatNotificationSound]);
+
+  // Bidirectional scroll sync between Script ↔ Outline ↔ Comments
+  useEffect(() => {
+    const script = scriptContainerRef.current;
+    const outline = outlineSidebarRef.current;
+    const comments = commentsSidebarRef.current;
+    
+    if (!script) return;
+    
+    let isScrolling = false;
+    let scrollTimeout = null;
+    
+    const syncScroll = (source, sourceEl) => {
+      if (isScrolling) return;
+      isScrolling = true;
+      
+      // Calculate scroll percentage
+      const maxScroll = sourceEl.scrollHeight - sourceEl.clientHeight;
+      const scrollPercent = maxScroll > 0 ? sourceEl.scrollTop / maxScroll : 0;
+      
+      // Apply to other containers
+      requestAnimationFrame(() => {
+        if (source !== 'script' && script) {
+          const scriptMax = script.scrollHeight - script.clientHeight;
+          script.scrollTop = scrollPercent * scriptMax;
+        }
+        if (source !== 'outline' && outline) {
+          const outlineMax = outline.scrollHeight - outline.clientHeight;
+          outline.scrollTop = scrollPercent * outlineMax;
+        }
+        if (source !== 'comments' && comments) {
+          const commentsMax = comments.scrollHeight - comments.clientHeight;
+          comments.scrollTop = scrollPercent * commentsMax;
+        }
+        
+        // Reset flag after a short delay
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+          isScrolling = false;
+        }, 50);
+      });
+    };
+    
+    const handleScriptScroll = () => syncScroll('script', script);
+    const handleOutlineScroll = () => syncScroll('outline', outline);
+    const handleCommentsScroll = () => syncScroll('comments', comments);
+    
+    script.addEventListener('scroll', handleScriptScroll, { passive: true });
+    if (outline) outline.addEventListener('scroll', handleOutlineScroll, { passive: true });
+    if (comments) comments.addEventListener('scroll', handleCommentsScroll, { passive: true });
+    
+    return () => {
+      script.removeEventListener('scroll', handleScriptScroll);
+      if (outline) outline.removeEventListener('scroll', handleOutlineScroll);
+      if (comments) comments.removeEventListener('scroll', handleCommentsScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, [showOutline, showComments]);
   
   // Chat notification audio - Web Audio synthesis
   const playChatNotification = useCallback(() => {
@@ -4095,11 +4132,7 @@ export default function ScreenplayEditor() {
     setSprintTimeLeft(seconds);
   };
 
-  // Track element positions and scroll for comments sync (Google Docs style)
-  // Track element positions and scroll - optimized with requestAnimationFrame
-  const scrollRAFRef = useRef(null);
-  const lastScrollTop = useRef(0);
-  
+  // Track element positions for comments sync (Google Docs style)
   useEffect(() => {
     if (!showComments) return;
     
@@ -4123,47 +4156,16 @@ export default function ScreenplayEditor() {
       setElementPositions(positions);
     };
     
-    // Throttled scroll handler using requestAnimationFrame
-    const handleScroll = () => {
-      if (scrollRAFRef.current) return; // Skip if already scheduled
-      
-      scrollRAFRef.current = requestAnimationFrame(() => {
-        if (scriptContainerRef.current) {
-          const newScrollTop = scriptContainerRef.current.scrollTop;
-          // Only update if scroll changed significantly (> 1px)
-          if (Math.abs(newScrollTop - lastScrollTop.current) > 1) {
-            lastScrollTop.current = newScrollTop;
-            setDocumentScrollTop(newScrollTop);
-          }
-        }
-        scrollRAFRef.current = null;
-      });
-    };
-    
     // Initial update
     updatePositions();
-    if (scriptContainerRef.current) {
-      lastScrollTop.current = scriptContainerRef.current.scrollTop;
-      setDocumentScrollTop(scriptContainerRef.current.scrollTop);
-    }
     
-    // Update on scroll and resize
-    const container = scriptContainerRef.current;
-    if (container) {
-      container.addEventListener('scroll', handleScroll, { passive: true });
-    }
+    // Update on resize
     window.addEventListener('resize', updatePositions);
     
     // Update positions less frequently (elements rarely change height)
     const positionInterval = setInterval(updatePositions, 2000);
     
     return () => {
-      if (scrollRAFRef.current) {
-        cancelAnimationFrame(scrollRAFRef.current);
-      }
-      if (container) {
-        container.removeEventListener('scroll', handleScroll);
-      }
       window.removeEventListener('resize', updatePositions);
       clearInterval(positionInterval);
     };
@@ -5644,7 +5646,7 @@ export default function ScreenplayEditor() {
                 <button onClick={() => setOutlineFilter({ status: '', assignee: '' })} style={{ padding: '6px 10px', fontSize: 11, background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', flexShrink: 0 }}>✕</button>
               </div>
             )}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+            <div ref={outlineSidebarRef} style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
               {filteredOutline.length === 0 ? (
                 <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>Aucune scène</p>
               ) : (
@@ -5944,7 +5946,7 @@ export default function ScreenplayEditor() {
             selectedCommentId={selectedCommentId}
             onSelectComment={(id) => { setSelectedCommentId(id); if (id) setSelectedSuggestionId(null); }}
             elementPositions={elementPositions}
-            scrollTop={documentScrollTop}
+            scrollContainerRef={commentsSidebarRef}
             token={token} 
             docId={docId} 
             canComment={canComment}
