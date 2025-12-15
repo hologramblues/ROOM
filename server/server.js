@@ -23,7 +23,8 @@ if (process.env.ANTHROPIC_API_KEY) {
 }
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/api/auth', authRouter);
 
 app.get('/api/health', async (req, res) => {
@@ -52,11 +53,76 @@ function getRandomColor() {
 app.post('/api/documents', authMiddleware, async (req, res) => {
   try {
     const shortId = uuidv4().slice(0, 8);
-    const doc = new Document({ shortId, ownerId: req.user._id, elements: [{ id: uuidv4(), type: 'scene', content: '' }], publicAccess: { enabled: true, role: 'editor' } });
+    const doc = new Document({ 
+      shortId, 
+      ownerId: req.user._id, 
+      title: req.body.title || 'SANS TITRE',
+      elements: req.body.elements || [{ id: uuidv4(), type: 'scene', content: '' }], 
+      publicAccess: { enabled: true, role: 'editor' } 
+    });
     await doc.save();
     await HistoryEntry.create({ documentId: doc._id, userId: req.user._id, userName: req.user.name, userColor: req.user.color, action: 'snapshot', data: { title: doc.title, elements: doc.elements } });
-    res.json({ id: doc.shortId, url: '/doc/' + doc.shortId });
-  } catch (error) { res.status(500).json({ error: 'Erreur' }); }
+    console.log('Created document', shortId, 'with', doc.elements.length, 'elements');
+    res.json({ id: doc.shortId, title: doc.title, elementsCount: doc.elements.length });
+  } catch (error) { console.error('Create doc error:', error); res.status(500).json({ error: 'Erreur' }); }
+});
+
+// Import document (create with title and elements)
+app.post('/api/documents/import', authMiddleware, async (req, res) => {
+  try {
+    const { title, elements } = req.body;
+    if (!elements || !Array.isArray(elements) || elements.length === 0) {
+      return res.status(400).json({ error: 'Elements requis' });
+    }
+    
+    const shortId = uuidv4().slice(0, 8);
+    const doc = new Document({ 
+      shortId, 
+      ownerId: req.user._id, 
+      title: title || 'SANS TITRE',
+      elements: elements,
+      publicAccess: { enabled: true, role: 'editor' } 
+    });
+    await doc.save();
+    await HistoryEntry.create({ 
+      documentId: doc._id, 
+      userId: req.user._id, 
+      userName: req.user.name, 
+      userColor: req.user.color, 
+      action: 'snapshot', 
+      data: { title: doc.title, elements: doc.elements } 
+    });
+    
+    console.log('Imported document', shortId, 'with', doc.elements.length, 'elements');
+    res.json({ id: doc.shortId, title: doc.title, elementsCount: doc.elements.length });
+  } catch (error) { 
+    console.error('Import doc error:', error); 
+    res.status(500).json({ error: 'Erreur import' }); 
+  }
+});
+
+// Bulk save (update existing document)
+app.put('/api/documents/:shortId/bulk', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId });
+    if (!doc) return res.status(404).json({ error: 'Document non trouve' });
+    if (!checkDocumentAccess(doc, req.user, 'editor')) return res.status(403).json({ error: 'Acces refuse' });
+    
+    if (req.body.title) doc.title = req.body.title;
+    if (req.body.elements && Array.isArray(req.body.elements)) {
+      doc.elements = req.body.elements;
+      doc.markModified('elements');
+    }
+    await doc.save();
+    
+    io.to(req.params.shortId).emit('document-restored', { title: doc.title, elements: doc.elements });
+    
+    console.log('Bulk saved document', req.params.shortId, 'with', doc.elements.length, 'elements');
+    res.json({ success: true, elementsCount: doc.elements.length });
+  } catch (error) { 
+    console.error('Bulk save error:', error);
+    res.status(500).json({ error: 'Erreur' }); 
+  }
 });
 
 app.get('/api/documents', authMiddleware, async (req, res) => {
