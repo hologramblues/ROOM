@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V157 - Bidirectional scroll sync: Script ↔ Outline ↔ Comments
+// V158 - Element-based scroll sync (not percentage-based)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -1734,6 +1734,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
               return (
                 <div 
                   key={idx}
+                  data-comment-element-index={idx}
                   ref={(el) => measureCard(idx, el)}
                   style={{ 
                     position: 'absolute',
@@ -3356,7 +3357,9 @@ export default function ScreenplayEditor() {
     chatNotificationSoundRef.current = chatNotificationSound;
   }, [chatNotificationSound]);
 
-  // Bidirectional scroll sync between Script ↔ Outline ↔ Comments
+  // Bidirectional scroll sync based on visible ELEMENT (not percentage)
+  const currentVisibleElementRef = useRef(null);
+  
   useEffect(() => {
     const script = scriptContainerRef.current;
     const outline = outlineSidebarRef.current;
@@ -3366,41 +3369,156 @@ export default function ScreenplayEditor() {
     
     let isScrolling = false;
     let scrollTimeout = null;
+    let rafId = null;
     
-    const syncScroll = (source, sourceEl) => {
+    // Find which element is at the center of a container
+    const findCenterElement = (container, selector) => {
+      const elements = container.querySelectorAll(selector);
+      const containerRect = container.getBoundingClientRect();
+      const centerY = containerRect.top + containerRect.height / 2;
+      
+      let closest = null;
+      let closestDist = Infinity;
+      
+      elements.forEach(el => {
+        const rect = el.getBoundingClientRect();
+        const elCenter = rect.top + rect.height / 2;
+        const dist = Math.abs(elCenter - centerY);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closest = el;
+        }
+      });
+      
+      return closest;
+    };
+    
+    // Scroll an element into view within its container (centered)
+    const scrollToElement = (container, element) => {
+      if (!container || !element) return;
+      const containerRect = container.getBoundingClientRect();
+      const elementRect = element.getBoundingClientRect();
+      const elementTop = elementRect.top - containerRect.top + container.scrollTop;
+      const targetScroll = elementTop - (containerRect.height / 2) + (elementRect.height / 2);
+      container.scrollTop = Math.max(0, targetScroll);
+    };
+    
+    // Main scroll handler for script
+    const handleScriptScroll = () => {
       if (isScrolling) return;
-      isScrolling = true;
       
-      // Calculate scroll percentage
-      const maxScroll = sourceEl.scrollHeight - sourceEl.clientHeight;
-      const scrollPercent = maxScroll > 0 ? sourceEl.scrollTop / maxScroll : 0;
-      
-      // Apply to other containers
-      requestAnimationFrame(() => {
-        if (source !== 'script' && script) {
-          const scriptMax = script.scrollHeight - script.clientHeight;
-          script.scrollTop = scrollPercent * scriptMax;
-        }
-        if (source !== 'outline' && outline) {
-          const outlineMax = outline.scrollHeight - outline.clientHeight;
-          outline.scrollTop = scrollPercent * outlineMax;
-        }
-        if (source !== 'comments' && comments) {
-          const commentsMax = comments.scrollHeight - comments.clientHeight;
-          comments.scrollTop = scrollPercent * commentsMax;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        // Find element at center of script
+        const centerEl = findCenterElement(script, '[data-element-index]');
+        if (!centerEl) return;
+        
+        const elementIndex = parseInt(centerEl.getAttribute('data-element-index'), 10);
+        if (isNaN(elementIndex) || elementIndex === currentVisibleElementRef.current) return;
+        
+        currentVisibleElementRef.current = elementIndex;
+        
+        // Find which scene this element belongs to
+        let sceneIndex = null;
+        for (let i = elementIndex; i >= 0; i--) {
+          if (elements[i]?.type === 'scene') {
+            sceneIndex = i;
+            break;
+          }
         }
         
-        // Reset flag after a short delay
+        isScrolling = true;
+        
+        // Sync outline - scroll to the scene
+        if (outline && sceneIndex !== null) {
+          const sceneEl = outline.querySelector(`[data-outline-element-index="${sceneIndex}"]`);
+          if (sceneEl) scrollToElement(outline, sceneEl);
+        }
+        
+        // Sync comments - scroll to comments for this element or nearby
+        if (comments) {
+          // Try to find comment card for this element or nearby elements
+          let commentEl = null;
+          for (let i = elementIndex; i >= Math.max(0, elementIndex - 5); i--) {
+            commentEl = comments.querySelector(`[data-comment-element-index="${i}"]`);
+            if (commentEl) break;
+          }
+          if (commentEl) scrollToElement(comments, commentEl);
+        }
+        
         clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(() => {
-          isScrolling = false;
-        }, 50);
+        scrollTimeout = setTimeout(() => { isScrolling = false; }, 100);
       });
     };
     
-    const handleScriptScroll = () => syncScroll('script', script);
-    const handleOutlineScroll = () => syncScroll('outline', outline);
-    const handleCommentsScroll = () => syncScroll('comments', comments);
+    // Handler for outline scroll
+    const handleOutlineScroll = () => {
+      if (isScrolling) return;
+      
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const centerEl = findCenterElement(outline, '[data-outline-element-index]');
+        if (!centerEl) return;
+        
+        const elementIndex = parseInt(centerEl.getAttribute('data-outline-element-index'), 10);
+        if (isNaN(elementIndex) || elementIndex === currentVisibleElementRef.current) return;
+        
+        currentVisibleElementRef.current = elementIndex;
+        isScrolling = true;
+        
+        // Sync script
+        const scriptEl = script.querySelector(`[data-element-index="${elementIndex}"]`);
+        if (scriptEl) scrollToElement(script, scriptEl);
+        
+        // Sync comments
+        if (comments) {
+          let commentEl = comments.querySelector(`[data-comment-element-index="${elementIndex}"]`);
+          if (commentEl) scrollToElement(comments, commentEl);
+        }
+        
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => { isScrolling = false; }, 100);
+      });
+    };
+    
+    // Handler for comments scroll
+    const handleCommentsScroll = () => {
+      if (isScrolling) return;
+      
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const centerEl = findCenterElement(comments, '[data-comment-element-index]');
+        if (!centerEl) return;
+        
+        const elementIndex = parseInt(centerEl.getAttribute('data-comment-element-index'), 10);
+        if (isNaN(elementIndex) || elementIndex === currentVisibleElementRef.current) return;
+        
+        currentVisibleElementRef.current = elementIndex;
+        isScrolling = true;
+        
+        // Sync script
+        const scriptEl = script.querySelector(`[data-element-index="${elementIndex}"]`);
+        if (scriptEl) scrollToElement(script, scriptEl);
+        
+        // Sync outline - find the scene for this element
+        if (outline) {
+          let sceneIndex = null;
+          for (let i = elementIndex; i >= 0; i--) {
+            if (elements[i]?.type === 'scene') {
+              sceneIndex = i;
+              break;
+            }
+          }
+          if (sceneIndex !== null) {
+            const sceneEl = outline.querySelector(`[data-outline-element-index="${sceneIndex}"]`);
+            if (sceneEl) scrollToElement(outline, sceneEl);
+          }
+        }
+        
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => { isScrolling = false; }, 100);
+      });
+    };
     
     script.addEventListener('scroll', handleScriptScroll, { passive: true });
     if (outline) outline.addEventListener('scroll', handleOutlineScroll, { passive: true });
@@ -3410,9 +3528,10 @@ export default function ScreenplayEditor() {
       script.removeEventListener('scroll', handleScriptScroll);
       if (outline) outline.removeEventListener('scroll', handleOutlineScroll);
       if (comments) comments.removeEventListener('scroll', handleCommentsScroll);
+      if (rafId) cancelAnimationFrame(rafId);
       clearTimeout(scrollTimeout);
     };
-  }, [showOutline, showComments]);
+  }, [showOutline, showComments, elements]);
   
   // Chat notification audio - Web Audio synthesis
   const playChatNotification = useCallback(() => {
@@ -5676,6 +5795,7 @@ export default function ScreenplayEditor() {
                     </div>
                   )}
                   <div 
+                    data-outline-element-index={scene.elementIndex}
                     onClick={() => {
                       setActiveIndex(scene.elementIndex);
                       setTimeout(() => {
