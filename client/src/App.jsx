@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V160 - Scroll sync: Script↔Comments (1:1 pixel) + Script↔Outline (scene-based)
+// V161 - Fixed outline scroll sync + scene click navigation
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3363,14 +3363,12 @@ export default function ScreenplayEditor() {
   // + Scene-based sync between Script and Outline
   useEffect(() => {
     const script = scriptContainerRef.current;
-    const comments = commentsSidebarRef.current;
-    const outline = outlineSidebarRef.current;
-    
     if (!script) return;
     
     let isScrollingComments = false;
     let isScrollingOutline = false;
     let outlineRAF = null;
+    let lastTopScene = null;
     
     // Find which scene element is at the top of the script viewport
     const findTopSceneInScript = () => {
@@ -3396,6 +3394,7 @@ export default function ScreenplayEditor() {
     
     // Find which scene is at the top of the outline
     const findTopSceneInOutline = () => {
+      const outline = outlineSidebarRef.current;
       if (!outline) return null;
       const outlineRect = outline.getBoundingClientRect();
       const sceneElements = outline.querySelectorAll('[data-outline-element-index]');
@@ -3414,6 +3413,7 @@ export default function ScreenplayEditor() {
     
     // Scroll outline to show a specific scene at top
     const scrollOutlineToScene = (sceneIndex) => {
+      const outline = outlineSidebarRef.current;
       if (!outline) return;
       const sceneEl = outline.querySelector(`[data-outline-element-index="${sceneIndex}"]`);
       if (sceneEl) {
@@ -3435,9 +3435,10 @@ export default function ScreenplayEditor() {
       }
     };
     
-    let lastTopScene = null;
-    
     const handleScriptScroll = () => {
+      const comments = commentsSidebarRef.current;
+      const outline = outlineSidebarRef.current;
+      
       // 1:1 sync with comments
       if (!isScrollingComments && comments) {
         isScrollingComments = true;
@@ -3461,6 +3462,9 @@ export default function ScreenplayEditor() {
     };
     
     const handleCommentsScroll = () => {
+      const comments = commentsSidebarRef.current;
+      if (!comments) return;
+      
       if (!isScrollingComments) {
         isScrollingComments = true;
         script.scrollTop = comments.scrollTop;
@@ -3478,21 +3482,56 @@ export default function ScreenplayEditor() {
           lastTopScene = topScene;
           isScrollingOutline = true;
           scrollScriptToScene(topScene);
-          // Comments will follow via the 1:1 sync
+          // Comments will follow via the 1:1 sync (triggered by script scroll)
           setTimeout(() => { isScrollingOutline = false; }, 100);
         }
       });
     };
     
+    // Attach listeners
     script.addEventListener('scroll', handleScriptScroll, { passive: true });
-    if (comments) comments.addEventListener('scroll', handleCommentsScroll, { passive: true });
-    if (outline) outline.addEventListener('scroll', handleOutlineScroll, { passive: true });
+    
+    // We need to attach outline/comments listeners when they become available
+    // Use a MutationObserver or just check periodically
+    let commentsListener = null;
+    let outlineListener = null;
+    
+    const attachListeners = () => {
+      const comments = commentsSidebarRef.current;
+      const outline = outlineSidebarRef.current;
+      
+      if (comments && !commentsListener) {
+        commentsListener = handleCommentsScroll;
+        comments.addEventListener('scroll', commentsListener, { passive: true });
+      }
+      if (outline && !outlineListener) {
+        outlineListener = handleOutlineScroll;
+        outline.addEventListener('scroll', outlineListener, { passive: true });
+      }
+    };
+    
+    // Initial attach
+    attachListeners();
+    
+    // Re-check after a short delay (in case panels just mounted)
+    const attachTimeout = setTimeout(attachListeners, 100);
+    const attachTimeout2 = setTimeout(attachListeners, 500);
     
     return () => {
       script.removeEventListener('scroll', handleScriptScroll);
-      if (comments) comments.removeEventListener('scroll', handleCommentsScroll);
-      if (outline) outline.removeEventListener('scroll', handleOutlineScroll);
+      
+      const comments = commentsSidebarRef.current;
+      const outline = outlineSidebarRef.current;
+      
+      if (comments && commentsListener) {
+        comments.removeEventListener('scroll', commentsListener);
+      }
+      if (outline && outlineListener) {
+        outline.removeEventListener('scroll', outlineListener);
+      }
       if (outlineRAF) cancelAnimationFrame(outlineRAF);
+      clearTimeout(attachTimeout);
+      clearTimeout(attachTimeout2);
     };
   }, [showComments, showOutline, elements]);
 
@@ -5777,11 +5816,19 @@ export default function ScreenplayEditor() {
                   )}
                   <div 
                     data-outline-element-index={scene.elementIndex}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setActiveIndex(scene.elementIndex);
+                      // Scroll the script container to this scene
                       setTimeout(() => {
+                        const script = scriptContainerRef.current;
                         const el = document.querySelector(`[data-element-index="${scene.elementIndex}"]`);
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        if (script && el) {
+                          const scriptRect = script.getBoundingClientRect();
+                          const elRect = el.getBoundingClientRect();
+                          const targetScroll = script.scrollTop + (elRect.top - scriptRect.top) - 50;
+                          script.scrollTop = Math.max(0, targetScroll);
+                        }
                       }, 50);
                     }}
                     onContextMenu={(e) => {
@@ -5824,7 +5871,7 @@ export default function ScreenplayEditor() {
                       }}>{scene.content || 'Scène vide'}</div>
                       <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>{scene.duration}m • ~1min</div>
                     </div>
-                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
