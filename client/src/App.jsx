@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V169 - Hourglass loading indicator
+// V169 - Hourglass loading + Compact timer mode
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3345,6 +3345,7 @@ export default function ScreenplayEditor() {
   const [chatPosition, setChatPosition] = useState({ x: window.innerWidth - 340, y: 80 });
   const [notePosition, setNotePosition] = useState({ x: window.innerWidth / 2 - 200, y: window.innerHeight / 2 - 150 });
   const [timerPosition, setTimerPosition] = useState({ x: window.innerWidth - 260, y: window.innerHeight - 350 });
+  const [timerCompact, setTimerCompact] = useState(false);
   const [isDraggingChat, setIsDraggingChat] = useState(false);
   const [isDraggingNote, setIsDraggingNote] = useState(false);
   const [isDraggingTimer, setIsDraggingTimer] = useState(false);
@@ -7262,186 +7263,310 @@ export default function ScreenplayEditor() {
       
       {/* Writing Timer Widget - FLOATING */}
       {showTimer && (
-        <div style={{
-          position: 'fixed',
-          left: timerPosition.x,
-          top: timerPosition.y,
-          background: darkMode ? '#1f2937' : 'white',
-          border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
-          borderRadius: 12,
-          boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
-          zIndex: 200,
-          minWidth: 220,
-          overflow: 'hidden'
-        }}>
-          {/* Timer Header - DRAGGABLE */}
-          <div 
-            style={{ 
-              padding: '10px 16px', 
-              borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              cursor: 'grab',
-              background: darkMode ? '#374151' : '#f3f4f6'
-            }}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              dragOffsetRef.current = { x: e.clientX - timerPosition.x, y: e.clientY - timerPosition.y };
-              setIsDraggingTimer(true);
-            }}
-          >
-            <span style={{ fontSize: 12, color: darkMode ? 'white' : '#374151', fontWeight: 500 }}>⏱️ Timer</span>
-            <button onClick={() => setShowTimer(false)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 14 }}>✕</button>
-          </div>
-          
-          <div style={{ padding: 16 }}>
-            {/* Mode selector */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 6, padding: 3 }}>
-              <button 
-                onClick={() => { setTimerMode('chrono'); if (!timerRunning) resetTimer(); }}
-                style={{ 
-                  flex: 1, 
-                  padding: '6px 10px', 
-                  background: timerMode === 'chrono' ? (darkMode ? '#1f2937' : 'white') : 'transparent', 
-                  border: 'none', 
-                  borderRadius: 4, 
-                  color: timerMode === 'chrono' ? (darkMode ? 'white' : 'black') : '#6b7280', 
-                  cursor: 'pointer', 
-                  fontSize: 11,
-                  fontWeight: timerMode === 'chrono' ? 600 : 400
-                }}
-              >
-                ⏱️ Chrono
-              </button>
-              <button 
-                onClick={() => { setTimerMode('sprint'); if (!timerRunning) { resetTimer(); setSprintTimeLeft(sprintDuration); } }}
-                style={{ 
-                  flex: 1, 
-                  padding: '6px 10px', 
-                  background: timerMode === 'sprint' ? (darkMode ? '#1f2937' : 'white') : 'transparent', 
-                  border: 'none', 
-                  borderRadius: 4, 
-                  color: timerMode === 'sprint' ? (darkMode ? 'white' : 'black') : '#6b7280', 
-                  cursor: 'pointer', 
-                  fontSize: 11,
-                  fontWeight: timerMode === 'sprint' ? 600 : 400
-                }}
-              >
-                🏃 Sprint
-              </button>
-            </div>
-            
-            {/* Timer display */}
-            <div style={{ fontSize: 32, fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center', color: timerMode === 'sprint' && sprintTimeLeft < 60 ? '#ef4444' : (darkMode ? 'white' : 'black'), marginBottom: 8 }}>
-              {timerMode === 'chrono' ? formatTime(timerSeconds) : formatTime(sprintTimeLeft)}
-            </div>
-            
-            {/* Sprint duration selector */}
-            {timerMode === 'sprint' && !timerRunning && (
-              <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 12 }}>
-                {[15, 25, 45, 60].map(mins => (
-                  <button 
-                    key={mins}
-                    onClick={() => setSprintMinutes(mins)}
-                    style={{ 
-                      padding: '4px 8px', 
-                      background: sprintDuration === mins * 60 ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), 
-                      border: 'none', 
-                      borderRadius: 4, 
-                      color: sprintDuration === mins * 60 ? 'white' : (darkMode ? '#d1d5db' : '#374151'), 
-                      cursor: 'pointer', 
-                      fontSize: 10 
-                    }}
-                  >
-                    {mins}m
-                  </button>
-                ))}
-              </div>
-            )}
-            
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
+        timerCompact ? (
+          /* COMPACT MODE */
+          <div style={{
+            position: 'fixed',
+            left: timerPosition.x,
+            top: timerPosition.y,
+            background: darkMode ? '#1f2937' : 'white',
+            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+            borderRadius: 10,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+            zIndex: 200,
+            overflow: 'hidden'
+          }}>
+            <div 
+              style={{ 
+                padding: '8px 12px', 
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                cursor: 'grab',
+                background: darkMode ? '#374151' : '#f3f4f6'
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                dragOffsetRef.current = { x: e.clientX - timerPosition.x, y: e.clientY - timerPosition.y };
+                setIsDraggingTimer(true);
+              }}
+            >
+              {/* Time display */}
+              <span style={{ 
+                fontSize: 18, 
+                fontWeight: 'bold', 
+                fontFamily: 'monospace', 
+                color: timerMode === 'sprint' && sprintTimeLeft < 60 ? '#ef4444' : (darkMode ? 'white' : 'black'),
+                minWidth: 60
+              }}>
+                {timerMode === 'chrono' ? formatTime(timerSeconds) : formatTime(sprintTimeLeft)}
+              </span>
+              
+              {/* Play/Pause */}
               <button 
                 onClick={() => setTimerRunning(!timerRunning)}
                 style={{ 
-                  padding: '8px 16px', 
+                  width: 28, height: 28,
                   background: timerRunning ? '#ef4444' : '#22c55e', 
                   border: 'none', 
                   borderRadius: 6, 
                   color: 'white', 
                   cursor: 'pointer', 
-                  fontSize: 13,
-                  fontWeight: 500
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}
               >
-                {timerRunning ? '⏸ Pause' : '▶ Start'}
+                {timerRunning ? '⏸' : '▶'}
               </button>
+              
+              {/* Reset */}
               <button 
                 onClick={resetTimer}
                 style={{ 
-                  padding: '8px 12px', 
-                  background: darkMode ? '#374151' : '#e5e7eb', 
+                  width: 28, height: 28,
+                  background: darkMode ? '#4b5563' : '#e5e7eb', 
                   border: 'none', 
                   borderRadius: 6, 
-                  color: darkMode ? 'white' : 'black', 
+                  color: darkMode ? 'white' : '#374151', 
                   cursor: 'pointer', 
-                  fontSize: 13 
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}
               >
                 ↺
               </button>
+              
+              {/* Expand */}
+              <button 
+                onClick={() => setTimerCompact(false)}
+                style={{ 
+                  width: 28, height: 28,
+                  background: 'transparent', 
+                  border: 'none', 
+                  color: '#6b7280', 
+                  cursor: 'pointer', 
+                  fontSize: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Agrandir"
+              >
+                ⤢
+              </button>
+              
+              {/* Close */}
+              <button 
+                onClick={() => setShowTimer(false)} 
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: '#6b7280', 
+                  cursor: 'pointer', 
+                  fontSize: 12,
+                  marginLeft: -4
+                }}
+              >
+                ✕
+              </button>
             </div>
-            <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: 12, fontSize: 12, color: '#6b7280' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span>Mots cette session</span>
-                <span style={{ color: sessionWordCount > 0 ? '#22c55e' : (darkMode ? 'white' : 'black'), fontWeight: 500 }}>+{sessionWordCount}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Mots/heure</span>
-                <span style={{ color: darkMode ? 'white' : 'black' }}>{timerSeconds > 60 ? Math.round(sessionWordCount / (timerSeconds / 3600)) : '—'}</span>
+          </div>
+        ) : (
+          /* EXPANDED MODE */
+          <div style={{
+            position: 'fixed',
+            left: timerPosition.x,
+            top: timerPosition.y,
+            background: darkMode ? '#1f2937' : 'white',
+            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+            borderRadius: 12,
+            boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+            zIndex: 200,
+            minWidth: 220,
+            overflow: 'hidden'
+          }}>
+            {/* Timer Header - DRAGGABLE */}
+            <div 
+              style={{ 
+                padding: '10px 16px', 
+                borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'grab',
+                background: darkMode ? '#374151' : '#f3f4f6'
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                dragOffsetRef.current = { x: e.clientX - timerPosition.x, y: e.clientY - timerPosition.y };
+                setIsDraggingTimer(true);
+              }}
+            >
+              <span style={{ fontSize: 12, color: darkMode ? 'white' : '#374151', fontWeight: 500 }}>⏱️ Timer</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button 
+                  onClick={() => setTimerCompact(true)} 
+                  style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 12 }}
+                  title="Réduire"
+                >
+                  ⤡
+                </button>
+                <button onClick={() => setShowTimer(false)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 14 }}>✕</button>
               </div>
             </div>
             
-            {/* Daily Goal Section */}
-            <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: 12, marginTop: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 11, color: '#6b7280' }}>🎯 Objectif du jour</span>
-                <span style={{ fontSize: 11, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : (darkMode ? 'white' : '#374151') }}>
-                  {writingGoal.todayWords} / {writingGoal.daily}
-                </span>
+            <div style={{ padding: 16 }}>
+              {/* Mode selector */}
+              <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 6, padding: 3 }}>
+                <button 
+                  onClick={() => { setTimerMode('chrono'); if (!timerRunning) resetTimer(); }}
+                  style={{ 
+                    flex: 1, 
+                    padding: '6px 10px', 
+                    background: timerMode === 'chrono' ? (darkMode ? '#1f2937' : 'white') : 'transparent', 
+                    border: 'none', 
+                    borderRadius: 4, 
+                    color: timerMode === 'chrono' ? (darkMode ? 'white' : 'black') : '#6b7280', 
+                    cursor: 'pointer', 
+                    fontSize: 11,
+                    fontWeight: timerMode === 'chrono' ? 600 : 400
+                  }}
+                >
+                  ⏱️ Chrono
+                </button>
+                <button 
+                  onClick={() => { setTimerMode('sprint'); if (!timerRunning) { resetTimer(); setSprintTimeLeft(sprintDuration); } }}
+                  style={{ 
+                    flex: 1, 
+                    padding: '6px 10px', 
+                    background: timerMode === 'sprint' ? (darkMode ? '#1f2937' : 'white') : 'transparent', 
+                    border: 'none', 
+                    borderRadius: 4, 
+                    color: timerMode === 'sprint' ? (darkMode ? 'white' : 'black') : '#6b7280', 
+                    cursor: 'pointer', 
+                    fontSize: 11,
+                    fontWeight: timerMode === 'sprint' ? 600 : 400
+                  }}
+                >
+                  🏃 Sprint
+                </button>
               </div>
-              <div style={{ height: 6, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
-                <div style={{ 
-                  height: '100%', 
-                  width: `${Math.min(100, Math.round((writingGoal.todayWords / writingGoal.daily) * 100))}%`, 
-                  background: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : '#3b82f6', 
-                  borderRadius: 3, 
-                  transition: 'width 0.3s' 
-                }} />
+              
+              {/* Timer display */}
+              <div style={{ fontSize: 32, fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center', color: timerMode === 'sprint' && sprintTimeLeft < 60 ? '#ef4444' : (darkMode ? 'white' : 'black'), marginBottom: 8 }}>
+                {timerMode === 'chrono' ? formatTime(timerSeconds) : formatTime(sprintTimeLeft)}
               </div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {[500, 1000, 1500, 2000].map(preset => (
-                  <button
-                    key={preset}
-                    onClick={() => setWritingGoal(g => ({ ...g, daily: preset }))}
-                    style={{ 
-                      flex: 1, 
-                      padding: '4px', 
-                      background: writingGoal.daily === preset ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), 
-                      border: 'none', 
-                      borderRadius: 4, 
-                      color: writingGoal.daily === preset ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'), 
-                      cursor: 'pointer', 
-                      fontSize: 9 
-                    }}
-                  >
-                    {preset}
-                  </button>
-                ))}
+              
+              {/* Sprint duration selector */}
+              {timerMode === 'sprint' && !timerRunning && (
+                <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 12 }}>
+                  {[15, 25, 45, 60].map(mins => (
+                    <button 
+                      key={mins}
+                      onClick={() => setSprintMinutes(mins)}
+                      style={{ 
+                        padding: '4px 8px', 
+                        background: sprintDuration === mins * 60 ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), 
+                        border: 'none', 
+                        borderRadius: 4, 
+                        color: sprintDuration === mins * 60 ? 'white' : (darkMode ? '#d1d5db' : '#374151'), 
+                        cursor: 'pointer', 
+                        fontSize: 10 
+                      }}
+                    >
+                      {mins}m
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
+                <button 
+                  onClick={() => setTimerRunning(!timerRunning)}
+                  style={{ 
+                    padding: '8px 16px', 
+                    background: timerRunning ? '#ef4444' : '#22c55e', 
+                    border: 'none', 
+                    borderRadius: 6, 
+                    color: 'white', 
+                    cursor: 'pointer', 
+                    fontSize: 13,
+                    fontWeight: 500
+                  }}
+                >
+                  {timerRunning ? '⏸ Pause' : '▶ Start'}
+                </button>
+                <button 
+                  onClick={resetTimer}
+                  style={{ 
+                    padding: '8px 12px', 
+                    background: darkMode ? '#374151' : '#e5e7eb', 
+                    border: 'none', 
+                    borderRadius: 6, 
+                    color: darkMode ? 'white' : 'black', 
+                    cursor: 'pointer', 
+                    fontSize: 13 
+                  }}
+                >
+                  ↺
+                </button>
+              </div>
+              <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: 12, fontSize: 12, color: '#6b7280' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span>Mots cette session</span>
+                  <span style={{ color: sessionWordCount > 0 ? '#22c55e' : (darkMode ? 'white' : 'black'), fontWeight: 500 }}>+{sessionWordCount}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Mots/heure</span>
+                  <span style={{ color: darkMode ? 'white' : 'black' }}>{timerSeconds > 60 ? Math.round(sessionWordCount / (timerSeconds / 3600)) : '—'}</span>
+                </div>
+              </div>
+              
+              {/* Daily Goal Section */}
+              <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: 12, marginTop: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: '#6b7280' }}>🎯 Objectif du jour</span>
+                  <span style={{ fontSize: 11, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : (darkMode ? 'white' : '#374151') }}>
+                    {writingGoal.todayWords} / {writingGoal.daily}
+                  </span>
+                </div>
+                <div style={{ height: 6, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                  <div style={{ 
+                    height: '100%', 
+                    width: `${Math.min(100, Math.round((writingGoal.todayWords / writingGoal.daily) * 100))}%`, 
+                    background: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : '#3b82f6', 
+                    borderRadius: 3, 
+                    transition: 'width 0.3s' 
+                  }} />
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[500, 1000, 1500, 2000].map(preset => (
+                    <button
+                      key={preset}
+                      onClick={() => setWritingGoal(g => ({ ...g, daily: preset }))}
+                      style={{ 
+                        flex: 1, 
+                        padding: '4px', 
+                        background: writingGoal.daily === preset ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), 
+                        border: 'none', 
+                        borderRadius: 4, 
+                        color: writingGoal.daily === preset ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'), 
+                        cursor: 'pointer', 
+                        fontSize: 9 
+                      }}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )
       )}
       
       {/* CSS Highlight API styles for comments and suggestions */}
