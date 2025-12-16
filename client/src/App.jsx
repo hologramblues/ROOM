@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V168 - Auto-save every 5s + Auto-snapshot every 15min + Logout fix
+// V168 - Auto-save 5s + Auto-snapshot 15min + Logout fix + Manual snapshot fix + Loading overlay
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -4264,13 +4264,14 @@ export default function ScreenplayEditor() {
   const createSnapshot = async () => {
     if (!token || !docId) return;
     try {
-      const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/bulk', {
-        method: 'PUT',
+      const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/snapshot', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ title, elements })
+        body: JSON.stringify({ title, elements, auto: false })
       });
       if (res.ok) {
-        console.log('[SNAPSHOT] Created');
+        console.log('[SNAPSHOT] Created manually');
+        setLastSaved(new Date());
         // Brief visual feedback
         const btn = document.querySelector('[title="Snapshot (⌘S)"]');
         if (btn) {
@@ -5713,7 +5714,8 @@ export default function ScreenplayEditor() {
           />
           {docId && lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
           {docId && !canEdit && <span style={{ fontSize: 10, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
-          {(loading || importing) && <span style={{ fontSize: 11, color: '#60a5fa' }}>...</span>}
+          {loading && <span style={{ fontSize: 11, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ display: 'inline-block', width: 8, height: 8, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Chargement...</span>}
+          {importing && <span style={{ fontSize: 11, color: '#f59e0b' }}>Import en cours...</span>}
         </div>
         
         {/* RIGHT ZONE: User/Collab + Toggles */}
@@ -5870,8 +5872,40 @@ export default function ScreenplayEditor() {
       <div style={{ 
         flex: 1,
         display: 'flex', 
-        overflow: 'auto'
+        overflow: 'auto',
+        position: 'relative'
       }}>
+        {/* Loading Overlay */}
+        {loading && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: darkMode ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100
+          }}>
+            <div style={{
+              width: 48,
+              height: 48,
+              border: `3px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+              borderTopColor: '#3b82f6',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }} />
+            <p style={{ marginTop: 16, color: darkMode ? '#9ca3af' : '#6b7280', fontSize: 14 }}>
+              Chargement du document...
+            </p>
+            <style>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+          </div>
+        )}
+        
         {/* LEFT SIDEBAR - Outline */}
         {showOutline && (
           <div style={{ 
