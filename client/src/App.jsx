@@ -5660,7 +5660,7 @@ export default function ScreenplayEditor() {
               
               {/* Document actions */}
               <button
-                onClick={() => navigate('/')}
+                onClick={() => { window.location.hash = ''; setShowDocsList(true); }}
                 style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#374151' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 title="Mes documents"
               >
