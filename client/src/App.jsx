@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V162 - Fixed outline click (scene.index not scene.elementIndex)
+// V163 - Added folder and export buttons in header
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3298,6 +3298,7 @@ export default function ScreenplayEditor() {
   const [collaborators, setCollaborators] = useState([]); // All users who have access to this document
   const [showTimer, setShowTimer] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerMode, setTimerMode] = useState('chrono'); // 'chrono' or 'sprint'
@@ -5654,6 +5655,75 @@ export default function ScreenplayEditor() {
                 💬
                 {unreadMessages > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: 'white', fontSize: 8, fontWeight: 'bold', padding: '1px 4px', borderRadius: 8, minWidth: 14, textAlign: 'center' }}>{unreadMessages > 9 ? '9+' : unreadMessages}</span>}
               </button>
+              
+              <div style={{ width: 1, height: 20, background: darkMode ? '#374151' : '#d1d5db', margin: '0 6px' }} />
+              
+              {/* Document actions */}
+              <button
+                onClick={() => navigate('/')}
+                style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#374151' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Mes documents"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+              </button>
+              
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showExportMenu ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showExportMenu ? 'white' : '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+                title="Exporter"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', bottom: 4, right: 4 }}>
+                  <polyline points="18 15 12 9 6 15"/>
+                </svg>
+              </button>
+              
+              {/* Export dropdown menu */}
+              {showExportMenu && (
+                <>
+                  <div 
+                    style={{ position: 'fixed', inset: 0, zIndex: 999 }} 
+                    onClick={() => setShowExportMenu(false)} 
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    top: 50,
+                    right: 'auto',
+                    background: darkMode ? '#1f2937' : 'white',
+                    borderRadius: 8,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                    border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                    zIndex: 1000,
+                    minWidth: 160,
+                    overflow: 'hidden'
+                  }}>
+                    <button
+                      onClick={() => { exportFDX(); setShowExportMenu(false); }}
+                      style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      📄 Export FDX
+                    </button>
+                    <button
+                      onClick={() => { exportPDF(); setShowExportMenu(false); }}
+                      style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      🖨️ Export PDF
+                    </button>
+                    <button
+                      onClick={() => { exportFountain(); setShowExportMenu(false); }}
+                      style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      ⛲ Export Fountain
+                    </button>
+                  </div>
+                </>
+              )}
               
               <div style={{ width: 1, height: 20, background: darkMode ? '#374151' : '#d1d5db', margin: '0 6px' }} />
               
