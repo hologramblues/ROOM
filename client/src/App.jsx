@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V169 - Lazy TipTap: only active element uses TipTap, others use simple div (massive perf improvement)
+// V168 - Auto-save 5s + Auto-snapshot 15min + Logout fix + Manual snapshot fix + Loading overlay
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -2550,75 +2550,6 @@ const renderContentWithHighlights = (content, highlights) => {
   
   return parts.length > 0 ? parts : content;
 };
-
-// ============ SIMPLE SCENE LINE (NO TIPTAP - for performance) ============
-// Used for elements that are not active or near active - much faster to render
-const SimpleSceneLine = React.memo(({ element, index, onFocus, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onHighlightClick, onSuggestionClick, remoteCursors }) => {
-  const style = getElementStyle(element.type);
-  const usersOnLine = remoteCursors?.filter(u => u.cursor?.index === index) || [];
-  
-  const handleClick = (e) => {
-    // Check if clicking on a highlight
-    const commentEl = e.target.closest('[data-comment-id]');
-    if (commentEl && onHighlightClick) {
-      onHighlightClick(commentEl.getAttribute('data-comment-id'));
-      return;
-    }
-    const suggestionEl = e.target.closest('[data-suggestion-id]');
-    if (suggestionEl && onSuggestionClick) {
-      onSuggestionClick(suggestionEl.getAttribute('data-suggestion-id'));
-      return;
-    }
-    // Otherwise focus this element
-    onFocus(index, 0);
-  };
-  
-  return (
-    <div 
-      style={{ position: 'relative', paddingLeft: showSceneNumbers && element.type === 'scene' ? 40 : 0, paddingRight: showSceneNumbers && element.type === 'scene' ? 40 : 0 }}
-      onClick={handleClick}
-    >
-      {/* Scene numbers */}
-      {showSceneNumbers && element.type === 'scene' && sceneNumber && (
-        <>
-          <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
-          <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
-        </>
-      )}
-      
-      {/* Note indicator */}
-      {note && note.content && (
-        <span 
-          onClick={(e) => { e.stopPropagation(); onNoteClick && onNoteClick(element.id); }}
-          style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'inherit' }}
-        >
-          📝 Note
-        </span>
-      )}
-      
-      {/* Remote cursors */}
-      {usersOnLine.map(u => (
-        <div key={u.id} style={{ position: 'absolute', left: -12, top: 0, display: 'flex', alignItems: 'flex-start', pointerEvents: 'none', zIndex: 10 }}>
-          <div style={{ width: 3, height: 20, background: u.color || '#888', borderRadius: 2, flexShrink: 0 }} />
-          <div style={{ marginLeft: 2, background: u.color || '#888', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', fontWeight: 500, lineHeight: '1.2', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>{u.name || 'Anonyme'}</div>
-        </div>
-      ))}
-      
-      {/* Content - simple div, no TipTap */}
-      <div 
-        style={{ 
-          ...style, 
-          color: '#111',
-          cursor: canEdit && !isLocked ? 'text' : 'default',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word'
-        }}
-      >
-        {renderContentWithHighlights(element.content, highlights) || '\u200B'}
-      </div>
-    </div>
-  );
-});
 
 // ============ SCENE LINE (TIPTAP VERSION) ============
 const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset }) => {
@@ -6300,13 +6231,8 @@ export default function ScreenplayEditor() {
                     {page.number}.
                   </div>
                   
-                  {page.elements.map(({ element, index }) => {
-                    // Use TipTap only for active element and nearby elements (±3)
-                    const isNearActive = Math.abs(index - activeIndex) <= 3;
-                    
-                    return (
+                  {page.elements.map(({ element, index }) => (
                     <div key={element.id} data-element-index={index}>
-                      {isNearActive ? (
                       <SceneLine 
                       element={element} 
                       index={index} 
@@ -6358,34 +6284,8 @@ export default function ScreenplayEditor() {
                         }, 150);
                       }}
                     />
-                      ) : (
-                      <SimpleSceneLine
-                        element={element}
-                        index={index}
-                        onFocus={handleFocus}
-                        canEdit={canEdit && !isElementLocked(index)}
-                        isLocked={isElementLocked(index)}
-                        sceneNumber={sceneNumbersMap[element.id]}
-                        showSceneNumbers={showSceneNumbers}
-                        note={notes[element.id]}
-                        onNoteClick={(id) => setShowNoteFor(id)}
-                        highlights={getElementHighlights(element.id)}
-                        onHighlightClick={(commentId) => {
-                          setShowComments(true);
-                          setSelectedCommentId(commentId);
-                          setSelectedSuggestionId(null);
-                        }}
-                        onSuggestionClick={(suggestionId) => {
-                          setShowComments(true);
-                          setSelectedSuggestionId(suggestionId);
-                          setSelectedCommentId(null);
-                        }}
-                        remoteCursors={remoteCursors}
-                      />
-                      )}
                   </div>
-                    );
-                  })}
+                ))}
               </div>
             </div>
           ))}
