@@ -3643,6 +3643,18 @@ export default function ScreenplayEditor() {
     return () => clearInterval(autoSaveInterval);
   }, [docId, token, elements, title]);
 
+  // Helper to format snapshot name: "Title - MMDDYY HH:MM"
+  const formatSnapshotName = (docTitle, isAuto = false) => {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const yy = String(now.getFullYear()).slice(-2);
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const prefix = isAuto ? '[Auto] ' : '';
+    return `${prefix}${docTitle} - ${mm}${dd}${yy} ${hh}:${min}`;
+  };
+
   // Auto-snapshot every 15 minutes (only when document is open and has content)
   useEffect(() => {
     if (!docId || !token || elements.length === 0) return;
@@ -3653,13 +3665,14 @@ export default function ScreenplayEditor() {
       if (!hasContent) return;
       
       try {
+        const snapshotName = formatSnapshotName(title, true);
         const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/snapshot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-          body: JSON.stringify({ title, elements, auto: true })
+          body: JSON.stringify({ title, elements, auto: true, snapshotName })
         });
         if (res.ok) {
-          console.log('[AUTO-SNAPSHOT] Created at', new Date().toLocaleTimeString());
+          console.log('[AUTO-SNAPSHOT] Created:', snapshotName);
         }
       } catch (err) { 
         console.error('[AUTO-SNAPSHOT] Error:', err); 
@@ -4264,13 +4277,14 @@ export default function ScreenplayEditor() {
   const createSnapshot = async () => {
     if (!token || !docId) return;
     try {
+      const snapshotName = formatSnapshotName(title, false);
       const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ title, elements, auto: false })
+        body: JSON.stringify({ title, elements, auto: false, snapshotName })
       });
       if (res.ok) {
-        console.log('[SNAPSHOT] Created manually');
+        console.log('[SNAPSHOT] Created:', snapshotName);
         setLastSaved(new Date());
         // Brief visual feedback
         const btn = document.querySelector('[title="Snapshot (⌘S)"]');
