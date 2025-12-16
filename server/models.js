@@ -111,6 +111,7 @@ const historyEntrySchema = new mongoose.Schema({
     ],
     required: true,
   },
+  snapshotName: { type: String, default: null }, // For named snapshots and auto-saves
   data: {
     oldTitle: String,
     newTitle: String,
