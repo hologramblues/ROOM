@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V161 - Fixed outline scroll sync + scene click navigation
+// V162 - Fixed outline click (scene.index not scene.elementIndex)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -5815,14 +5815,16 @@ export default function ScreenplayEditor() {
                     </div>
                   )}
                   <div 
-                    data-outline-element-index={scene.elementIndex}
+                    data-outline-element-index={scene.index}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveIndex(scene.elementIndex);
+                      console.log('Outline click:', scene.index);
+                      setActiveIndex(scene.index);
                       // Scroll the script container to this scene
                       setTimeout(() => {
                         const script = scriptContainerRef.current;
-                        const el = document.querySelector(`[data-element-index="${scene.elementIndex}"]`);
+                        const el = document.querySelector(`[data-element-index="${scene.index}"]`);
+                        console.log('Script ref:', script, 'Element:', el);
                         if (script && el) {
                           const scriptRect = script.getBoundingClientRect();
                           const elRect = el.getBoundingClientRect();
@@ -5845,7 +5847,7 @@ export default function ScreenplayEditor() {
                     style={{ 
                       padding: '10px 12px', 
                       cursor: 'pointer', 
-                      background: activeIndex === scene.elementIndex 
+                      background: activeIndex === scene.index 
                         ? (darkMode ? '#374151' : '#f3f4f6')
                         : 'transparent',
                       borderBottom: `1px solid ${darkMode ? '#374151' : '#f3f4f6'}`,
