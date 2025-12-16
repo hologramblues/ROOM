@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V167 - TEST: Courier font everywhere (V166 is safe base)
+// V166 - Comments icon as yellow post-it + Document menu with submenus
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -2472,7 +2472,7 @@ const getNextType = (t) => ({ scene: 'action', action: 'action', character: 'dia
 const RemoteCursor = ({ user }) => (
   <div style={{ position: 'absolute', left: -12, top: 0, display: 'flex', alignItems: 'flex-start', pointerEvents: 'none', zIndex: 10 }}>
     <div style={{ width: 3, height: 20, background: user.color || '#888', borderRadius: 2, flexShrink: 0 }} />
-    <div style={{ marginLeft: 2, background: user.color || '#888', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', fontFamily: 'inherit', fontWeight: 500, lineHeight: '1.2', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>{user.name || 'Anonyme'}</div>
+    <div style={{ marginLeft: 2, background: user.color || '#888', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', fontFamily: 'system-ui, sans-serif', fontWeight: 500, lineHeight: '1.2', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>{user.name || 'Anonyme'}</div>
   </div>
 );
 
@@ -2926,7 +2926,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       
       {/* Element type label when active */}
       {isActive && (
-        <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'inherit' }}>
+        <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif' }}>
           {isLocked ? '🔒 ' : ''}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}
         </span>
       )}
@@ -5378,10 +5378,7 @@ export default function ScreenplayEditor() {
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
 
   return (
-    <div className={focusMode ? 'focus-mode-active' : ''} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s', overflow: 'hidden', fontFamily: "'Courier Prime', 'Courier New', Courier, monospace" }}>
-      <style>{`
-        button, input, select, textarea { font-family: inherit; }
-      `}</style>
+    <div className={focusMode ? 'focus-mode-active' : ''} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s', overflow: 'hidden' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       
       {/* Template Selector Modal */}
@@ -5638,8 +5635,7 @@ export default function ScreenplayEditor() {
               outline: 'none', 
               maxWidth: 250,
               textOverflow: 'ellipsis',
-              textAlign: 'center',
-              fontFamily: 'inherit'
+              textAlign: 'center'
             }} 
           />
           {docId && lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
