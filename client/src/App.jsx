@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V168 - Auto-save 5s + Auto-snapshot 15min + Logout fix + Manual snapshot fix + Loading overlay
+// V169 - Hourglass loading indicator
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3761,7 +3761,8 @@ export default function ScreenplayEditor() {
           }
         }
       } catch (err) { console.error('[LOAD] Error:', err); }
-      setLoading(false);
+      // Small delay to let React render elements before hiding overlay
+      setTimeout(() => setLoading(false), 100);
     };
     loadDocument();
   }, [docId, token]);
@@ -5894,27 +5895,21 @@ export default function ScreenplayEditor() {
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: darkMode ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+            background: darkMode ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 100
           }}>
-            <div style={{
-              width: 48,
-              height: 48,
-              border: `3px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
-              borderTopColor: '#3b82f6',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
-            }} />
+            <div style={{ fontSize: 48, animation: 'pulse 1.5s ease-in-out infinite' }}>⏳</div>
             <p style={{ marginTop: 16, color: darkMode ? '#9ca3af' : '#6b7280', fontSize: 14 }}>
               Chargement du document...
             </p>
             <style>{`
-              @keyframes spin {
-                to { transform: rotate(360deg); }
+              @keyframes pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.6; transform: scale(0.95); }
               }
             `}</style>
           </div>
