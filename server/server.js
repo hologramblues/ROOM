@@ -1,3 +1,4 @@
+// Server V2 - Added autosave and snapshot endpoints
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -121,6 +122,63 @@ app.put('/api/documents/:shortId/bulk', optionalAuthMiddleware, async (req, res)
     res.json({ success: true, elementsCount: doc.elements.length });
   } catch (error) { 
     console.error('Bulk save error:', error);
+    res.status(500).json({ error: 'Erreur' }); 
+  }
+});
+
+// Autosave - silent save without history entry or broadcast (for auto-save every 5s)
+app.put('/api/documents/:shortId/autosave', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId });
+    if (!doc) return res.status(404).json({ error: 'Document non trouve' });
+    if (!checkDocumentAccess(doc, req.user, 'editor')) return res.status(403).json({ error: 'Acces refuse' });
+    
+    if (req.body.title) doc.title = req.body.title;
+    if (req.body.elements && Array.isArray(req.body.elements)) {
+      doc.elements = req.body.elements;
+      doc.markModified('elements');
+    }
+    await doc.save();
+    
+    // No broadcast, no history entry - just silent save
+    res.json({ success: true, savedAt: new Date().toISOString() });
+  } catch (error) { 
+    console.error('Autosave error:', error);
+    res.status(500).json({ error: 'Erreur' }); 
+  }
+});
+
+// Create snapshot - explicit history entry (for manual saves and auto-snapshots every 15min)
+app.post('/api/documents/:shortId/snapshot', authMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId });
+    if (!doc) return res.status(404).json({ error: 'Document non trouve' });
+    if (!checkDocumentAccess(doc, req.user, 'editor')) return res.status(403).json({ error: 'Acces refuse' });
+    
+    // Update document with latest data if provided
+    if (req.body.title) doc.title = req.body.title;
+    if (req.body.elements && Array.isArray(req.body.elements)) {
+      doc.elements = req.body.elements;
+      doc.markModified('elements');
+    }
+    await doc.save();
+    
+    // Create history entry
+    const isAuto = req.body.auto === true;
+    await HistoryEntry.create({ 
+      documentId: doc._id, 
+      userId: req.user._id, 
+      userName: req.user.name, 
+      userColor: req.user.color, 
+      action: 'snapshot', 
+      snapshotName: isAuto ? `Auto-save ${new Date().toLocaleString('fr-FR')}` : (req.body.snapshotName || null),
+      data: { title: doc.title, elements: doc.elements } 
+    });
+    
+    console.log(isAuto ? '[AUTO-SNAPSHOT]' : '[SNAPSHOT]', 'Created for', req.params.shortId);
+    res.json({ success: true, createdAt: new Date().toISOString(), auto: isAuto });
+  } catch (error) { 
+    console.error('Snapshot error:', error);
     res.status(500).json({ error: 'Erreur' }); 
   }
 });
