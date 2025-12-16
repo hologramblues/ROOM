@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V169 - Hourglass loading + Compact timer mode
+// V170 - Fix scene lock + Remove duration from outline
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -2858,6 +2858,16 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       }
     }
   }, [editorReady, editor, isActive, initialCursorOffset]);
+  
+  // Update editor editable state when lock status changes
+  useEffect(() => {
+    if (editor && editorReady) {
+      const shouldBeEditable = canEdit && !isLocked;
+      if (editor.isEditable !== shouldBeEditable) {
+        editor.setEditable(shouldBeEditable);
+      }
+    }
+  }, [editor, editorReady, canEdit, isLocked]);
   
   // Autocomplete for characters and locations
   useEffect(() => {
@@ -6084,7 +6094,6 @@ export default function ScreenplayEditor() {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis'
                       }}>{scene.content || 'Scène vide'}</div>
-                      <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>{scene.duration}m • ~1min</div>
                     </div>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                       <button
