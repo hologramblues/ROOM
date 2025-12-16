@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V158 - Element-based scroll sync (not percentage-based)
+// V159 - Simple 1:1 pixel scroll sync between Script and Comments
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -919,7 +919,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollContainerRef, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
+const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollContainerRef, scriptScrollHeight, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
@@ -1212,7 +1212,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
     return positions;
   }, [sortedIndices, elementPositions, cardHeights]);
 
-  // Calculate max content height for scroll spacer
+  // Calculate max content height for scroll spacer - must be at least as tall as script
   const maxContentHeight = useMemo(() => {
     let maxBottom = 0;
     sortedIndices.forEach(idx => {
@@ -1231,8 +1231,9 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
       const pendingTop = elementPositions[pendingIdx] || (pendingIdx * 30);
       maxBottom = Math.max(maxBottom, pendingTop + 200);
     }
-    return maxBottom;
-  }, [sortedIndices, adjustedPositions, cardHeights, pendingInlineComment, pendingSuggestion, elementPositions]);
+    // Ensure at least as tall as script for 1:1 scroll sync
+    return Math.max(maxBottom, scriptScrollHeight || 0);
+  }, [sortedIndices, adjustedPositions, cardHeights, pendingInlineComment, pendingSuggestion, elementPositions, scriptScrollHeight]);
 
   // Navigation functions
   // Get filtered indices based on current filter
@@ -3316,6 +3317,7 @@ export default function ScreenplayEditor() {
   const [sceneSynopsis, setSceneSynopsis] = useState({}); // { sceneId: 'synopsis text' }
   const [visibleElementIndex, setVisibleElementIndex] = useState(0); // For scroll sync with comments
   const [elementPositions, setElementPositions] = useState({}); // { elementIndex: topPosition }
+  const [scriptScrollHeight, setScriptScrollHeight] = useState(0);
   const [writingGoal, setWritingGoal] = useState(() => {
     const saved = localStorage.getItem('rooms-writing-goal');
     return saved ? JSON.parse(saved) : { daily: 1000, todayWords: 0, lastDate: null };
@@ -3357,181 +3359,55 @@ export default function ScreenplayEditor() {
     chatNotificationSoundRef.current = chatNotificationSound;
   }, [chatNotificationSound]);
 
-  // Bidirectional scroll sync based on visible ELEMENT (not percentage)
-  const currentVisibleElementRef = useRef(null);
-  
+  // Simple 1:1 scroll sync between Script and Comments (like they're glued together)
   useEffect(() => {
     const script = scriptContainerRef.current;
-    const outline = outlineSidebarRef.current;
     const comments = commentsSidebarRef.current;
     
-    if (!script) return;
+    if (!script || !comments) return;
     
     let isScrolling = false;
-    let scrollTimeout = null;
-    let rafId = null;
     
-    // Find which element is at the center of a container
-    const findCenterElement = (container, selector) => {
-      const elements = container.querySelectorAll(selector);
-      const containerRect = container.getBoundingClientRect();
-      const centerY = containerRect.top + containerRect.height / 2;
-      
-      let closest = null;
-      let closestDist = Infinity;
-      
-      elements.forEach(el => {
-        const rect = el.getBoundingClientRect();
-        const elCenter = rect.top + rect.height / 2;
-        const dist = Math.abs(elCenter - centerY);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closest = el;
-        }
-      });
-      
-      return closest;
-    };
-    
-    // Scroll an element into view within its container (centered)
-    const scrollToElement = (container, element) => {
-      if (!container || !element) return;
-      const containerRect = container.getBoundingClientRect();
-      const elementRect = element.getBoundingClientRect();
-      const elementTop = elementRect.top - containerRect.top + container.scrollTop;
-      const targetScroll = elementTop - (containerRect.height / 2) + (elementRect.height / 2);
-      container.scrollTop = Math.max(0, targetScroll);
-    };
-    
-    // Main scroll handler for script
     const handleScriptScroll = () => {
       if (isScrolling) return;
-      
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        // Find element at center of script
-        const centerEl = findCenterElement(script, '[data-element-index]');
-        if (!centerEl) return;
-        
-        const elementIndex = parseInt(centerEl.getAttribute('data-element-index'), 10);
-        if (isNaN(elementIndex) || elementIndex === currentVisibleElementRef.current) return;
-        
-        currentVisibleElementRef.current = elementIndex;
-        
-        // Find which scene this element belongs to
-        let sceneIndex = null;
-        for (let i = elementIndex; i >= 0; i--) {
-          if (elements[i]?.type === 'scene') {
-            sceneIndex = i;
-            break;
-          }
-        }
-        
-        isScrolling = true;
-        
-        // Sync outline - scroll to the scene
-        if (outline && sceneIndex !== null) {
-          const sceneEl = outline.querySelector(`[data-outline-element-index="${sceneIndex}"]`);
-          if (sceneEl) scrollToElement(outline, sceneEl);
-        }
-        
-        // Sync comments - scroll to comments for this element or nearby
-        if (comments) {
-          // Try to find comment card for this element or nearby elements
-          let commentEl = null;
-          for (let i = elementIndex; i >= Math.max(0, elementIndex - 5); i--) {
-            commentEl = comments.querySelector(`[data-comment-element-index="${i}"]`);
-            if (commentEl) break;
-          }
-          if (commentEl) scrollToElement(comments, commentEl);
-        }
-        
-        clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(() => { isScrolling = false; }, 100);
-      });
+      isScrolling = true;
+      comments.scrollTop = script.scrollTop;
+      requestAnimationFrame(() => { isScrolling = false; });
     };
     
-    // Handler for outline scroll
-    const handleOutlineScroll = () => {
-      if (isScrolling) return;
-      
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const centerEl = findCenterElement(outline, '[data-outline-element-index]');
-        if (!centerEl) return;
-        
-        const elementIndex = parseInt(centerEl.getAttribute('data-outline-element-index'), 10);
-        if (isNaN(elementIndex) || elementIndex === currentVisibleElementRef.current) return;
-        
-        currentVisibleElementRef.current = elementIndex;
-        isScrolling = true;
-        
-        // Sync script
-        const scriptEl = script.querySelector(`[data-element-index="${elementIndex}"]`);
-        if (scriptEl) scrollToElement(script, scriptEl);
-        
-        // Sync comments
-        if (comments) {
-          let commentEl = comments.querySelector(`[data-comment-element-index="${elementIndex}"]`);
-          if (commentEl) scrollToElement(comments, commentEl);
-        }
-        
-        clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(() => { isScrolling = false; }, 100);
-      });
-    };
-    
-    // Handler for comments scroll
     const handleCommentsScroll = () => {
       if (isScrolling) return;
-      
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const centerEl = findCenterElement(comments, '[data-comment-element-index]');
-        if (!centerEl) return;
-        
-        const elementIndex = parseInt(centerEl.getAttribute('data-comment-element-index'), 10);
-        if (isNaN(elementIndex) || elementIndex === currentVisibleElementRef.current) return;
-        
-        currentVisibleElementRef.current = elementIndex;
-        isScrolling = true;
-        
-        // Sync script
-        const scriptEl = script.querySelector(`[data-element-index="${elementIndex}"]`);
-        if (scriptEl) scrollToElement(script, scriptEl);
-        
-        // Sync outline - find the scene for this element
-        if (outline) {
-          let sceneIndex = null;
-          for (let i = elementIndex; i >= 0; i--) {
-            if (elements[i]?.type === 'scene') {
-              sceneIndex = i;
-              break;
-            }
-          }
-          if (sceneIndex !== null) {
-            const sceneEl = outline.querySelector(`[data-outline-element-index="${sceneIndex}"]`);
-            if (sceneEl) scrollToElement(outline, sceneEl);
-          }
-        }
-        
-        clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(() => { isScrolling = false; }, 100);
-      });
+      isScrolling = true;
+      script.scrollTop = comments.scrollTop;
+      requestAnimationFrame(() => { isScrolling = false; });
     };
     
     script.addEventListener('scroll', handleScriptScroll, { passive: true });
-    if (outline) outline.addEventListener('scroll', handleOutlineScroll, { passive: true });
-    if (comments) comments.addEventListener('scroll', handleCommentsScroll, { passive: true });
+    comments.addEventListener('scroll', handleCommentsScroll, { passive: true });
     
     return () => {
       script.removeEventListener('scroll', handleScriptScroll);
-      if (outline) outline.removeEventListener('scroll', handleOutlineScroll);
-      if (comments) comments.removeEventListener('scroll', handleCommentsScroll);
-      if (rafId) cancelAnimationFrame(rafId);
-      clearTimeout(scrollTimeout);
+      comments.removeEventListener('scroll', handleCommentsScroll);
     };
-  }, [showOutline, showComments, elements]);
+  }, [showComments]);
+
+  // Track script's scrollHeight for comments sidebar min-height
+  useEffect(() => {
+    const script = scriptContainerRef.current;
+    if (!script) return;
+    
+    const updateHeight = () => {
+      setScriptScrollHeight(script.scrollHeight);
+    };
+    
+    updateHeight();
+    
+    // Use ResizeObserver to track content height changes
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(script);
+    
+    return () => observer.disconnect();
+  }, [elements.length]);
   
   // Chat notification audio - Web Audio synthesis
   const playChatNotification = useCallback(() => {
@@ -6067,6 +5943,7 @@ export default function ScreenplayEditor() {
             onSelectComment={(id) => { setSelectedCommentId(id); if (id) setSelectedSuggestionId(null); }}
             elementPositions={elementPositions}
             scrollContainerRef={commentsSidebarRef}
+            scriptScrollHeight={scriptScrollHeight}
             token={token} 
             docId={docId} 
             canComment={canComment}
