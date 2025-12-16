@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V166 - Comments icon as yellow post-it + Document menu with submenus
+// V168 - Auto-save every 5s + Auto-snapshot every 15min + Logout fix
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3609,6 +3609,66 @@ export default function ScreenplayEditor() {
     return () => clearInterval(backupInterval);
   }, [docId, title, elements, sceneSynopsis, sceneStatus, notes]);
 
+  // Track last saved state for auto-save comparison
+  const lastSavedElementsRef = useRef(null);
+  const lastSavedTitleRef = useRef(null);
+  
+  // Auto-save to cloud every 5 seconds (only if changes detected)
+  useEffect(() => {
+    if (!docId || !token || elements.length === 0) return;
+    
+    const autoSaveInterval = setInterval(async () => {
+      // Check if there are changes since last save
+      const elementsChanged = JSON.stringify(elements) !== JSON.stringify(lastSavedElementsRef.current);
+      const titleChanged = title !== lastSavedTitleRef.current;
+      
+      if (elementsChanged || titleChanged) {
+        try {
+          const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/autosave', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ title, elements })
+          });
+          if (res.ok) {
+            lastSavedElementsRef.current = JSON.parse(JSON.stringify(elements));
+            lastSavedTitleRef.current = title;
+            setLastSaved(new Date());
+          }
+        } catch (err) { 
+          console.error('[AUTOSAVE] Error:', err); 
+        }
+      }
+    }, 5000);
+    
+    return () => clearInterval(autoSaveInterval);
+  }, [docId, token, elements, title]);
+
+  // Auto-snapshot every 15 minutes (only when document is open and has content)
+  useEffect(() => {
+    if (!docId || !token || elements.length === 0) return;
+    
+    const autoSnapshotInterval = setInterval(async () => {
+      // Only create snapshot if document has meaningful content
+      const hasContent = elements.some(el => el.content && el.content.trim().length > 0);
+      if (!hasContent) return;
+      
+      try {
+        const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/snapshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ title, elements, auto: true })
+        });
+        if (res.ok) {
+          console.log('[AUTO-SNAPSHOT] Created at', new Date().toLocaleTimeString());
+        }
+      } catch (err) { 
+        console.error('[AUTO-SNAPSHOT] Error:', err); 
+      }
+    }, 15 * 60 * 1000); // 15 minutes
+    
+    return () => clearInterval(autoSnapshotInterval);
+  }, [docId, token, elements, title]);
+
   // Track writing goals daily reset
   useEffect(() => {
     const today = new Date().toDateString();
@@ -3749,7 +3809,20 @@ export default function ScreenplayEditor() {
     setToken(newToken); 
     setShowAuthModal(false);
   };
-  const handleLogout = () => { localStorage.removeItem('screenplay-token'); localStorage.removeItem('screenplay-user'); setCurrentUser(null); setToken(null); };
+  const handleLogout = () => { 
+    localStorage.removeItem('screenplay-token'); 
+    localStorage.removeItem('screenplay-user'); 
+    setCurrentUser(null); 
+    setToken(null); 
+    // Return to blank document state
+    window.location.hash = '';
+    setElements([{ id: Date.now().toString(), type: 'scene', content: '' }]);
+    setTitle('Sans titre');
+    setComments({});
+    setNotes({});
+    setChatMessages([]);
+    loadedDocRef.current = null;
+  };
 
   // Send chat message
   const sendChatMessage = useCallback(() => {
