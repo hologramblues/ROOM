@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V170 - Fix scene lock + Remove duration from outline
+// V171 - Consistent SVG icons in header toolbar
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -5772,13 +5772,20 @@ export default function ScreenplayEditor() {
                 onClick={copyLink} 
                 style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
                 title="Inviter (copier le lien)"
-              >+</button>
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              </button>
               <button
                 onClick={() => setShowChat(!showChat)}
                 style={{ marginLeft: 2, width: 24, height: 24, borderRadius: '50%', border: 'none', background: showChat ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), color: showChat ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
                 title="Chat"
               >
-                💬
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
                 {unreadMessages > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: 'white', fontSize: 8, fontWeight: 'bold', padding: '1px 4px', borderRadius: 8, minWidth: 14, textAlign: 'center' }}>{unreadMessages > 9 ? '9+' : unreadMessages}</span>}
               </button>
             </>
@@ -5860,7 +5867,16 @@ export default function ScreenplayEditor() {
             onClick={() => setShowOutline(!showOutline)}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showOutline ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showOutline ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="Outline (⌘O)"
-          >📋</button>
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/>
+              <line x1="8" y1="12" x2="21" y2="12"/>
+              <line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/>
+              <line x1="3" y1="12" x2="3.01" y2="12"/>
+              <line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+          </button>
           
           <button
             onClick={() => setShowComments(!showComments)}
@@ -5878,19 +5894,50 @@ export default function ScreenplayEditor() {
             onClick={() => setShowTimer(!showTimer)}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showTimer ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showTimer ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="Timer"
-          >⏱️</button>
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="13" r="8"/>
+              <path d="M12 9v4l2 2"/>
+              <path d="M9 2h6"/>
+              <path d="M12 2v2"/>
+            </svg>
+          </button>
           
           <button
             onClick={() => setFocusMode(!focusMode)}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: focusMode ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: focusMode ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="Mode focus"
-          >🎯</button>
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="6"/>
+              <circle cx="12" cy="12" r="2"/>
+            </svg>
+          </button>
           
           <button
             onClick={() => setDarkMode(!darkMode)}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#374151' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title={darkMode ? 'Mode clair' : 'Mode sombre'}
-          >{darkMode ? '☀️' : '🌙'}</button>
+          >
+            {darkMode ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5"/>
+                <line x1="12" y1="1" x2="12" y2="3"/>
+                <line x1="12" y1="21" x2="12" y2="23"/>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                <line x1="1" y1="12" x2="3" y2="12"/>
+                <line x1="21" y1="12" x2="23" y2="12"/>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+            )}
+          </button>
         </div>
       </div>
       
