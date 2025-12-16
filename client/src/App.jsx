@@ -5379,6 +5379,9 @@ export default function ScreenplayEditor() {
 
   return (
     <div className={focusMode ? 'focus-mode-active' : ''} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s', overflow: 'hidden', fontFamily: "'Courier Prime', 'Courier New', Courier, monospace" }}>
+      <style>{`
+        button, input, select, textarea { font-family: inherit; }
+      `}</style>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       
       {/* Template Selector Modal */}
@@ -5635,7 +5638,8 @@ export default function ScreenplayEditor() {
               outline: 'none', 
               maxWidth: 250,
               textOverflow: 'ellipsis',
-              textAlign: 'center'
+              textAlign: 'center',
+              fontFamily: 'inherit'
             }} 
           />
           {docId && lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
