@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V171 - Consistent SVG icons in header toolbar
+// V172 - SVG icons in Outline column, Comments sidebar, and Chat header
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -578,7 +578,9 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                       setEditText(comment.content);
                     }}
                     style={{
-                      display: 'block',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
                       width: '100%',
                       padding: '10px 14px',
                       background: 'none',
@@ -591,7 +593,10 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                     onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                   >
-                    ✏️ Modifier
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                    </svg>
+                    Modifier
                   </button>
                   <button
                     onClick={(e) => { 
@@ -1299,7 +1304,10 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             }}
             title="Filtrer les commentaires"
           >
-            💬 {unresolvedComments.length}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+            </svg>
+            {unresolvedComments.length}
           </button>
           
           {/* Suggestion filter button */}
@@ -1321,7 +1329,10 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
               }}
               title="Filtrer les suggestions"
             >
-              ✏️ {pendingSuggestions.length}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+              </svg>
+              {pendingSuggestions.length}
             </button>
           )}
         </div>
@@ -1627,7 +1638,10 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   alignItems: 'center',
                   gap: 6
                 }}>
-                  ✏️ Proposer une modification
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                  </svg>
+                  Proposer une modification
                 </div>
                 
                 <div style={{ padding: 12 }}>
@@ -5883,9 +5897,8 @@ export default function ScreenplayEditor() {
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showComments ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showComments ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
             title="Commentaires"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill={showComments ? 'white' : '#fbbf24'} stroke={showComments ? 'white' : '#d97706'} strokeWidth="1.5">
-              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
-              <path d="M14 3v4c0 .55.45 1 1 1h4" fill={showComments ? '#3b82f6' : '#fef3c7'} stroke="none"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
             </svg>
             {totalComments > 0 && <span style={{ position: 'absolute', top: -2, right: -2, background: '#f59e0b', color: 'black', fontSize: 8, fontWeight: 'bold', padding: '1px 4px', borderRadius: 8, minWidth: 14, textAlign: 'center' }}>{totalComments}</span>}
           </button>
@@ -5986,7 +5999,17 @@ export default function ScreenplayEditor() {
             overflow: 'hidden'
           }}>
             <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black' }}>📋 Outline</h3>
+              <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="8" y1="6" x2="21" y2="6"/>
+                  <line x1="8" y1="12" x2="21" y2="12"/>
+                  <line x1="8" y1="18" x2="21" y2="18"/>
+                  <line x1="3" y1="6" x2="3.01" y2="6"/>
+                  <line x1="3" y1="12" x2="3.01" y2="12"/>
+                  <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                Outline
+              </h3>
               <button onClick={() => setShowOutline(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
             </div>
             
@@ -7181,7 +7204,12 @@ export default function ScreenplayEditor() {
             }}
           >
             <div>
-              <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : 'black' }}>💬 Chat</h3>
+              <h3 style={{ margin: 0, fontSize: 14, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                Chat
+              </h3>
               <span style={{ fontSize: 10, color: '#6b7280' }}>{users.length} connecté{users.length > 1 ? 's' : ''}</span>
             </div>
             <button 
