@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V164 - Fixed folder button behavior + toolbar always visible
+// V165 - Outils menu always visible + fixed Tab cycle after dialogue
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -5011,7 +5011,8 @@ export default function ScreenplayEditor() {
       e.preventDefault();
       const prev = index > 0 ? elements[index - 1] : null;
       const fromDial = prev && (prev.type === 'dialogue' || prev.type === 'parenthetical');
-      if (el.type === 'action') changeType(index, e.shiftKey ? 'scene' : 'character');
+      // After dialogue: character <-> action <-> scene cycle
+      if (el.type === 'action') changeType(index, fromDial ? (e.shiftKey ? 'character' : 'scene') : (e.shiftKey ? 'scene' : 'character'));
       else if (el.type === 'character') changeType(index, fromDial ? (e.shiftKey ? 'scene' : 'action') : (e.shiftKey ? 'action' : 'scene'));
       else if (el.type === 'scene') changeType(index, fromDial ? (e.shiftKey ? 'action' : 'character') : (e.shiftKey ? 'character' : 'action'));
       else if (el.type === 'dialogue' && !e.shiftKey) changeType(index, 'parenthetical');
@@ -5545,7 +5546,6 @@ export default function ScreenplayEditor() {
           </div>
           
           {/* TOOLS MENU */}
-          {docId && (
           <div style={{ position: 'relative' }}>
             <button onClick={(e) => { e.stopPropagation(); setShowToolsMenu(!showToolsMenu); setShowDocMenu(false); }} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: showToolsMenu ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: darkMode ? '#e5e7eb' : '#374151', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
               Outils ▾
@@ -5586,7 +5586,6 @@ export default function ScreenplayEditor() {
               </div>
             )}
           </div>
-          )}
         </div>
         
         {/* CENTER ZONE: Title only */}
