@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V175 - Registration form with First/Last name, distinct user colors, loading spinner, gray selection menu icons, IA text instead of star
+// V176 - Fixed auth modal layout, deterministic user colors based on ID
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -145,27 +145,114 @@ const AuthModal = ({ onLogin, onClose }) => {
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    background: '#111827',
+    border: '1px solid #374151',
+    borderRadius: 8,
+    color: 'white',
+    fontSize: 14,
+    boxSizing: 'border-box',
+    outline: 'none',
+    transition: 'border-color 0.2s'
+  };
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#1f2937', borderRadius: 12, padding: 32, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
-        <h2 style={{ color: 'white', fontSize: 24, marginBottom: 24, textAlign: 'center' }}>{mode === 'login' ? 'Connexion' : 'Inscription'}</h2>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#1f2937', borderRadius: 12, padding: 32, width: 'calc(100% - 32px)', maxWidth: 380, boxShadow: '0 25px 50px rgba(0,0,0,0.5)', border: '1px solid #374151' }}>
+        <h2 style={{ color: 'white', fontSize: 22, marginBottom: 24, textAlign: 'center', fontWeight: 600 }}>{mode === 'login' ? 'Connexion' : 'Inscription'}</h2>
         <form onSubmit={handleSubmit}>
           {mode === 'register' && (
-            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-              <input type="text" placeholder="Prénom" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ flex: 1, padding: 12, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, boxSizing: 'border-box' }} required />
-              <input type="text" placeholder="Nom" value={lastName} onChange={e => setLastName(e.target.value)} style={{ flex: 1, padding: 12, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, boxSizing: 'border-box' }} required />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <input 
+                type="text" 
+                placeholder="Prénom" 
+                value={firstName} 
+                onChange={e => setFirstName(e.target.value)} 
+                style={inputStyle}
+                onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                onBlur={e => e.target.style.borderColor = '#374151'}
+                required 
+              />
+              <input 
+                type="text" 
+                placeholder="Nom" 
+                value={lastName} 
+                onChange={e => setLastName(e.target.value)} 
+                style={inputStyle}
+                onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                onBlur={e => e.target.style.borderColor = '#374151'}
+                required 
+              />
             </div>
           )}
-          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: 12, marginBottom: 16, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, boxSizing: 'border-box' }} required />
-          <input type="password" placeholder="Mot de passe" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: 12, marginBottom: 16, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, boxSizing: 'border-box' }} required />
-          {error && <p style={{ color: '#f87171', fontSize: 14, marginBottom: 16, textAlign: 'center' }}>{error}</p>}
-          <button type="submit" disabled={loading} style={{ width: '100%', padding: 14, background: '#2563eb', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, fontWeight: 'bold', cursor: 'pointer' }}>{loading ? '...' : mode === 'login' ? 'Se connecter' : "S'inscrire"}</button>
+          <input 
+            type="email" 
+            placeholder="Email" 
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            style={{ ...inputStyle, marginBottom: 12 }}
+            onFocus={e => e.target.style.borderColor = '#3b82f6'}
+            onBlur={e => e.target.style.borderColor = '#374151'}
+            required 
+          />
+          <input 
+            type="password" 
+            placeholder="Mot de passe" 
+            value={password} 
+            onChange={e => setPassword(e.target.value)} 
+            style={{ ...inputStyle, marginBottom: 16 }}
+            onFocus={e => e.target.style.borderColor = '#3b82f6'}
+            onBlur={e => e.target.style.borderColor = '#374151'}
+            required 
+          />
+          {error && <p style={{ color: '#f87171', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>{error}</p>}
+          <button 
+            type="submit" 
+            disabled={loading} 
+            style={{ 
+              width: '100%', 
+              padding: 14, 
+              background: '#3b82f6', 
+              border: 'none', 
+              borderRadius: 8, 
+              color: 'white', 
+              fontSize: 14, 
+              fontWeight: 600, 
+              cursor: loading ? 'wait' : 'pointer',
+              opacity: loading ? 0.7 : 1,
+              transition: 'opacity 0.2s'
+            }}
+          >
+            {loading ? 'Chargement...' : mode === 'login' ? 'Se connecter' : "S'inscrire"}
+          </button>
         </form>
-        <p style={{ marginTop: 20, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>
+        <p style={{ marginTop: 20, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
           {mode === 'login' ? 'Pas de compte ?' : 'Déjà un compte ?'}
-          <button onClick={() => setMode(mode === 'login' ? 'register' : 'login')} style={{ marginLeft: 8, color: '#60a5fa', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>{mode === 'login' ? "S'inscrire" : 'Se connecter'}</button>
+          <button 
+            onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }} 
+            style={{ marginLeft: 8, color: '#60a5fa', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+          >
+            {mode === 'login' ? "S'inscrire" : 'Se connecter'}
+          </button>
         </p>
-        <button onClick={onClose} style={{ marginTop: 20, width: '100%', padding: 12, background: 'transparent', border: '1px solid #4b5563', borderRadius: 8, color: '#9ca3af', cursor: 'pointer', fontSize: 14 }}>Continuer sans compte</button>
+        <button 
+          onClick={onClose} 
+          style={{ 
+            marginTop: 16, 
+            width: '100%', 
+            padding: 12, 
+            background: 'transparent', 
+            border: '1px solid #374151', 
+            borderRadius: 8, 
+            color: '#6b7280', 
+            cursor: 'pointer', 
+            fontSize: 13 
+          }}
+        >
+          Continuer sans compte
+        </button>
       </div>
     </div>
   );
