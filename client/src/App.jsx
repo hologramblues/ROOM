@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V181 - Fixed assignment menu: merge collaborators + online users
+// V182 - Custom assignee dropdown, outline tooltips
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3429,6 +3429,7 @@ export default function ScreenplayEditor() {
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
   const [outlineFilter, setOutlineFilter] = useState({ status: '', assignee: '' });
   const [showStatusDropdown, setShowStatusDropdown] = useState(false); // Custom dropdown for status filter
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false); // Custom dropdown for assignee filter
   const [outlineChapters, setOutlineChapters] = useState({}); // { sceneId: 'Acte 1' } - chapter before this scene
   const [editingChapter, setEditingChapter] = useState(null); // sceneId being edited
   const [lastSaved, setLastSaved] = useState(null);
@@ -6210,42 +6211,77 @@ export default function ScreenplayEditor() {
                   </>
                 )}
               </div>
-              <select 
-                value={outlineFilter.assignee} 
-                onChange={e => setOutlineFilter(f => ({ ...f, assignee: e.target.value }))}
-                style={{ 
-                  flex: 1,
-                  minWidth: 0,
-                  padding: '6px 10px', 
-                  background: outlineFilter.assignee ? (darkMode ? '#4a4a4a' : '#dbeafe') : (darkMode ? '#484848' : '#f3f4f6'), 
-                  border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
-                  borderRadius: 6, 
-                  color: darkMode ? '#e5e7eb' : '#484848', 
-                  fontSize: 11,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 8l3-3.5H3z'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 6px center',
-                  paddingRight: 22
-                }}
-              >
-                <option value="">Assigné</option>
-                <option value="unassigned">Non assigné</option>
-                {(() => {
-                  // Merge collaborators and online users for filter dropdown
-                  const allUsers = [...collaborators];
-                  users.forEach(onlineUser => {
-                    if (!allUsers.find(c => c.name === onlineUser.name)) {
-                      allUsers.push({ name: onlineUser.name, color: onlineUser.color });
-                    }
-                  });
-                  return allUsers;
-                })().map(u => (
-                  <option key={u.name} value={u.name}>{u.name}</option>
-                ))}
-              </select>
+              {/* Custom Assignee Dropdown */}
+              <div style={{ flex: 1, position: 'relative' }}>
+                <button
+                  onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
+                  style={{ 
+                    width: '100%',
+                    padding: '6px 10px', 
+                    background: outlineFilter.assignee ? (darkMode ? '#4a4a4a' : '#dbeafe') : (darkMode ? '#484848' : '#f3f4f6'), 
+                    border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
+                    borderRadius: 6, 
+                    color: darkMode ? '#e5e7eb' : '#484848', 
+                    fontSize: 11,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 6
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {outlineFilter.assignee === 'unassigned' ? 'Non assigné' : outlineFilter.assignee || 'Assigné'}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="#6b7280" style={{ flexShrink: 0 }}><path d="M3 4.5L6 8l3-3.5H3z"/></svg>
+                </button>
+                {showAssigneeDropdown && (
+                  <>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setShowAssigneeDropdown(false)} />
+                    <div style={{ 
+                      position: 'absolute', 
+                      top: '100%', 
+                      left: 0, 
+                      right: 0,
+                      marginTop: 4,
+                      background: darkMode ? '#333333' : 'white', 
+                      border: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
+                      borderRadius: 6,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      zIndex: 999,
+                      overflow: 'hidden',
+                      maxHeight: 200,
+                      overflowY: 'auto'
+                    }}>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, assignee: '' })); setShowAssigneeDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        Tous
+                      </button>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, assignee: 'unassigned' })); setShowAssigneeDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <span style={{ width: 16, height: 16, borderRadius: 3, border: '1px dashed #6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8 }}>✕</span>
+                        Non assigné
+                      </button>
+                      {(() => {
+                        const allUsers = [...collaborators];
+                        users.forEach(onlineUser => {
+                          if (!allUsers.find(c => c.name === onlineUser.name)) {
+                            allUsers.push({ name: onlineUser.name, color: onlineUser.color });
+                          }
+                        });
+                        return allUsers;
+                      })().map(u => (
+                        <button key={u.name} onClick={() => { setOutlineFilter(f => ({ ...f, assignee: u.name })); setShowAssigneeDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                          <span style={{ width: 16, height: 16, borderRadius: 3, background: u.color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 'bold' }}>{getInitials(u.name)}</span>
+                          {u.name}
+                          {users.find(online => online.name === u.name) && (
+                            <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
             {(outlineFilter.status || outlineFilter.assignee) && (
               <div style={{ padding: '4px 12px', background: darkMode ? '#484848' : '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -6365,7 +6401,8 @@ export default function ScreenplayEditor() {
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}
-                        title={lockedScenes.has(scene.id) ? 'Déverrouiller' : 'Verrouiller'}
+                        className="outline-btn"
+                        data-tooltip={lockedScenes.has(scene.id) ? 'Déverrouiller' : 'Verrouiller'}
                       >
                         {lockedScenes.has(scene.id) ? (
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -6398,10 +6435,11 @@ export default function ScreenplayEditor() {
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}
-                        title={sceneStatus[scene.id] === 'done' ? 'Validé' 
+                        className="outline-btn"
+                        data-tooltip={sceneStatus[scene.id] === 'done' ? 'Validé' 
                           : sceneStatus[scene.id] === 'progress' ? 'En cours' 
                           : sceneStatus[scene.id] === 'urgent' ? 'Urgent'
-                          : 'Pas commencé'}
+                          : 'Statut'}
                       >
                         {sceneStatus[scene.id] === 'done' ? '✓' 
                           : sceneStatus[scene.id] === 'progress' ? '…' 
@@ -6433,7 +6471,8 @@ export default function ScreenplayEditor() {
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}
-                        title={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner'}
+                        className="outline-btn"
+                        data-tooltip={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner'}
                       >
                         {getInitials(sceneAssignments[scene.id]?.userName) || ''}
                       </button>
@@ -7920,6 +7959,47 @@ export default function ScreenplayEditor() {
         }
         .header-btn:hover::after {
           transform: translateX(-50%) translateY(0);
+        }
+        
+        /* Outline tooltips - appear above */
+        .outline-btn {
+          position: relative;
+        }
+        .outline-btn::after {
+          content: attr(data-tooltip);
+          position: absolute;
+          bottom: calc(100% + 6px);
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 5px 8px;
+          background: ${darkMode ? '#333333' : '#484848'};
+          color: white;
+          font-size: 10px;
+          font-weight: 500;
+          white-space: nowrap;
+          border-radius: 4px;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease;
+          z-index: 1000;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .outline-btn::before {
+          content: '';
+          position: absolute;
+          bottom: calc(100% + 1px);
+          left: 50%;
+          transform: translateX(-50%);
+          border: 4px solid transparent;
+          border-top-color: ${darkMode ? '#333333' : '#484848'};
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease;
+          z-index: 1000;
+        }
+        .outline-btn:hover::after,
+        .outline-btn:hover::before {
+          opacity: 1;
         }
       `}</style>
       
