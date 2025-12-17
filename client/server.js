@@ -47,7 +47,8 @@ function checkDocumentAccess(doc, user, requiredRole) {
 }
 
 function getRandomColor() {
-  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
+  // Couleurs très distinctes pour les utilisateurs
+  const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
@@ -163,20 +164,19 @@ app.post('/api/documents/:shortId/snapshot', authMiddleware, async (req, res) =>
     }
     await doc.save();
     
-    // Create history entry - use client-provided snapshotName or generate fallback
+    // Create history entry
     const isAuto = req.body.auto === true;
-    const snapshotName = req.body.snapshotName || `${doc.title} - ${new Date().toLocaleString('fr-FR')}`;
     await HistoryEntry.create({ 
       documentId: doc._id, 
       userId: req.user._id, 
       userName: req.user.name, 
       userColor: req.user.color, 
       action: 'snapshot', 
-      snapshotName: snapshotName,
+      snapshotName: isAuto ? `Auto-save ${new Date().toLocaleString('fr-FR')}` : (req.body.snapshotName || null),
       data: { title: doc.title, elements: doc.elements } 
     });
     
-    console.log(isAuto ? '[AUTO-SNAPSHOT]' : '[SNAPSHOT]', snapshotName);
+    console.log(isAuto ? '[AUTO-SNAPSHOT]' : '[SNAPSHOT]', 'Created for', req.params.shortId);
     res.json({ success: true, createdAt: new Date().toISOString(), auto: isAuto });
   } catch (error) { 
     console.error('Snapshot error:', error);

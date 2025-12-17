@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V174 - Custom status dropdown with colored dots
+// V175 - Registration form with First/Last name, distinct user colors, loading spinner, gray selection menu icons, IA text instead of star
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -123,7 +123,8 @@ const AuthModal = ({ onLogin, onClose }) => {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -133,6 +134,7 @@ const AuthModal = ({ onLogin, onClose }) => {
     setLoading(true);
     try {
       const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+      const name = mode === 'register' ? `${firstName} ${lastName}`.trim() : '';
       const body = mode === 'login' ? { email, password } : { email, password, name };
       const res = await fetch(SERVER_URL + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
@@ -148,7 +150,12 @@ const AuthModal = ({ onLogin, onClose }) => {
       <div style={{ background: '#1f2937', borderRadius: 12, padding: 32, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
         <h2 style={{ color: 'white', fontSize: 24, marginBottom: 24, textAlign: 'center' }}>{mode === 'login' ? 'Connexion' : 'Inscription'}</h2>
         <form onSubmit={handleSubmit}>
-          {mode === 'register' && <input type="text" placeholder="Nom" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', padding: 12, marginBottom: 16, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, boxSizing: 'border-box' }} required />}
+          {mode === 'register' && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+              <input type="text" placeholder="Prénom" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ flex: 1, padding: 12, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, boxSizing: 'border-box' }} required />
+              <input type="text" placeholder="Nom" value={lastName} onChange={e => setLastName(e.target.value)} style={{ flex: 1, padding: 12, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, boxSizing: 'border-box' }} required />
+            </div>
+          )}
           <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: 12, marginBottom: 16, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, boxSizing: 'border-box' }} required />
           <input type="password" placeholder="Mot de passe" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: 12, marginBottom: 16, background: '#374151', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, boxSizing: 'border-box' }} required />
           {error && <p style={{ color: '#f87171', fontSize: 14, marginBottom: 16, textAlign: 'center' }}>{error}</p>}
@@ -6001,14 +6008,15 @@ export default function ScreenplayEditor() {
             justifyContent: 'center',
             zIndex: 100
           }}>
-            <div style={{ fontSize: 48, animation: 'pulse 1.5s ease-in-out infinite' }}>⏳</div>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={darkMode ? '#60a5fa' : '#3b82f6'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
             <p style={{ marginTop: 16, color: darkMode ? '#9ca3af' : '#6b7280', fontSize: 14 }}>
               Chargement du document...
             </p>
             <style>{`
-              @keyframes pulse {
-                0%, 100% { opacity: 1; transform: scale(1); }
-                50% { opacity: 0.6; transform: scale(0.95); }
+              @keyframes spin {
+                to { transform: rotate(360deg); }
               }
             `}</style>
           </div>
@@ -6813,7 +6821,7 @@ export default function ScreenplayEditor() {
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
             title="Proposer une modification"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
@@ -6848,7 +6856,7 @@ export default function ScreenplayEditor() {
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
             title="Ajouter un commentaire"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               <line x1="12" y1="8" x2="12" y2="14" />
               <line x1="9" y1="11" x2="15" y2="11" />
@@ -6872,7 +6880,7 @@ export default function ScreenplayEditor() {
             title="Réactions (bientôt)"
             disabled
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <path d="M8 14s1.5 2 4 2 4-2 4-2" />
               <line x1="9" y1="9" x2="9.01" y2="9" />
@@ -6911,9 +6919,7 @@ export default function ScreenplayEditor() {
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
             title="Réécrire avec l'IA"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9333ea" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-            </svg>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', fontFamily: 'system-ui, sans-serif' }}>IA</span>
           </button>
         </div>
         );
@@ -6945,7 +6951,7 @@ export default function ScreenplayEditor() {
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : '#1f2937', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: '#9333ea' }}>✨</span> Réécrire avec l'IA
+                <span style={{ color: '#6b7280', fontWeight: 700 }}>IA</span> Réécrire avec l'IA
               </h3>
               <button 
                 onClick={() => { setShowAIRewrite(false); setAiRewriteSelection(null); setAiRewriteResult(null); setAiRewriteMode(null); }}
@@ -6962,9 +6968,9 @@ export default function ScreenplayEditor() {
               fontSize: 13,
               color: darkMode ? '#d1d5db' : '#4b5563',
               fontStyle: 'italic',
-              borderLeft: '3px solid #9333ea'
+              borderLeft: '3px solid #3b82f6'
             }}>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#9333ea', marginBottom: 6, fontWeight: 600 }}>Texte sélectionné</div>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#3b82f6', marginBottom: 6, fontWeight: 600 }}>Texte sélectionné</div>
               "{aiRewriteSelection.text}"
             </div>
             
@@ -6986,7 +6992,7 @@ export default function ScreenplayEditor() {
                     fontSize: 14,
                     transition: 'all 0.15s'
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#9333ea'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#3b82f6'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#374151' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb'; }}
                 >
                   <span style={{ marginRight: 8, display: 'inline-flex' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span> <strong>Plus concis</strong>
@@ -7006,7 +7012,7 @@ export default function ScreenplayEditor() {
                     fontSize: 14,
                     transition: 'all 0.15s'
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#9333ea'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#3b82f6'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#374151' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb'; }}
                 >
                   <span style={{ marginRight: 8, display: 'inline-flex' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span> <strong>Développer</strong>
@@ -7026,7 +7032,7 @@ export default function ScreenplayEditor() {
                     fontSize: 14,
                     transition: 'all 0.15s'
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#9333ea'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#3b82f6'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#374151' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb'; }}
                 >
                   <span style={{ marginRight: 8, display: 'inline-flex' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span> <strong>Reformuler</strong>
@@ -7058,7 +7064,7 @@ export default function ScreenplayEditor() {
                           fontSize: 12,
                           transition: 'all 0.15s'
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#9333ea'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#9333ea'; }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#3b82f6'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#3b82f6'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#1f2937' : 'white'; e.currentTarget.style.color = darkMode ? '#d1d5db' : '#4b5563'; e.currentTarget.style.borderColor = darkMode ? '#6b7280' : '#d1d5db'; }}
                       >
                         {tone}
@@ -7099,7 +7105,7 @@ export default function ScreenplayEditor() {
                       disabled={!aiRewriteCustomPrompt.trim()}
                       style={{
                         padding: '8px 16px',
-                        background: aiRewriteCustomPrompt.trim() ? '#9333ea' : (darkMode ? '#4b5563' : '#e5e7eb'),
+                        background: aiRewriteCustomPrompt.trim() ? '#3b82f6' : (darkMode ? '#4b5563' : '#e5e7eb'),
                         border: 'none',
                         borderRadius: 6,
                         color: aiRewriteCustomPrompt.trim() ? 'white' : (darkMode ? '#9ca3af' : '#9ca3af'),
@@ -7122,7 +7128,7 @@ export default function ScreenplayEditor() {
                   width: 40, 
                   height: 40, 
                   border: '3px solid transparent',
-                  borderTopColor: '#9333ea',
+                  borderTopColor: '#3b82f6',
                   borderRadius: '50%',
                   margin: '0 auto 16px',
                   animation: 'spin 1s linear infinite'
