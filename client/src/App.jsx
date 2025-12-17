@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V173 - Full SVG icons: Document menu, Tools menu, Timer, Outline locks, Modals
+// V173 - Full SVG icons + Styled tooltips + Homogeneous outline dropdowns
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -5799,8 +5799,9 @@ export default function ScreenplayEditor() {
             <>
               <button 
                 onClick={copyLink} 
+                className="header-btn"
+                data-tooltip="Inviter (copier le lien)"
                 style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
-                title="Inviter (copier le lien)"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"/>
@@ -5809,8 +5810,9 @@ export default function ScreenplayEditor() {
               </button>
               <button
                 onClick={() => setShowChat(!showChat)}
+                className="header-btn"
+                data-tooltip="Chat d'équipe"
                 style={{ marginLeft: 2, width: 24, height: 24, borderRadius: '50%', border: 'none', background: showChat ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), color: showChat ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-                title="Chat"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -5825,8 +5827,9 @@ export default function ScreenplayEditor() {
           {/* Document actions */}
           <button
             onClick={() => setShowDocsList(true)}
+            className="header-btn"
+            data-tooltip="Mes documents"
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#374151' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            title="Mes documents"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -5835,8 +5838,9 @@ export default function ScreenplayEditor() {
           
           <button
             onClick={() => setShowExportMenu(!showExportMenu)}
+            className="header-btn"
+            data-tooltip="Exporter"
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showExportMenu ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showExportMenu ? 'white' : '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-            title="Exporter"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -5897,8 +5901,9 @@ export default function ScreenplayEditor() {
           {/* Quick toggle buttons */}
           <button
             onClick={() => setShowOutline(!showOutline)}
+            className="header-btn"
+            data-tooltip="Outline (⌘O)"
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showOutline ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showOutline ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            title="Outline (⌘O)"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="8" y1="6" x2="21" y2="6"/>
@@ -5912,8 +5917,9 @@ export default function ScreenplayEditor() {
           
           <button
             onClick={() => setShowComments(!showComments)}
+            className="header-btn"
+            data-tooltip="Commentaires"
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showComments ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showComments ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-            title="Commentaires"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
@@ -5923,8 +5929,9 @@ export default function ScreenplayEditor() {
           
           <button
             onClick={() => setShowTimer(!showTimer)}
+            className="header-btn"
+            data-tooltip="Timer d'écriture"
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showTimer ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showTimer ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            title="Timer"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="13" r="8"/>
@@ -5936,8 +5943,9 @@ export default function ScreenplayEditor() {
           
           <button
             onClick={() => setFocusMode(!focusMode)}
+            className="header-btn"
+            data-tooltip="Mode focus"
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: focusMode ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: focusMode ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            title="Mode focus"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/>
@@ -5948,8 +5956,9 @@ export default function ScreenplayEditor() {
           
           <button
             onClick={() => setDarkMode(!darkMode)}
+            className="header-btn"
+            data-tooltip={darkMode ? 'Mode clair' : 'Mode sombre'}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#374151' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            title={darkMode ? 'Mode clair' : 'Mode sombre'}
           >
             {darkMode ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6039,27 +6048,26 @@ export default function ScreenplayEditor() {
                 style={{ 
                   flex: 1,
                   minWidth: 0,
-                  padding: '8px 10px', 
-                  background: outlineFilter.status ? (darkMode ? '#1e3a5f' : '#dbeafe') : (darkMode ? '#1f2937' : 'white'), 
-                  border: 'none',
-                  borderRadius: 8, 
-                  color: darkMode ? 'white' : '#374151', 
-                  fontSize: 12,
+                  padding: '6px 10px', 
+                  background: outlineFilter.status ? (darkMode ? '#1e3a5f' : '#dbeafe') : (darkMode ? '#374151' : '#f3f4f6'), 
+                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                  borderRadius: 6, 
+                  color: darkMode ? '#e5e7eb' : '#374151', 
+                  fontSize: 11,
                   fontWeight: 500,
                   cursor: 'pointer',
-                  boxShadow: darkMode ? 'inset 0 1px 2px rgba(0,0,0,0.3)' : 'inset 0 1px 2px rgba(0,0,0,0.06)',
                   appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 8l3-3.5H3z'/%3E%3C/svg%3E")`,
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 8l3-3.5H3z'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 8px center',
-                  paddingRight: 28
+                  backgroundPosition: 'right 6px center',
+                  paddingRight: 22
                 }}
               >
                 <option value="">Statut</option>
-                <option value="progress">🟡 En cours</option>
-                <option value="done">🟢 Validé</option>
-                <option value="urgent">🔴 Urgent</option>
-                <option value="none">⚪ Non défini</option>
+                <option value="progress">● En cours</option>
+                <option value="done">● Validé</option>
+                <option value="urgent">● Urgent</option>
+                <option value="none">○ Non défini</option>
               </select>
               <select 
                 value={outlineFilter.assignee} 
@@ -6067,23 +6075,22 @@ export default function ScreenplayEditor() {
                 style={{ 
                   flex: 1,
                   minWidth: 0,
-                  padding: '8px 10px', 
-                  background: outlineFilter.assignee ? (darkMode ? '#1e3a5f' : '#dbeafe') : (darkMode ? '#1f2937' : 'white'), 
-                  border: 'none',
-                  borderRadius: 8, 
-                  color: darkMode ? 'white' : '#374151', 
-                  fontSize: 12,
+                  padding: '6px 10px', 
+                  background: outlineFilter.assignee ? (darkMode ? '#1e3a5f' : '#dbeafe') : (darkMode ? '#374151' : '#f3f4f6'), 
+                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                  borderRadius: 6, 
+                  color: darkMode ? '#e5e7eb' : '#374151', 
+                  fontSize: 11,
                   fontWeight: 500,
                   cursor: 'pointer',
-                  boxShadow: darkMode ? 'inset 0 1px 2px rgba(0,0,0,0.3)' : 'inset 0 1px 2px rgba(0,0,0,0.06)',
                   appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 8l3-3.5H3z'/%3E%3C/svg%3E")`,
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 8l3-3.5H3z'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 8px center',
-                  paddingRight: 28
+                  backgroundPosition: 'right 6px center',
+                  paddingRight: 22
                 }}
               >
-                <option value="">👤 Assigné</option>
+                <option value="">Assigné</option>
                 <option value="unassigned">Non assigné</option>
                 {users.map(u => (
                   <option key={u.id} value={u.name}>{u.name}</option>
@@ -6095,7 +6102,9 @@ export default function ScreenplayEditor() {
                 <span style={{ fontSize: 10, color: darkMode ? '#fbbf24' : '#92400e' }}>
                   {filteredOutline.length} scène{filteredOutline.length > 1 ? 's' : ''} filtrée{filteredOutline.length > 1 ? 's' : ''}
                 </span>
-                <button onClick={() => setOutlineFilter({ status: '', assignee: '' })} style={{ padding: '6px 10px', fontSize: 11, background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+                <button onClick={() => setOutlineFilter({ status: '', assignee: '' })} style={{ padding: '4px 8px', fontSize: 10, background: '#ef4444', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
               </div>
             )}
             <div ref={outlineSidebarRef} style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
@@ -7710,6 +7719,50 @@ export default function ScreenplayEditor() {
         ::highlight(suggestion-highlight) {
           background-color: rgba(34, 197, 94, 0.3);
           text-decoration: underline wavy #16a34a;
+        }
+        
+        /* Custom Tooltips */
+        .header-btn {
+          position: relative;
+        }
+        .header-btn::after {
+          content: attr(data-tooltip);
+          position: absolute;
+          top: calc(100% + 8px);
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 6px 10px;
+          background: ${darkMode ? '#1f2937' : '#374151'};
+          color: white;
+          font-size: 11px;
+          font-weight: 500;
+          white-space: nowrap;
+          border-radius: 6px;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease, transform 0.15s ease;
+          z-index: 1000;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .header-btn::before {
+          content: '';
+          position: absolute;
+          top: calc(100% + 2px);
+          left: 50%;
+          transform: translateX(-50%);
+          border: 5px solid transparent;
+          border-bottom-color: ${darkMode ? '#1f2937' : '#374151'};
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease;
+          z-index: 1000;
+        }
+        .header-btn:hover::after,
+        .header-btn:hover::before {
+          opacity: 1;
+        }
+        .header-btn:hover::after {
+          transform: translateX(-50%) translateY(0);
         }
       `}</style>
       
