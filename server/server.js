@@ -34,6 +34,96 @@ app.get('/api/health', async (req, res) => {
   res.json({ status: 'ok', documents: docCount, users: userCount, aiEnabled: !!anthropic });
 });
 
+// ============ ADMIN ROUTES ============
+// Protected by a simple secret key (set ADMIN_SECRET in Railway env vars)
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'rooms-admin-2024';
+
+const adminAuth = (req, res, next) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret;
+  if (secret !== ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
+
+// Stats overview
+app.get('/api/admin/stats', adminAuth, async (req, res) => {
+  try {
+    const users = await User.countDocuments();
+    const documents = await Document.countDocuments();
+    const history = await HistoryEntry.countDocuments();
+    res.json({ users, documents, history });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List all users
+app.get('/api/admin/users', adminAuth, async (req, res) => {
+  try {
+    const users = await User.find().select('name email createdAt').sort({ createdAt: -1 });
+    res.json({ users });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a user
+app.delete('/api/admin/users/:id', adminAuth, async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'User deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List all documents
+app.get('/api/admin/documents', adminAuth, async (req, res) => {
+  try {
+    const documents = await Document.find().select('shortId title ownerId updatedAt').sort({ updatedAt: -1 });
+    res.json({ documents });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a document
+app.delete('/api/admin/documents/:id', adminAuth, async (req, res) => {
+  try {
+    await Document.findOneAndDelete({ shortId: req.params.id });
+    await HistoryEntry.deleteMany({ documentId: req.params.id });
+    res.json({ success: true, message: 'Document and history deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DANGER: Reset everything
+app.post('/api/admin/reset', adminAuth, async (req, res) => {
+  try {
+    const { confirm } = req.body;
+    if (confirm !== 'DELETE_ALL') {
+      return res.status(400).json({ error: 'Send { confirm: "DELETE_ALL" } to confirm' });
+    }
+    
+    const userCount = await User.deleteMany({});
+    const docCount = await Document.deleteMany({});
+    const historyCount = await HistoryEntry.deleteMany({});
+    
+    res.json({ 
+      success: true, 
+      deleted: {
+        users: userCount.deletedCount,
+        documents: docCount.deletedCount,
+        history: historyCount.deletedCount
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 function checkDocumentAccess(doc, user, requiredRole) {
   if (doc.publicAccess.enabled) {
     const h = { viewer: 0, commenter: 1, editor: 2 };
