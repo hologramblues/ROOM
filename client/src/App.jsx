@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V177 - Fixed chat messaging, deterministic user colors
+// V178 - Gray neutral dark mode (Final Draft style)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -148,8 +148,8 @@ const AuthModal = ({ onLogin, onClose }) => {
   const inputStyle = {
     width: '100%',
     padding: '12px 14px',
-    background: '#111827',
-    border: '1px solid #374151',
+    background: '#2b2b2b',
+    border: '1px solid #484848',
     borderRadius: 8,
     color: 'white',
     fontSize: 14,
@@ -160,7 +160,7 @@ const AuthModal = ({ onLogin, onClose }) => {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#1f2937', borderRadius: 12, padding: 32, width: 'calc(100% - 32px)', maxWidth: 380, boxShadow: '0 25px 50px rgba(0,0,0,0.5)', border: '1px solid #374151' }}>
+      <div style={{ background: '#333333', borderRadius: 12, padding: 32, width: 'calc(100% - 32px)', maxWidth: 380, boxShadow: '0 25px 50px rgba(0,0,0,0.5)', border: '1px solid #484848' }}>
         <h2 style={{ color: 'white', fontSize: 22, marginBottom: 24, textAlign: 'center', fontWeight: 600 }}>{mode === 'login' ? 'Connexion' : 'Inscription'}</h2>
         <form onSubmit={handleSubmit}>
           {mode === 'register' && (
@@ -172,7 +172,7 @@ const AuthModal = ({ onLogin, onClose }) => {
                 onChange={e => setFirstName(e.target.value)} 
                 style={inputStyle}
                 onFocus={e => e.target.style.borderColor = '#3b82f6'}
-                onBlur={e => e.target.style.borderColor = '#374151'}
+                onBlur={e => e.target.style.borderColor = '#484848'}
                 required 
               />
               <input 
@@ -182,7 +182,7 @@ const AuthModal = ({ onLogin, onClose }) => {
                 onChange={e => setLastName(e.target.value)} 
                 style={inputStyle}
                 onFocus={e => e.target.style.borderColor = '#3b82f6'}
-                onBlur={e => e.target.style.borderColor = '#374151'}
+                onBlur={e => e.target.style.borderColor = '#484848'}
                 required 
               />
             </div>
@@ -194,7 +194,7 @@ const AuthModal = ({ onLogin, onClose }) => {
             onChange={e => setEmail(e.target.value)} 
             style={{ ...inputStyle, marginBottom: 12 }}
             onFocus={e => e.target.style.borderColor = '#3b82f6'}
-            onBlur={e => e.target.style.borderColor = '#374151'}
+            onBlur={e => e.target.style.borderColor = '#484848'}
             required 
           />
           <input 
@@ -204,7 +204,7 @@ const AuthModal = ({ onLogin, onClose }) => {
             onChange={e => setPassword(e.target.value)} 
             style={{ ...inputStyle, marginBottom: 16 }}
             onFocus={e => e.target.style.borderColor = '#3b82f6'}
-            onBlur={e => e.target.style.borderColor = '#374151'}
+            onBlur={e => e.target.style.borderColor = '#484848'}
             required 
           />
           {error && <p style={{ color: '#f87171', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>{error}</p>}
@@ -244,7 +244,7 @@ const AuthModal = ({ onLogin, onClose }) => {
             width: '100%', 
             padding: 12, 
             background: 'transparent', 
-            border: '1px solid #374151', 
+            border: '1px solid #484848', 
             borderRadius: 8, 
             color: '#6b7280', 
             cursor: 'pointer', 
@@ -277,7 +277,7 @@ const DocumentsList = ({ token, onSelectDoc, onCreateDoc, onClose }) => {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#1f2937', borderRadius: 12, padding: 32, width: '100%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
+      <div style={{ background: '#333333', borderRadius: 12, padding: 32, width: '100%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h2 style={{ color: 'white', fontSize: 24, margin: 0 }}>Mes documents</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
@@ -286,7 +286,7 @@ const DocumentsList = ({ token, onSelectDoc, onCreateDoc, onClose }) => {
         {loading ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Chargement...</p> : docs.length === 0 ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Aucun document</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {docs.map(doc => (
-              <button key={doc.shortId} onClick={() => onSelectDoc(doc.shortId)} style={{ padding: 16, background: '#374151', border: 'none', borderRadius: 8, color: 'white', textAlign: 'left', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={e => e.target.style.background = '#4b5563'} onMouseOut={e => e.target.style.background = '#374151'}>
+              <button key={doc.shortId} onClick={() => onSelectDoc(doc.shortId)} style={{ padding: 16, background: '#484848', border: 'none', borderRadius: 8, color: 'white', textAlign: 'left', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={e => e.target.style.background = '#555555'} onMouseOut={e => e.target.style.background = '#484848'}>
                 <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{doc.title || 'SANS TITRE'}</div>
                 <div style={{ fontSize: 12, color: '#9ca3af' }}>{new Date(doc.updatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
               </button>
@@ -356,7 +356,7 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#1f2937', borderRadius: 12, padding: 32, width: '100%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
+      <div style={{ background: '#333333', borderRadius: 12, padding: 32, width: '100%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h2 style={{ color: 'white', fontSize: 24, margin: 0 }}>Historique</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
@@ -377,7 +377,7 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
               };
               
               return (
-                <div key={entry._id} style={{ padding: 16, background: '#374151', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div key={entry._id} style={{ padding: 16, background: '#484848', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ width: 32, height: 32, borderRadius: '50%', background: entry.userColor || '#666', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: 14, flexShrink: 0 }}>{entry.userName?.charAt(0).toUpperCase() || '?'}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ color: 'white', fontWeight: 'bold', marginBottom: 4, fontSize: 13 }}>
@@ -520,14 +520,14 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 13 }}>{comment.userName}</span>
+              <span style={{ color: darkMode ? 'white' : '#333333', fontWeight: 600, fontSize: 13 }}>{comment.userName}</span>
               <span style={{ color: '#9ca3af', fontSize: 11 }}>
                 {new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
               </span>
               {comment.resolved && <span style={{ fontSize: 9, background: '#10b981', color: 'white', padding: '1px 6px', borderRadius: 10 }}>✓</span>}
             </div>
             <p style={{ 
-              color: darkMode ? '#e5e7eb' : '#374151', 
+              color: darkMode ? '#e5e7eb' : '#484848', 
               margin: 0, 
               fontSize: 13, 
               lineHeight: 1.4,
@@ -553,12 +553,12 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
   // Expanded view when selected
   return (
     <div style={{ 
-      background: darkMode ? '#374151' : 'white', 
+      background: darkMode ? '#484848' : 'white', 
       borderRadius: 8, 
       padding: '12px 14px',
       marginBottom: 6,
       boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-      border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`
+      border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`
     }}>
       {/* Header with avatar, name, date, and action icons */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
@@ -579,7 +579,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 13 }}>{comment.userName}</span>
+            <span style={{ color: darkMode ? 'white' : '#333333', fontWeight: 600, fontSize: 13 }}>{comment.userName}</span>
             <span style={{ color: '#9ca3af', fontSize: 11 }}>
               {new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
               {' '}
@@ -599,7 +599,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                 height: 28, 
                 borderRadius: '50%', 
                 border: 'none', 
-                background: comment.resolved ? '#10b981' : (darkMode ? '#4b5563' : '#f3f4f6'),
+                background: comment.resolved ? '#10b981' : (darkMode ? '#555555' : '#f3f4f6'),
                 color: comment.resolved ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'),
                 cursor: 'pointer',
                 display: 'flex',
@@ -618,7 +618,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
               }}
               onMouseLeave={(e) => {
                 if (!comment.resolved) {
-                  e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6';
+                  e.currentTarget.style.background = darkMode ? '#555555' : '#f3f4f6';
                   e.currentTarget.style.color = darkMode ? '#9ca3af' : '#6b7280';
                 } else {
                   e.currentTarget.style.background = '#10b981';
@@ -635,7 +635,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                 height: 28, 
                 borderRadius: '50%', 
                 border: 'none', 
-                background: darkMode ? '#4b5563' : '#f3f4f6',
+                background: darkMode ? '#555555' : '#f3f4f6',
                 color: darkMode ? '#9ca3af' : '#6b7280',
                 cursor: 'pointer',
                 display: 'flex',
@@ -654,8 +654,8 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                     top: '100%',
                     right: 0,
                     marginTop: 4,
-                    background: darkMode ? '#374151' : 'white',
-                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    background: darkMode ? '#484848' : 'white',
+                    border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                     borderRadius: 8,
                     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                     zIndex: 100,
@@ -681,10 +681,10 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                       border: 'none',
                       textAlign: 'left',
                       cursor: 'pointer',
-                      color: darkMode ? '#e5e7eb' : '#374151',
+                      color: darkMode ? '#e5e7eb' : '#484848',
                       fontSize: 13
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'}
+                    onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#555555' : '#f3f4f6'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -709,7 +709,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                       color: '#ef4444',
                       fontSize: 13
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'}
+                    onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#555555' : '#f3f4f6'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                   >
                     🗑️ Supprimer
@@ -747,8 +747,8 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
               fontSize: 13,
               resize: 'none',
               minHeight: 60,
-              background: darkMode ? '#1f2937' : 'white',
-              color: darkMode ? 'white' : '#374151',
+              background: darkMode ? '#333333' : 'white',
+              color: darkMode ? 'white' : '#484848',
               boxSizing: 'border-box'
             }}
           />
@@ -795,7 +795,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
         </div>
       ) : (
         <p style={{ 
-          color: darkMode ? '#e5e7eb' : '#374151', 
+          color: darkMode ? '#e5e7eb' : '#484848', 
           margin: '0 0 10px 0', 
           fontSize: 13, 
           lineHeight: 1.5
@@ -809,7 +809,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
         <div key={reply.id} style={{ 
           marginTop: 10, 
           paddingTop: 10, 
-          borderTop: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}` 
+          borderTop: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}` 
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             <div style={{ 
@@ -829,12 +829,12 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 12 }}>{reply.userName}</span>
+                <span style={{ color: darkMode ? 'white' : '#333333', fontWeight: 600, fontSize: 12 }}>{reply.userName}</span>
                 <span style={{ color: '#9ca3af', fontSize: 10 }}>
                   {new Date(reply.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                 </span>
               </div>
-              <p style={{ color: darkMode ? '#d1d5db' : '#374151', margin: '2px 0 0 0', fontSize: 12, lineHeight: 1.4 }}>{renderWithMentions(reply.content, darkMode)}</p>
+              <p style={{ color: darkMode ? '#d1d5db' : '#484848', margin: '2px 0 0 0', fontSize: 12, lineHeight: 1.4 }}>{renderWithMentions(reply.content, darkMode)}</p>
             </div>
           </div>
         </div>
@@ -843,7 +843,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
       {/* Reply input - Google Docs style */}
       {canComment && (
         isReplying ? (
-          <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, position: 'relative' }}>
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`, position: 'relative' }}>
             <textarea 
               ref={replyInputRef} 
               value={replyContent} 
@@ -884,10 +884,10 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
               style={{ 
                 width: '100%', 
                 padding: 10, 
-                background: darkMode ? '#1f2937' : '#f9fafb', 
-                border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, 
+                background: darkMode ? '#333333' : '#f9fafb', 
+                border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`, 
                 borderRadius: 6, 
-                color: darkMode ? 'white' : '#374151', 
+                color: darkMode ? 'white' : '#484848', 
                 fontSize: 12, 
                 resize: 'none', 
                 boxSizing: 'border-box' 
@@ -906,8 +906,8 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                   left: 0,
                   right: 0,
                   marginBottom: 4,
-                  background: darkMode ? '#374151' : 'white',
-                  border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                  background: darkMode ? '#484848' : 'white',
+                  border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`,
                   borderRadius: 6,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                   maxHeight: 120,
@@ -925,7 +925,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                       alignItems: 'center',
                       gap: 6,
                       cursor: 'pointer',
-                      background: idx === replyMentionIndex ? (darkMode ? '#4b5563' : '#f3f4f6') : 'transparent'
+                      background: idx === replyMentionIndex ? (darkMode ? '#555555' : '#f3f4f6') : 'transparent'
                     }}
                     onMouseEnter={() => setReplyMentionIndex(idx)}
                   >
@@ -951,10 +951,10 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                         height: 6,
                         borderRadius: '50%',
                         background: user.online ? '#22c55e' : '#6b7280',
-                        border: `1px solid ${darkMode ? '#374151' : 'white'}`
+                        border: `1px solid ${darkMode ? '#484848' : 'white'}`
                       }} />
                     </div>
-                    <span style={{ fontSize: 11, color: darkMode ? 'white' : '#374151' }}>
+                    <span style={{ fontSize: 11, color: darkMode ? 'white' : '#484848' }}>
                       {user.name}
                     </span>
                   </div>
@@ -1001,8 +1001,8 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
             style={{ 
               marginTop: 12, 
               padding: '10px 12px', 
-              background: darkMode ? '#1f2937' : '#f9fafb', 
-              border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, 
+              background: darkMode ? '#333333' : '#f9fafb', 
+              border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`, 
               borderRadius: 20,
               color: '#9ca3af',
               fontSize: 12,
@@ -1372,13 +1372,13 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
         flex: 1,
         display: 'flex', 
         flexDirection: 'column',
-        background: darkMode ? '#1f2937' : '#f8f9fa', 
+        background: darkMode ? '#333333' : '#f8f9fa', 
         overflow: 'hidden'
       }}
       onClick={() => { onSelectComment && onSelectComment(null); onSelectSuggestion && onSelectSuggestion(null); }}
     >
       {/* Header with navigation and filters */}
-      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {/* Comment filter button */}
           <button
@@ -1388,8 +1388,8 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
               alignItems: 'center',
               gap: 4,
               padding: '4px 8px',
-              background: filter === 'comments' || filter === 'all' ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent',
-              border: `1px solid ${filter === 'comments' ? '#1a73e8' : (darkMode ? '#4b5563' : '#d1d5db')}`,
+              background: filter === 'comments' || filter === 'all' ? (darkMode ? '#484848' : '#e5e7eb') : 'transparent',
+              border: `1px solid ${filter === 'comments' ? '#1a73e8' : (darkMode ? '#555555' : '#d1d5db')}`,
               borderRadius: 4,
               color: filter === 'comments' ? '#1a73e8' : (darkMode ? 'white' : '#202124'),
               cursor: 'pointer',
@@ -1413,8 +1413,8 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                 alignItems: 'center',
                 gap: 4,
                 padding: '4px 8px',
-                background: filter === 'suggestions' || filter === 'all' ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent',
-                border: `1px solid ${filter === 'suggestions' ? '#10b981' : (darkMode ? '#4b5563' : '#d1d5db')}`,
+                background: filter === 'suggestions' || filter === 'all' ? (darkMode ? '#484848' : '#e5e7eb') : 'transparent',
+                border: `1px solid ${filter === 'suggestions' ? '#10b981' : (darkMode ? '#555555' : '#d1d5db')}`,
                 borderRadius: 4,
                 color: filter === 'suggestions' ? '#10b981' : (darkMode ? 'white' : '#202124'),
                 cursor: 'pointer',
@@ -1437,9 +1437,9 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             disabled={filteredSortedIndices.length === 0}
             style={{ 
               background: 'none', 
-              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+              border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, 
               borderRadius: 4,
-              color: filteredSortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#374151'), 
+              color: filteredSortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#484848'), 
               cursor: filteredSortedIndices.length === 0 ? 'not-allowed' : 'pointer', 
               fontSize: 14, 
               padding: '4px 8px',
@@ -1454,9 +1454,9 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             disabled={filteredSortedIndices.length === 0}
             style={{ 
               background: 'none', 
-              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+              border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, 
               borderRadius: 4,
-              color: filteredSortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#374151'), 
+              color: filteredSortedIndices.length === 0 ? '#6b7280' : (darkMode ? '#d1d5db' : '#484848'), 
               cursor: filteredSortedIndices.length === 0 ? 'not-allowed' : 'pointer', 
               fontSize: 14, 
               padding: '4px 8px',
@@ -1505,10 +1505,10 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                 top: pendingTop,
                 left: 8,
                 right: 8,
-                background: darkMode ? '#374151' : 'white',
+                background: darkMode ? '#484848' : 'white',
                 borderRadius: 8,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                 zIndex: 10,
                 overflow: 'hidden'
               }}>
@@ -1516,7 +1516,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                 <div style={{ 
                   background: 'rgba(251, 191, 36, 0.2)', 
                   padding: '8px 12px',
-                  borderBottom: `1px solid ${darkMode ? '#4b5563' : '#fbbf24'}`,
+                  borderBottom: `1px solid ${darkMode ? '#555555' : '#fbbf24'}`,
                   fontSize: 12,
                   color: darkMode ? '#fbbf24' : '#92400e',
                   fontStyle: 'italic'
@@ -1567,13 +1567,13 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                     style={{
                       width: '100%',
                       padding: 10,
-                      border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                      border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                       borderRadius: 6,
                       fontSize: 13,
                       resize: 'none',
                       minHeight: 60,
-                      background: darkMode ? '#1f2937' : '#f9fafb',
-                      color: darkMode ? 'white' : '#374151',
+                      background: darkMode ? '#333333' : '#f9fafb',
+                      color: darkMode ? 'white' : '#484848',
                       boxSizing: 'border-box'
                     }}
                   />
@@ -1586,8 +1586,8 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                       left: 12,
                       right: 12,
                       marginBottom: -8,
-                      background: darkMode ? '#374151' : 'white',
-                      border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                      background: darkMode ? '#484848' : 'white',
+                      border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`,
                       borderRadius: 6,
                       boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                       maxHeight: 150,
@@ -1604,7 +1604,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                             alignItems: 'center',
                             gap: 8,
                             cursor: 'pointer',
-                            background: idx === mentionIndex ? (darkMode ? '#4b5563' : '#f3f4f6') : 'transparent'
+                            background: idx === mentionIndex ? (darkMode ? '#555555' : '#f3f4f6') : 'transparent'
                           }}
                           onMouseEnter={() => setMentionIndex(idx)}
                         >
@@ -1631,11 +1631,11 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                               height: 8,
                               borderRadius: '50%',
                               background: user.online ? '#22c55e' : '#6b7280',
-                              border: `2px solid ${darkMode ? '#374151' : 'white'}`
+                              border: `2px solid ${darkMode ? '#484848' : 'white'}`
                             }} />
                           </div>
                           <div style={{ flex: 1 }}>
-                            <span style={{ fontSize: 13, color: darkMode ? 'white' : '#374151' }}>
+                            <span style={{ fontSize: 13, color: darkMode ? 'white' : '#484848' }}>
                               {user.name}
                             </span>
                             {!user.online && (
@@ -1713,7 +1713,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                 top: pendingTop,
                 left: 8,
                 right: 8,
-                background: darkMode ? '#374151' : 'white',
+                background: darkMode ? '#484848' : 'white',
                 borderRadius: 8,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                 border: `2px solid #10b981`,
@@ -1724,7 +1724,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                 <div style={{ 
                   background: 'rgba(16, 185, 129, 0.1)', 
                   padding: '8px 12px',
-                  borderBottom: `1px solid ${darkMode ? '#4b5563' : '#10b981'}`,
+                  borderBottom: `1px solid ${darkMode ? '#555555' : '#10b981'}`,
                   fontSize: 12,
                   color: '#10b981',
                   fontWeight: 600,
@@ -1782,7 +1782,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                         fontSize: 13,
                         resize: 'none',
                         minHeight: 50,
-                        background: darkMode ? '#1f2937' : '#f0fdf4',
+                        background: darkMode ? '#333333' : '#f0fdf4',
                         color: darkMode ? '#6ee7b7' : '#166534',
                         boxSizing: 'border-box',
                         marginTop: 4
@@ -1911,7 +1911,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                             }
                           }}
                           style={{
-                            background: darkMode ? '#1f2937' : '#f0fdf4',
+                            background: darkMode ? '#333333' : '#f0fdf4',
                             borderRadius: 8,
                             padding: isSelected ? 12 : 10,
                             marginBottom: 6,
@@ -1940,12 +1940,12 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ color: darkMode ? 'white' : '#1f2937', fontWeight: 600, fontSize: 12 }}>{s.userName}</span>
+                                <span style={{ color: darkMode ? 'white' : '#333333', fontWeight: 600, fontSize: 12 }}>{s.userName}</span>
                                 <span style={{ color: '#6b7280', fontSize: 11 }}>{timeAgo}</span>
                               </div>
                               {/* Compact view - one line description */}
                               {!isSelected && (
-                                <div style={{ fontSize: 12, color: darkMode ? '#9ca3af' : '#4b5563', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <div style={{ fontSize: 12, color: darkMode ? '#9ca3af' : '#555555', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   <strong>Remplacer :</strong> <span style={{ fontStyle: 'italic' }}>"{s.originalText.substring(0, 20)}{s.originalText.length > 20 ? '...' : ''}"</span> par <span style={{ fontStyle: 'italic' }}>"{s.suggestedText.substring(0, 20)}{s.suggestedText.length > 20 ? '...' : ''}"</span>
                                 </div>
                               )}
@@ -1981,7 +1981,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                                   style={{
                                     padding: '6px 12px',
                                     background: 'transparent',
-                                    border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                                    border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`,
                                     borderRadius: 4,
                                     color: darkMode ? '#9ca3af' : '#6b7280',
                                     fontSize: 12,
@@ -2034,14 +2034,14 @@ const CharactersPanel = ({ characterStats, darkMode, onClose, onNavigate }) => {
       top: 60, 
       bottom: 0, 
       width: 320, 
-      background: darkMode ? '#1f2937' : 'white', 
-      borderLeft: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
+      background: darkMode ? '#333333' : 'white', 
+      borderLeft: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, 
       zIndex: 100, 
       display: 'flex', 
       flexDirection: 'column',
       boxShadow: '-4px 0 20px rgba(0,0,0,0.2)'
     }}>
-      <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Personnages</h3>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>✕</button>
       </div>
@@ -2051,7 +2051,7 @@ const CharactersPanel = ({ characterStats, darkMode, onClose, onNavigate }) => {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
+              <tr style={{ borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}` }}>
                 <th style={{ textAlign: 'left', padding: '8px 4px', color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: 600 }}>Personnage</th>
                 <th style={{ textAlign: 'center', padding: '8px 4px', color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: 600 }}>Répliques</th>
                 <th style={{ textAlign: 'center', padding: '8px 4px', color: darkMode ? '#9ca3af' : '#6b7280', fontWeight: 600 }}>Scènes</th>
@@ -2064,14 +2064,14 @@ const CharactersPanel = ({ characterStats, darkMode, onClose, onNavigate }) => {
                   key={char.name} 
                   onClick={() => onNavigate(char.firstIndex)}
                   style={{ 
-                    borderBottom: `1px solid ${darkMode ? '#374151' : '#f3f4f6'}`,
+                    borderBottom: `1px solid ${darkMode ? '#484848' : '#f3f4f6'}`,
                     cursor: 'pointer',
-                    background: idx % 2 === 0 ? 'transparent' : (darkMode ? '#374151' : '#f9fafb')
+                    background: idx % 2 === 0 ? 'transparent' : (darkMode ? '#484848' : '#f9fafb')
                   }}
                 >
                   <td style={{ padding: '10px 4px', color: darkMode ? 'white' : 'black', fontWeight: 500 }}>{char.name}</td>
-                  <td style={{ padding: '10px 4px', textAlign: 'center', color: darkMode ? '#d1d5db' : '#374151' }}>{char.lines}</td>
-                  <td style={{ padding: '10px 4px', textAlign: 'center', color: darkMode ? '#d1d5db' : '#374151' }}>{char.sceneCount}</td>
+                  <td style={{ padding: '10px 4px', textAlign: 'center', color: darkMode ? '#d1d5db' : '#484848' }}>{char.lines}</td>
+                  <td style={{ padding: '10px 4px', textAlign: 'center', color: darkMode ? '#d1d5db' : '#484848' }}>{char.sceneCount}</td>
                   <td style={{ padding: '10px 4px', textAlign: 'center', color: darkMode ? '#9ca3af' : '#6b7280' }}>Sc. {char.firstAppearance}</td>
                 </tr>
               ))}
@@ -2079,7 +2079,7 @@ const CharactersPanel = ({ characterStats, darkMode, onClose, onNavigate }) => {
           </table>
         )}
       </div>
-      <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 12, color: '#6b7280', textAlign: 'center' }}>
+      <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, fontSize: 12, color: '#6b7280', textAlign: 'center' }}>
         {characterStats.length} personnage{characterStats.length > 1 ? 's' : ''} • {characterStats.reduce((a, c) => a + c.lines, 0)} répliques
       </div>
     </div>
@@ -2099,7 +2099,7 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
         left: position?.x || '50%',
         top: position?.y || '50%',
         transform: position ? 'none' : 'translate(-50%, -50%)',
-        background: darkMode ? '#1f2937' : 'white', 
+        background: darkMode ? '#333333' : 'white', 
         borderRadius: 12, 
         width: 380, 
         boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
@@ -2114,7 +2114,7 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
           justifyContent: 'space-between', 
           alignItems: 'center', 
           padding: '12px 16px',
-          background: darkMode ? '#374151' : '#f3f4f6',
+          background: darkMode ? '#484848' : '#f3f4f6',
           cursor: 'move',
           userSelect: 'none'
         }}
@@ -2134,9 +2134,9 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
             width: '100%', 
             padding: 12, 
             background: color, 
-            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
+            border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, 
             borderRadius: 8, 
-            color: '#374151', 
+            color: '#484848', 
             fontSize: 14, 
             resize: 'none', 
             boxSizing: 'border-box',
@@ -2220,7 +2220,7 @@ const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
-      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 450, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: darkMode ? '#333333' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 450, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 20, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Statistiques</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
@@ -2228,22 +2228,22 @@ const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
         
         {/* Main stats grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
-          <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+          <div style={{ background: darkMode ? '#484848' : '#f3f4f6', padding: 16, borderRadius: 8, textAlign: 'center' }}>
             <div style={{ fontSize: 28, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>{stats.words}</div>
             <div style={{ fontSize: 12, color: '#6b7280' }}>Mots</div>
           </div>
-          <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+          <div style={{ background: darkMode ? '#484848' : '#f3f4f6', padding: 16, borderRadius: 8, textAlign: 'center' }}>
             <div style={{ fontSize: 28, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>{stats.scenes}</div>
             <div style={{ fontSize: 12, color: '#6b7280' }}>Scènes</div>
           </div>
-          <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, textAlign: 'center' }}>
+          <div style={{ background: darkMode ? '#484848' : '#f3f4f6', padding: 16, borderRadius: 8, textAlign: 'center' }}>
             <div style={{ fontSize: 28, fontWeight: 'bold', color: darkMode ? 'white' : 'black' }}>{characters.length}</div>
             <div style={{ fontSize: 12, color: '#6b7280' }}>Personnages</div>
           </div>
         </div>
         
         {/* Time estimates */}
-        <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, marginBottom: 20 }}>
+        <div style={{ background: darkMode ? '#484848' : '#f3f4f6', padding: 16, borderRadius: 8, marginBottom: 20 }}>
           <h4 style={{ margin: '0 0 12px 0', fontSize: 14, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 6 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Estimations</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
@@ -2258,7 +2258,7 @@ const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
         </div>
         
         {/* INT/EXT breakdown */}
-        <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8, marginBottom: 20 }}>
+        <div style={{ background: darkMode ? '#484848' : '#f3f4f6', padding: 16, borderRadius: 8, marginBottom: 20 }}>
           <h4 style={{ margin: '0 0 12px 0', fontSize: 14, color: darkMode ? 'white' : 'black' }}>📍 Lieux</h4>
           <div style={{ display: 'flex', gap: 20 }}>
             <div>
@@ -2271,7 +2271,7 @@ const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
             </div>
           </div>
           {(locations.INT + locations.EXT > 0) && (
-            <div style={{ marginTop: 10, height: 6, background: darkMode ? '#4b5563' : '#d1d5db', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ marginTop: 10, height: 6, background: darkMode ? '#555555' : '#d1d5db', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${(locations.INT / (locations.INT + locations.EXT)) * 100}%`, background: '#3b82f6', borderRadius: 3 }} />
             </div>
           )}
@@ -2279,7 +2279,7 @@ const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
         
         {/* Top characters */}
         {characters.length > 0 && (
-          <div style={{ background: darkMode ? '#374151' : '#f3f4f6', padding: 16, borderRadius: 8 }}>
+          <div style={{ background: darkMode ? '#484848' : '#f3f4f6', padding: 16, borderRadius: 8 }}>
             <h4 style={{ margin: '0 0 12px 0', fontSize: 14, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 6 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Top personnages</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {characters.slice(0, 5).map(([name, count]) => (
@@ -2315,7 +2315,7 @@ const GoToSceneModal = ({ onClose, onGoTo, maxScene, darkMode }) => {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
-      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 300, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: darkMode ? '#333333' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 300, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 16px 0', fontSize: 18, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>Aller à la scène</h3>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -2327,7 +2327,7 @@ const GoToSceneModal = ({ onClose, onGoTo, maxScene, darkMode }) => {
             onChange={e => setSceneNum(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleGo()}
             placeholder={`1 - ${maxScene}`}
-            style={{ flex: 1, padding: '10px 12px', borderRadius: 6, border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, background: darkMode ? '#374151' : 'white', color: darkMode ? 'white' : 'black', fontSize: 16 }}
+            style={{ flex: 1, padding: '10px 12px', borderRadius: 6, border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, background: darkMode ? '#484848' : 'white', color: darkMode ? 'white' : 'black', fontSize: 16 }}
           />
           <button onClick={handleGo} style={{ padding: '10px 16px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>Go</button>
         </div>
@@ -2349,7 +2349,7 @@ const WritingGoalsModal = ({ goal, onUpdate, onClose, currentWords, darkMode }) 
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
-      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: darkMode ? '#333333' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Objectif d'écriture</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20 }}>✕</button>
@@ -2361,7 +2361,7 @@ const WritingGoalsModal = ({ goal, onUpdate, onClose, currentWords, darkMode }) 
             <span style={{ fontSize: 14, color: darkMode ? 'white' : 'black' }}>Aujourd'hui</span>
             <span style={{ fontSize: 14, color: progress >= 100 ? '#22c55e' : '#6b7280' }}>{goal.todayWords} / {goal.daily} mots</span>
           </div>
-          <div style={{ height: 8, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ height: 8, background: darkMode ? '#484848' : '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${progress}%`, background: progress >= 100 ? '#22c55e' : '#3b82f6', borderRadius: 4, transition: 'width 0.3s' }} />
           </div>
           <p style={{ margin: '8px 0 0 0', fontSize: 12, color: progress >= 100 ? '#22c55e' : '#6b7280', textAlign: 'center' }}>
@@ -2378,7 +2378,7 @@ const WritingGoalsModal = ({ goal, onUpdate, onClose, currentWords, darkMode }) 
             step="100"
             value={dailyGoal}
             onChange={e => setDailyGoal(e.target.value)}
-            style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, background: darkMode ? '#374151' : 'white', color: darkMode ? 'white' : 'black', fontSize: 14 }}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, background: darkMode ? '#484848' : 'white', color: darkMode ? 'white' : 'black', fontSize: 14 }}
           />
         </div>
 
@@ -2388,7 +2388,7 @@ const WritingGoalsModal = ({ goal, onUpdate, onClose, currentWords, darkMode }) 
             <button
               key={preset}
               onClick={() => setDailyGoal(preset)}
-              style={{ flex: 1, padding: '8px', background: dailyGoal == preset ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), border: 'none', borderRadius: 6, color: dailyGoal == preset ? 'white' : (darkMode ? 'white' : 'black'), cursor: 'pointer', fontSize: 12 }}
+              style={{ flex: 1, padding: '8px', background: dailyGoal == preset ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), border: 'none', borderRadius: 6, color: dailyGoal == preset ? 'white' : (darkMode ? 'white' : 'black'), cursor: 'pointer', fontSize: 12 }}
             >
               {preset}
             </button>
@@ -2439,7 +2439,7 @@ const ShortcutsPanel = ({ onClose, darkMode }) => {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
-      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 500, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: darkMode ? '#333333' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 500, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 20, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 8h.001"/><path d="M10 8h.001"/><path d="M14 8h.001"/><path d="M18 8h.001"/><path d="M8 12h.001"/><path d="M12 12h.001"/><path d="M16 12h.001"/><path d="M7 16h10"/></svg>Raccourcis clavier</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
@@ -2450,16 +2450,16 @@ const ShortcutsPanel = ({ onClose, darkMode }) => {
             <h4 style={{ margin: '0 0 10px 0', fontSize: 13, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1 }}>{cat.category}</h4>
             <div style={{ display: 'grid', gap: 6 }}>
               {cat.items.map(item => (
-                <div key={item.keys} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: darkMode ? '#374151' : '#f3f4f6', borderRadius: 6 }}>
+                <div key={item.keys} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: darkMode ? '#484848' : '#f3f4f6', borderRadius: 6 }}>
                   <span style={{ fontSize: 13, color: darkMode ? 'white' : 'black' }}>{item.desc}</span>
                   <kbd style={{ 
                     padding: '4px 8px', 
-                    background: darkMode ? '#4b5563' : 'white', 
+                    background: darkMode ? '#555555' : 'white', 
                     border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`, 
                     borderRadius: 4, 
                     fontSize: 12, 
                     fontFamily: 'monospace',
-                    color: darkMode ? '#e5e7eb' : '#374151'
+                    color: darkMode ? '#e5e7eb' : '#484848'
                   }}>{item.keys}</kbd>
                 </div>
               ))}
@@ -2486,7 +2486,7 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
-      <div style={{ background: darkMode ? '#1f2937' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: darkMode ? '#333333' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>Renommer un personnage</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
@@ -2500,8 +2500,8 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
             style={{ 
               width: '100%', 
               padding: '10px 28px 10px 12px', 
-              background: darkMode ? '#374151' : 'white', 
-              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+              background: darkMode ? '#484848' : 'white', 
+              border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, 
               borderRadius: 6, 
               color: darkMode ? 'white' : 'black', 
               fontSize: 14,
@@ -2532,8 +2532,8 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
             style={{ 
               width: '100%', 
               padding: '10px 12px', 
-              background: darkMode ? '#374151' : 'white', 
-              border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, 
+              background: darkMode ? '#484848' : 'white', 
+              border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, 
               borderRadius: 6, 
               color: darkMode ? 'white' : 'black', 
               fontSize: 14,
@@ -2543,7 +2543,7 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
         </div>
         
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '10px 20px', background: 'transparent', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14 }}>
+          <button onClick={onClose} style={{ padding: '10px 20px', background: 'transparent', border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, borderRadius: 6, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14 }}>
             Annuler
           </button>
           <button 
@@ -5591,7 +5591,7 @@ export default function ScreenplayEditor() {
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
 
   return (
-    <div className={focusMode ? 'focus-mode-active' : ''} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: darkMode ? '#111827' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#111827', transition: 'background 0.3s, color 0.3s', overflow: 'hidden' }}>
+    <div className={focusMode ? 'focus-mode-active' : ''} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: darkMode ? '#2b2b2b' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#2b2b2b', transition: 'background 0.3s, color 0.3s', overflow: 'hidden' }}>
       {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
       
       {/* Template Selector Modal */}
@@ -5599,7 +5599,7 @@ export default function ScreenplayEditor() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowTemplateModal(false)}>
           <div 
             style={{ 
-              background: darkMode ? '#1f2937' : 'white', 
+              background: darkMode ? '#333333' : 'white', 
               borderRadius: 16, 
               width: '90%',
               maxWidth: 800,
@@ -5611,7 +5611,7 @@ export default function ScreenplayEditor() {
           >
             <div style={{ 
               padding: '20px 24px', 
-              borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+              borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center'
@@ -5631,8 +5631,8 @@ export default function ScreenplayEditor() {
                     onClick={() => createNewDocument(key)}
                     style={{
                       padding: 20,
-                      background: darkMode ? '#374151' : '#f9fafb',
-                      border: `2px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                      background: darkMode ? '#484848' : '#f9fafb',
+                      border: `2px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                       borderRadius: 12,
                       cursor: 'pointer',
                       textAlign: 'left',
@@ -5644,7 +5644,7 @@ export default function ScreenplayEditor() {
                       e.currentTarget.style.boxShadow = '0 8px 20px rgba(59, 130, 246, 0.2)';
                     }}
                     onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb';
+                      e.currentTarget.style.borderColor = darkMode ? '#555555' : '#e5e7eb';
                       e.currentTarget.style.transform = 'translateY(0)';
                       e.currentTarget.style.boxShadow = 'none';
                     }}
@@ -5661,7 +5661,7 @@ export default function ScreenplayEditor() {
                 ))}
               </div>
               
-              <div style={{ marginTop: 24, padding: 16, background: darkMode ? '#1f2937' : '#f3f4f6', borderRadius: 8, border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}` }}>
+              <div style={{ marginTop: 24, padding: 16, background: darkMode ? '#333333' : '#f3f4f6', borderRadius: 8, border: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}` }}>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: 13, color: darkMode ? 'white' : 'black' }}>💡 Conseil</h4>
                 <p style={{ margin: 0, fontSize: 12, color: '#6b7280', lineHeight: 1.5 }}>
                   Les structures sont des guides, pas des règles absolues. Adaptez-les à votre histoire ! 
@@ -5677,26 +5677,26 @@ export default function ScreenplayEditor() {
       
       {/* Search Panel */}
       {showSearch && (
-        <div style={{ position: 'fixed', top: 70, left: showOutline ? 'calc(50% + 150px)' : '50%', transform: 'translateX(-50%)', background: darkMode ? '#1f2937' : 'white', borderRadius: 8, padding: 16, boxShadow: '0 10px 40px rgba(0,0,0,0.3)', zIndex: 200, display: 'flex', gap: 8, alignItems: 'center', transition: 'left 0.2s ease' }}>
+        <div style={{ position: 'fixed', top: 70, left: showOutline ? 'calc(50% + 150px)' : '50%', transform: 'translateX(-50%)', background: darkMode ? '#333333' : 'white', borderRadius: 8, padding: 16, boxShadow: '0 10px 40px rgba(0,0,0,0.3)', zIndex: 200, display: 'flex', gap: 8, alignItems: 'center', transition: 'left 0.2s ease' }}>
           <input 
             autoFocus
             value={searchQuery} 
             onChange={e => setSearchQuery(e.target.value)} 
             placeholder="Rechercher..." 
-            style={{ padding: '8px 12px', background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 6, color: darkMode ? 'white' : 'black', fontSize: 14, width: 200 }}
+            style={{ padding: '8px 12px', background: darkMode ? '#484848' : '#f3f4f6', border: 'none', borderRadius: 6, color: darkMode ? 'white' : 'black', fontSize: 14, width: 200 }}
             onKeyDown={e => { if (e.key === 'Enter') goToSearchResult(1); }}
           />
           <input 
             value={replaceQuery} 
             onChange={e => setReplaceQuery(e.target.value)} 
             placeholder="Remplacer..." 
-            style={{ padding: '8px 12px', background: darkMode ? '#374151' : '#f3f4f6', border: 'none', borderRadius: 6, color: darkMode ? 'white' : 'black', fontSize: 14, width: 150 }}
+            style={{ padding: '8px 12px', background: darkMode ? '#484848' : '#f3f4f6', border: 'none', borderRadius: 6, color: darkMode ? 'white' : 'black', fontSize: 14, width: 150 }}
           />
           <span style={{ color: darkMode ? '#9ca3af' : '#6b7280', fontSize: 12, minWidth: 50 }}>
             {searchResults.length > 0 ? `${currentSearchIndex + 1}/${searchResults.length}` : '0/0'}
           </span>
-          <button onClick={() => goToSearchResult(-1)} style={{ padding: '6px 10px', background: darkMode ? '#374151' : '#e5e7eb', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>▲</button>
-          <button onClick={() => goToSearchResult(1)} style={{ padding: '6px 10px', background: darkMode ? '#374151' : '#e5e7eb', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>▼</button>
+          <button onClick={() => goToSearchResult(-1)} style={{ padding: '6px 10px', background: darkMode ? '#484848' : '#e5e7eb', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>▲</button>
+          <button onClick={() => goToSearchResult(1)} style={{ padding: '6px 10px', background: darkMode ? '#484848' : '#e5e7eb', border: 'none', borderRadius: 4, color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>▼</button>
           <button onClick={replaceOne} disabled={searchResults.length === 0} style={{ padding: '6px 10px', background: '#2563eb', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 12 }}>Remplacer</button>
           <button onClick={replaceAll} disabled={searchResults.length === 0} style={{ padding: '6px 10px', background: '#7c3aed', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', fontSize: 12 }}>Tout</button>
           <button onClick={() => setShowSearch(false)} style={{ padding: '6px 10px', background: 'transparent', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -5705,7 +5705,7 @@ export default function ScreenplayEditor() {
 
       
       {/* HEADER - 3 zones: Left (menus), Center (doc info + collab), Right (quick toggles) */}
-      <div style={{ position: 'sticky', top: 0, background: darkMode ? '#1f2937' : 'white', borderBottom: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, padding: '6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 200, gap: 16 }}>
+      <div style={{ position: 'sticky', top: 0, background: darkMode ? '#333333' : 'white', borderBottom: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, padding: '6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 200, gap: 16 }}>
         
         {/* LEFT ZONE: Logo + Menus */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -5713,32 +5713,32 @@ export default function ScreenplayEditor() {
           
           {/* DOCUMENT MENU */}
           <div style={{ position: 'relative' }}>
-            <button onClick={(e) => { e.stopPropagation(); setShowDocMenu(!showDocMenu); setShowToolsMenu(false); setShowImportSubmenu(false); setShowExportSubmenu(false); }} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: showDocMenu ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: darkMode ? '#e5e7eb' : '#374151', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+            <button onClick={(e) => { e.stopPropagation(); setShowDocMenu(!showDocMenu); setShowToolsMenu(false); setShowImportSubmenu(false); setShowExportSubmenu(false); }} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: showDocMenu ? (darkMode ? '#484848' : '#e5e7eb') : 'transparent', color: darkMode ? '#e5e7eb' : '#484848', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
               Document ▾
             </button>
             {showDocMenu && (
-              <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'visible', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                <button onClick={() => { if (!token) { setShowAuthModal(true); } else { setShowTemplateModal(true); } setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'visible', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                <button onClick={() => { if (!token) { setShowAuthModal(true); } else { setShowTemplateModal(true); } setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                   Nouveau
                 </button>
                 {token && (
-                  <button onClick={() => { setShowDocsList(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button onClick={() => { setShowDocsList(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                     Mes documents
                   </button>
                 )}
                 {docId && token && (
                   <>
-                    <div style={{ height: 1, background: darkMode ? '#374151' : '#e5e7eb', margin: '4px 0' }} />
-                    <button onClick={() => { createSnapshot(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ height: 1, background: darkMode ? '#484848' : '#e5e7eb', margin: '4px 0' }} />
+                    <button onClick={() => { createSnapshot(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Snapshot</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘S</span>
                     </button>
-                    <button onClick={() => { setShowHistory(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button onClick={() => { setShowHistory(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                       Historique
                     </button>
-                    <div style={{ height: 1, background: darkMode ? '#374151' : '#e5e7eb', margin: '4px 0' }} />
+                    <div style={{ height: 1, background: darkMode ? '#484848' : '#e5e7eb', margin: '4px 0' }} />
                     
                     {/* Import Submenu */}
                     <div 
@@ -5746,11 +5746,11 @@ export default function ScreenplayEditor() {
                       onMouseEnter={() => { setShowImportSubmenu(true); setShowExportSubmenu(false); }}
                       onMouseLeave={() => setShowImportSubmenu(false)}
                     >
-                      <button style={{ width: '100%', padding: '10px 14px', background: showImportSubmenu ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <button style={{ width: '100%', padding: '10px 14px', background: showImportSubmenu ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Importer</span><span style={{ color: '#6b7280' }}>▸</span>
                       </button>
                       {showImportSubmenu && (
-                        <div style={{ position: 'absolute', left: '100%', top: 0, marginLeft: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 501, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                        <div style={{ position: 'absolute', left: '100%', top: 0, marginLeft: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 501, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                           <button onClick={(e) => { e.stopPropagation(); importFDX(); setShowDocMenu(false); }} disabled={importing} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             FDX (Final Draft)
@@ -5765,24 +5765,24 @@ export default function ScreenplayEditor() {
                       onMouseEnter={() => { setShowExportSubmenu(true); setShowImportSubmenu(false); }}
                       onMouseLeave={() => setShowExportSubmenu(false)}
                     >
-                      <button style={{ width: '100%', padding: '10px 14px', background: showExportSubmenu ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '0 0 8px 8px' }}>
+                      <button style={{ width: '100%', padding: '10px 14px', background: showExportSubmenu ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '0 0 8px 8px' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Exporter</span><span style={{ color: '#6b7280' }}>▸</span>
                       </button>
                       {showExportSubmenu && (
-                        <div style={{ position: 'absolute', left: '100%', top: 0, marginLeft: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 501, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                          <button onClick={() => { exportFDX(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ position: 'absolute', left: '100%', top: 0, marginLeft: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 501, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                          <button onClick={() => { exportFDX(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             FDX (Final Draft)
                           </button>
-                          <button onClick={() => { exportFountain(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button onClick={() => { exportFountain(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2c2 4 4 6 4 10a4 4 0 1 1-8 0c0-4 2-6 4-10z"/></svg>
                             Fountain
                           </button>
-                          <button onClick={() => { exportPDF(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button onClick={() => { exportPDF(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                             PDF
                           </button>
-                          <button onClick={() => { exportTXT(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button onClick={() => { exportTXT(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                             TXT
                           </button>
@@ -5801,42 +5801,42 @@ export default function ScreenplayEditor() {
           
           {/* TOOLS MENU */}
           <div style={{ position: 'relative' }}>
-            <button onClick={(e) => { e.stopPropagation(); setShowToolsMenu(!showToolsMenu); setShowDocMenu(false); }} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: showToolsMenu ? (darkMode ? '#374151' : '#e5e7eb') : 'transparent', color: darkMode ? '#e5e7eb' : '#374151', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
+            <button onClick={(e) => { e.stopPropagation(); setShowToolsMenu(!showToolsMenu); setShowDocMenu(false); }} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: showToolsMenu ? (darkMode ? '#484848' : '#e5e7eb') : 'transparent', color: darkMode ? '#e5e7eb' : '#484848', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
               Outils ▾
             </button>
             {showToolsMenu && (
-              <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 4, background: darkMode ? '#1f2937' : 'white', border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Rechercher</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
                 </button>
-                <button onClick={() => { setShowNoteFor(elements[activeIndex]?.id); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <button onClick={() => { setShowNoteFor(elements[activeIndex]?.id); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Ajouter note</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘N</span>
                 </button>
-                <button onClick={() => { setShowRenameChar(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => { setShowRenameChar(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                   Renommer personnage
                 </button>
-                <button onClick={() => { setShowCharactersPanel(!showCharactersPanel); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showCharactersPanel ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => { setShowCharactersPanel(!showCharactersPanel); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showCharactersPanel ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                   Personnages {showCharactersPanel && '✓'}
                 </button>
-                <button onClick={() => { setShowStats(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => { setShowStats(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                   Statistiques
                 </button>
-                <button onClick={() => { setShowGoToScene(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <button onClick={() => { setShowGoToScene(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>Aller à la scène</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘G</span>
                 </button>
-                <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
                   Numéros de scènes {showSceneNumbers && '✓'}
                 </button>
-                <div style={{ height: 1, background: darkMode ? '#374151' : '#e5e7eb', margin: '4px 0' }} />
-                <button onClick={() => { setTypewriterSound(!typewriterSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: typewriterSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ height: 1, background: darkMode ? '#484848' : '#e5e7eb', margin: '4px 0' }} />
+                <button onClick={() => { setTypewriterSound(!typewriterSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: typewriterSound ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="M18 2l4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/></svg>
                   Son machine à écrire {typewriterSound && '✓'}
                 </button>
-                <button onClick={() => { setChatNotificationSound(!chatNotificationSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: chatNotificationSound ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => { setChatNotificationSound(!chatNotificationSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: chatNotificationSound ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                   Notifications chat {chatNotificationSound && '✓'}
                 </button>
@@ -5891,7 +5891,7 @@ export default function ScreenplayEditor() {
               {docId && users.length > 4 && <span style={{ color: '#9ca3af', fontSize: 10, marginLeft: 2 }}>+{users.length - 4}</span>}
             </>
           ) : (
-            <button onClick={() => setShowAuthModal(true)} style={{ padding: '4px 10px', border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
+            <button onClick={() => setShowAuthModal(true)} style={{ padding: '4px 10px', border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
           )}
           
           {docId && (
@@ -5900,7 +5900,7 @@ export default function ScreenplayEditor() {
                 onClick={copyLink} 
                 className="header-btn"
                 data-tooltip="Inviter (copier le lien)"
-                style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#4b5563' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#555555' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"/>
@@ -5911,7 +5911,7 @@ export default function ScreenplayEditor() {
                 onClick={() => setShowChat(!showChat)}
                 className="header-btn"
                 data-tooltip="Chat d'équipe"
-                style={{ marginLeft: 2, width: 24, height: 24, borderRadius: '50%', border: 'none', background: showChat ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), color: showChat ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+                style={{ marginLeft: 2, width: 24, height: 24, borderRadius: '50%', border: 'none', background: showChat ? '#3b82f6' : (darkMode ? '#484848' : '#e5e7eb'), color: showChat ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -5921,14 +5921,14 @@ export default function ScreenplayEditor() {
             </>
           )}
           
-          <div style={{ width: 1, height: 20, background: darkMode ? '#374151' : '#d1d5db', margin: '0 6px' }} />
+          <div style={{ width: 1, height: 20, background: darkMode ? '#484848' : '#d1d5db', margin: '0 6px' }} />
           
           {/* Document actions */}
           <button
             onClick={() => setShowDocsList(true)}
             className="header-btn"
             data-tooltip="Mes documents"
-            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#374151' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#484848' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -5939,7 +5939,7 @@ export default function ScreenplayEditor() {
             onClick={() => setShowExportMenu(!showExportMenu)}
             className="header-btn"
             data-tooltip="Exporter"
-            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showExportMenu ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showExportMenu ? 'white' : '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showExportMenu ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: showExportMenu ? 'white' : '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -5962,24 +5962,24 @@ export default function ScreenplayEditor() {
                 position: 'absolute',
                 top: 50,
                 right: 'auto',
-                background: darkMode ? '#1f2937' : 'white',
+                background: darkMode ? '#333333' : 'white',
                 borderRadius: 8,
                 boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                border: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
                 zIndex: 1000,
                 minWidth: 160,
                 overflow: 'hidden'
               }}>
                 <button
                   onClick={() => { exportFDX(); setShowExportMenu(false); }}
-                  style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
+                  style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   Export FDX
                 </button>
                 <button
                   onClick={() => { exportPDF(); setShowExportMenu(false); }}
-                  style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
+                  style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                   Export PDF
@@ -5995,14 +5995,14 @@ export default function ScreenplayEditor() {
             </>
           )}
           
-          <div style={{ width: 1, height: 20, background: darkMode ? '#374151' : '#d1d5db', margin: '0 6px' }} />
+          <div style={{ width: 1, height: 20, background: darkMode ? '#484848' : '#d1d5db', margin: '0 6px' }} />
           
           {/* Quick toggle buttons */}
           <button
             onClick={() => setShowOutline(!showOutline)}
             className="header-btn"
             data-tooltip="Outline (⌘O)"
-            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showOutline ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showOutline ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showOutline ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: showOutline ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="8" y1="6" x2="21" y2="6"/>
@@ -6018,7 +6018,7 @@ export default function ScreenplayEditor() {
             onClick={() => setShowComments(!showComments)}
             className="header-btn"
             data-tooltip="Commentaires"
-            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showComments ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showComments ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showComments ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: showComments ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
@@ -6030,7 +6030,7 @@ export default function ScreenplayEditor() {
             onClick={() => setShowTimer(!showTimer)}
             className="header-btn"
             data-tooltip="Timer d'écriture"
-            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showTimer ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: showTimer ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showTimer ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: showTimer ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="13" r="8"/>
@@ -6044,7 +6044,7 @@ export default function ScreenplayEditor() {
             onClick={() => setFocusMode(!focusMode)}
             className="header-btn"
             data-tooltip="Mode focus"
-            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: focusMode ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'), color: focusMode ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: focusMode ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: focusMode ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/>
@@ -6057,7 +6057,7 @@ export default function ScreenplayEditor() {
             onClick={() => setDarkMode(!darkMode)}
             className="header-btn"
             data-tooltip={darkMode ? 'Mode clair' : 'Mode sombre'}
-            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#374151' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#484848' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             {darkMode ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6092,7 +6092,7 @@ export default function ScreenplayEditor() {
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: darkMode ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+            background: darkMode ? 'rgba(43, 43, 43, 0.95)' : 'rgba(255, 255, 255, 0.95)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -6119,13 +6119,13 @@ export default function ScreenplayEditor() {
             width: 300,
             minWidth: 200,
             flexShrink: 1,
-            background: darkMode ? '#1f2937' : 'white', 
-            borderRight: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
+            background: darkMode ? '#333333' : 'white', 
+            borderRight: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, 
             display: 'flex', 
             flexDirection: 'column',
             overflow: 'hidden'
           }}>
-            <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: 16, borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="8" y1="6" x2="21" y2="6"/>
@@ -6141,7 +6141,7 @@ export default function ScreenplayEditor() {
             </div>
             
             {/* Filters */}
-            <div style={{ padding: '10px 12px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', gap: 6 }}>
+            <div style={{ padding: '10px 12px', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, display: 'flex', gap: 6 }}>
               {/* Custom Status Dropdown */}
               <div style={{ flex: 1, position: 'relative' }}>
                 <button
@@ -6149,10 +6149,10 @@ export default function ScreenplayEditor() {
                   style={{ 
                     width: '100%',
                     padding: '6px 10px', 
-                    background: outlineFilter.status ? (darkMode ? '#1e3a5f' : '#dbeafe') : (darkMode ? '#374151' : '#f3f4f6'), 
-                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    background: outlineFilter.status ? (darkMode ? '#4a4a4a' : '#dbeafe') : (darkMode ? '#484848' : '#f3f4f6'), 
+                    border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                     borderRadius: 6, 
-                    color: darkMode ? '#e5e7eb' : '#374151', 
+                    color: darkMode ? '#e5e7eb' : '#484848', 
                     fontSize: 11,
                     fontWeight: 500,
                     cursor: 'pointer',
@@ -6180,29 +6180,29 @@ export default function ScreenplayEditor() {
                       left: 0, 
                       right: 0,
                       marginTop: 4,
-                      background: darkMode ? '#1f2937' : 'white', 
-                      border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                      background: darkMode ? '#333333' : 'white', 
+                      border: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
                       borderRadius: 6,
                       boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                       zIndex: 999,
                       overflow: 'hidden'
                     }}>
-                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: '' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: '' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         Tous les statuts
                       </button>
-                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'progress' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'progress' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
                         En cours
                       </button>
-                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'done' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'done' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
                         Validé
                       </button>
-                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'urgent' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'urgent' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
                         Urgent
                       </button>
-                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'none' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'none' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #6b7280', background: 'transparent' }} />
                         Non défini
                       </button>
@@ -6217,10 +6217,10 @@ export default function ScreenplayEditor() {
                   flex: 1,
                   minWidth: 0,
                   padding: '6px 10px', 
-                  background: outlineFilter.assignee ? (darkMode ? '#1e3a5f' : '#dbeafe') : (darkMode ? '#374151' : '#f3f4f6'), 
-                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                  background: outlineFilter.assignee ? (darkMode ? '#4a4a4a' : '#dbeafe') : (darkMode ? '#484848' : '#f3f4f6'), 
+                  border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                   borderRadius: 6, 
-                  color: darkMode ? '#e5e7eb' : '#374151', 
+                  color: darkMode ? '#e5e7eb' : '#484848', 
                   fontSize: 11,
                   fontWeight: 500,
                   cursor: 'pointer',
@@ -6239,7 +6239,7 @@ export default function ScreenplayEditor() {
               </select>
             </div>
             {(outlineFilter.status || outlineFilter.assignee) && (
-              <div style={{ padding: '4px 12px', background: darkMode ? '#374151' : '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ padding: '4px 12px', background: darkMode ? '#484848' : '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 10, color: darkMode ? '#fbbf24' : '#92400e' }}>
                   {filteredOutline.length} scène{filteredOutline.length > 1 ? 's' : ''} filtrée{filteredOutline.length > 1 ? 's' : ''}
                 </span>
@@ -6258,7 +6258,7 @@ export default function ScreenplayEditor() {
                     <div 
                       style={{ 
                         padding: '8px 12px', 
-                        background: darkMode ? '#1e3a5f' : '#dbeafe', 
+                        background: darkMode ? '#4a4a4a' : '#dbeafe', 
                         borderLeft: '3px solid #3b82f6',
                         margin: '4px 8px',
                         borderRadius: 4,
@@ -6309,9 +6309,9 @@ export default function ScreenplayEditor() {
                       padding: '10px 12px', 
                       cursor: 'pointer', 
                       background: activeIndex === scene.index 
-                        ? (darkMode ? '#374151' : '#f3f4f6')
+                        ? (darkMode ? '#484848' : '#f3f4f6')
                         : 'transparent',
-                      borderBottom: `1px solid ${darkMode ? '#374151' : '#f3f4f6'}`,
+                      borderBottom: `1px solid ${darkMode ? '#484848' : '#f3f4f6'}`,
                       display: 'flex',
                       alignItems: 'center',
                       gap: 8
@@ -6434,7 +6434,7 @@ export default function ScreenplayEditor() {
                 ))
               )}
             </div>
-            <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', textAlign: 'center' }}>
+            <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', textAlign: 'center' }}>
               <div>{outline.length} scène{outline.length > 1 ? 's' : ''} • Position: {currentSceneNumber}/{outline.length}</div>
               <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7 }}>💡 Clic droit sur une scène = ajouter un chapitre</div>
             </div>
@@ -6548,8 +6548,8 @@ export default function ScreenplayEditor() {
           width: 320,
           minWidth: 250,
           flexShrink: 1,
-          background: darkMode ? '#1f2937' : 'white', 
-          borderLeft: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`, 
+          background: darkMode ? '#333333' : 'white', 
+          borderLeft: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, 
           display: 'flex', 
           flexDirection: 'column',
           overflow: 'hidden'
@@ -6720,15 +6720,15 @@ export default function ScreenplayEditor() {
               position: 'fixed',
               left: assignmentMenu.x,
               top: assignmentMenu.y,
-              background: darkMode ? '#1f2937' : 'white',
-              border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+              background: darkMode ? '#333333' : 'white',
+              border: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
               borderRadius: 8,
               boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
               minWidth: 180,
               overflow: 'hidden'
             }}
           >
-            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', fontWeight: 500 }}>
+            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', fontWeight: 500 }}>
               Assigner à
             </div>
             {/* Remove assignment option */}
@@ -6746,7 +6746,7 @@ export default function ScreenplayEditor() {
                 padding: '10px 12px',
                 background: 'transparent',
                 border: 'none',
-                borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
                 color: '#6b7280',
                 fontSize: 12,
                 cursor: 'pointer',
@@ -6755,7 +6755,7 @@ export default function ScreenplayEditor() {
                 alignItems: 'center',
                 gap: 8
               }}
-              onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'}
+              onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
               <span style={{ width: 24, height: 24, borderRadius: 4, border: '1px dashed #6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>✕</span>
@@ -6778,9 +6778,9 @@ export default function ScreenplayEditor() {
                 style={{
                   width: '100%',
                   padding: '10px 12px',
-                  background: sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent',
+                  background: sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent',
                   border: 'none',
-                  borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                  borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
                   color: darkMode ? 'white' : 'black',
                   fontSize: 12,
                   cursor: 'pointer',
@@ -6789,8 +6789,8 @@ export default function ScreenplayEditor() {
                   alignItems: 'center',
                   gap: 8
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'}
-                onMouseLeave={e => e.currentTarget.style.background = sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#374151' : '#f3f4f6') : 'transparent'}
+                onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'}
+                onMouseLeave={e => e.currentTarget.style.background = sceneAssignments[assignmentMenu.sceneId]?.userName === user.name ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent'}
               >
                 <span style={{ 
                   width: 24, 
@@ -7030,7 +7030,7 @@ export default function ScreenplayEditor() {
         onClick={(e) => { if (e.target === e.currentTarget) { setShowAIRewrite(false); setAiRewriteSelection(null); setAiRewriteResult(null); setAiRewriteMode(null); } }}
         >
           <div style={{
-            background: darkMode ? '#1f2937' : 'white',
+            background: darkMode ? '#333333' : 'white',
             borderRadius: 16,
             padding: 24,
             width: '100%',
@@ -7041,7 +7041,7 @@ export default function ScreenplayEditor() {
           }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : '#1f2937', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : '#333333', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ color: '#6b7280', fontWeight: 700 }}>IA</span> Réécrire avec l'IA
               </h3>
               <button 
@@ -7052,12 +7052,12 @@ export default function ScreenplayEditor() {
             
             {/* Original text */}
             <div style={{ 
-              background: darkMode ? '#374151' : '#f3f4f6', 
+              background: darkMode ? '#484848' : '#f3f4f6', 
               padding: 12, 
               borderRadius: 8, 
               marginBottom: 16,
               fontSize: 13,
-              color: darkMode ? '#d1d5db' : '#4b5563',
+              color: darkMode ? '#d1d5db' : '#555555',
               fontStyle: 'italic',
               borderLeft: '3px solid #3b82f6'
             }}>
@@ -7074,17 +7074,17 @@ export default function ScreenplayEditor() {
                   onClick={() => { setAiRewriteMode('concis'); handleAIRewrite('concis'); }}
                   style={{
                     padding: '12px 16px',
-                    background: darkMode ? '#374151' : '#f9fafb',
-                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    background: darkMode ? '#484848' : '#f9fafb',
+                    border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                     borderRadius: 8,
-                    color: darkMode ? 'white' : '#1f2937',
+                    color: darkMode ? 'white' : '#333333',
                     cursor: 'pointer',
                     textAlign: 'left',
                     fontSize: 14,
                     transition: 'all 0.15s'
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#3b82f6'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#374151' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#555555' : '#f3f4f6'; e.currentTarget.style.borderColor = '#3b82f6'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#484848' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#555555' : '#e5e7eb'; }}
                 >
                   <span style={{ marginRight: 8, display: 'inline-flex' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span> <strong>Plus concis</strong>
                   <div style={{ fontSize: 11, color: darkMode ? '#9ca3af' : '#6b7280', marginTop: 2 }}>Raccourcir et aller à l'essentiel</div>
@@ -7094,17 +7094,17 @@ export default function ScreenplayEditor() {
                   onClick={() => { setAiRewriteMode('develop'); handleAIRewrite('develop'); }}
                   style={{
                     padding: '12px 16px',
-                    background: darkMode ? '#374151' : '#f9fafb',
-                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    background: darkMode ? '#484848' : '#f9fafb',
+                    border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                     borderRadius: 8,
-                    color: darkMode ? 'white' : '#1f2937',
+                    color: darkMode ? 'white' : '#333333',
                     cursor: 'pointer',
                     textAlign: 'left',
                     fontSize: 14,
                     transition: 'all 0.15s'
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#3b82f6'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#374151' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#555555' : '#f3f4f6'; e.currentTarget.style.borderColor = '#3b82f6'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#484848' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#555555' : '#e5e7eb'; }}
                 >
                   <span style={{ marginRight: 8, display: 'inline-flex' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span> <strong>Développer</strong>
                   <div style={{ fontSize: 11, color: darkMode ? '#9ca3af' : '#6b7280', marginTop: 2 }}>Enrichir avec plus de détails</div>
@@ -7114,17 +7114,17 @@ export default function ScreenplayEditor() {
                   onClick={() => { setAiRewriteMode('reformulate'); handleAIRewrite('reformulate'); }}
                   style={{
                     padding: '12px 16px',
-                    background: darkMode ? '#374151' : '#f9fafb',
-                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    background: darkMode ? '#484848' : '#f9fafb',
+                    border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                     borderRadius: 8,
-                    color: darkMode ? 'white' : '#1f2937',
+                    color: darkMode ? 'white' : '#333333',
                     cursor: 'pointer',
                     textAlign: 'left',
                     fontSize: 14,
                     transition: 'all 0.15s'
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#4b5563' : '#f3f4f6'; e.currentTarget.style.borderColor = '#3b82f6'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#374151' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#4b5563' : '#e5e7eb'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = darkMode ? '#555555' : '#f3f4f6'; e.currentTarget.style.borderColor = '#3b82f6'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#484848' : '#f9fafb'; e.currentTarget.style.borderColor = darkMode ? '#555555' : '#e5e7eb'; }}
                 >
                   <span style={{ marginRight: 8, display: 'inline-flex' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span> <strong>Reformuler</strong>
                   <div style={{ fontSize: 11, color: darkMode ? '#9ca3af' : '#6b7280', marginTop: 2 }}>Dire la même chose autrement</div>
@@ -7133,12 +7133,12 @@ export default function ScreenplayEditor() {
                 {/* Tone selector */}
                 <div style={{
                   padding: '12px 16px',
-                  background: darkMode ? '#374151' : '#f9fafb',
-                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                  background: darkMode ? '#484848' : '#f9fafb',
+                  border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                   borderRadius: 8,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                    <span style={{ marginRight: 8 }}>🎭</span> <strong style={{ color: darkMode ? 'white' : '#1f2937', fontSize: 14 }}>Changer le ton</strong>
+                    <span style={{ marginRight: 8 }}>🎭</span> <strong style={{ color: darkMode ? 'white' : '#333333', fontSize: 14 }}>Changer le ton</strong>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {['dramatique', 'comique', 'poétique', 'tendu', 'mélancolique', 'cynique'].map(tone => (
@@ -7147,16 +7147,16 @@ export default function ScreenplayEditor() {
                         onClick={() => { setAiRewriteTone(tone); setAiRewriteMode('tone'); handleAIRewrite('tone'); }}
                         style={{
                           padding: '6px 12px',
-                          background: darkMode ? '#1f2937' : 'white',
+                          background: darkMode ? '#333333' : 'white',
                           border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`,
                           borderRadius: 16,
-                          color: darkMode ? '#d1d5db' : '#4b5563',
+                          color: darkMode ? '#d1d5db' : '#555555',
                           cursor: 'pointer',
                           fontSize: 12,
                           transition: 'all 0.15s'
                         }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#3b82f6'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#3b82f6'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#1f2937' : 'white'; e.currentTarget.style.color = darkMode ? '#d1d5db' : '#4b5563'; e.currentTarget.style.borderColor = darkMode ? '#6b7280' : '#d1d5db'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = darkMode ? '#333333' : 'white'; e.currentTarget.style.color = darkMode ? '#d1d5db' : '#555555'; e.currentTarget.style.borderColor = darkMode ? '#6b7280' : '#d1d5db'; }}
                       >
                         {tone}
                       </button>
@@ -7167,12 +7167,12 @@ export default function ScreenplayEditor() {
                 {/* Custom prompt */}
                 <div style={{
                   padding: '12px 16px',
-                  background: darkMode ? '#374151' : '#f9fafb',
-                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                  background: darkMode ? '#484848' : '#f9fafb',
+                  border: `1px solid ${darkMode ? '#555555' : '#e5e7eb'}`,
                   borderRadius: 8,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                    <span style={{ marginRight: 8 }}>✍️</span> <strong style={{ color: darkMode ? 'white' : '#1f2937', fontSize: 14 }}>Instruction libre</strong>
+                    <span style={{ marginRight: 8 }}>✍️</span> <strong style={{ color: darkMode ? 'white' : '#333333', fontSize: 14 }}>Instruction libre</strong>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input 
@@ -7183,10 +7183,10 @@ export default function ScreenplayEditor() {
                       style={{
                         flex: 1,
                         padding: '8px 12px',
-                        background: darkMode ? '#1f2937' : 'white',
+                        background: darkMode ? '#333333' : 'white',
                         border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`,
                         borderRadius: 6,
-                        color: darkMode ? 'white' : '#1f2937',
+                        color: darkMode ? 'white' : '#333333',
                         fontSize: 13
                       }}
                       onKeyDown={e => { if (e.key === 'Enter' && aiRewriteCustomPrompt.trim()) { setAiRewriteMode('custom'); handleAIRewrite('custom', aiRewriteCustomPrompt); } }}
@@ -7196,7 +7196,7 @@ export default function ScreenplayEditor() {
                       disabled={!aiRewriteCustomPrompt.trim()}
                       style={{
                         padding: '8px 16px',
-                        background: aiRewriteCustomPrompt.trim() ? '#3b82f6' : (darkMode ? '#4b5563' : '#e5e7eb'),
+                        background: aiRewriteCustomPrompt.trim() ? '#3b82f6' : (darkMode ? '#555555' : '#e5e7eb'),
                         border: 'none',
                         borderRadius: 6,
                         color: aiRewriteCustomPrompt.trim() ? 'white' : (darkMode ? '#9ca3af' : '#9ca3af'),
@@ -7233,7 +7233,7 @@ export default function ScreenplayEditor() {
             {aiRewriteResult && !aiRewriteLoading && (
               <div>
                 <div style={{ 
-                  background: aiRewriteResult.startsWith('❌') ? (darkMode ? '#7f1d1d' : '#fef2f2') : (darkMode ? '#1e3a5f' : '#eff6ff'), 
+                  background: aiRewriteResult.startsWith('❌') ? (darkMode ? '#7f1d1d' : '#fef2f2') : (darkMode ? '#4a4a4a' : '#eff6ff'), 
                   padding: 16, 
                   borderRadius: 8, 
                   marginBottom: 16,
@@ -7243,7 +7243,7 @@ export default function ScreenplayEditor() {
                     {aiRewriteResult.startsWith('❌') ? 'Erreur' : 'Proposition de l\'IA'}
                   </div>
                   <div style={{ 
-                    color: darkMode ? 'white' : '#1f2937', 
+                    color: darkMode ? 'white' : '#333333', 
                     fontSize: 14,
                     lineHeight: 1.6,
                     whiteSpace: 'pre-wrap'
@@ -7275,10 +7275,10 @@ export default function ScreenplayEditor() {
                       onClick={() => handleAIRewrite(aiRewriteMode, aiRewriteMode === 'custom' ? aiRewriteCustomPrompt : '')}
                       style={{
                         padding: '12px 16px',
-                        background: darkMode ? '#374151' : '#f3f4f6',
-                        border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                        background: darkMode ? '#484848' : '#f3f4f6',
+                        border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`,
                         borderRadius: 8,
-                        color: darkMode ? 'white' : '#1f2937',
+                        color: darkMode ? 'white' : '#333333',
                         cursor: 'pointer',
                         fontSize: 14
                       }}
@@ -7290,7 +7290,7 @@ export default function ScreenplayEditor() {
                       style={{
                         padding: '12px 16px',
                         background: 'transparent',
-                        border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                        border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`,
                         borderRadius: 8,
                         color: darkMode ? '#9ca3af' : '#6b7280',
                         cursor: 'pointer',
@@ -7308,10 +7308,10 @@ export default function ScreenplayEditor() {
                     style={{
                       width: '100%',
                       padding: '12px 16px',
-                      background: darkMode ? '#374151' : '#f3f4f6',
-                      border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
+                      background: darkMode ? '#484848' : '#f3f4f6',
+                      border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`,
                       borderRadius: 8,
-                      color: darkMode ? 'white' : '#1f2937',
+                      color: darkMode ? 'white' : '#333333',
                       cursor: 'pointer',
                       fontSize: 14
                     }}
@@ -7345,8 +7345,8 @@ export default function ScreenplayEditor() {
             top: chatPosition.y,
             width: 320,
             height: 450,
-            background: darkMode ? '#1f2937' : 'white',
-            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+            background: darkMode ? '#333333' : 'white',
+            border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
             borderRadius: 12,
             display: 'flex',
             flexDirection: 'column',
@@ -7360,12 +7360,12 @@ export default function ScreenplayEditor() {
           <div 
             style={{ 
               padding: '12px 16px', 
-              borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+              borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
               cursor: 'move',
-              background: darkMode ? '#374151' : '#f3f4f6',
+              background: darkMode ? '#484848' : '#f3f4f6',
               borderRadius: '12px 12px 0 0',
               userSelect: 'none'
             }}
@@ -7394,7 +7394,7 @@ export default function ScreenplayEditor() {
           {/* Online Users */}
           <div style={{ 
             padding: '6px 12px', 
-            borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+            borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
             display: 'flex',
             gap: 6,
             overflowX: 'auto',
@@ -7408,7 +7408,7 @@ export default function ScreenplayEditor() {
                   alignItems: 'center',
                   gap: 4,
                   padding: '3px 6px',
-                  background: darkMode ? '#374151' : '#f3f4f6',
+                  background: darkMode ? '#484848' : '#f3f4f6',
                   borderRadius: 10,
                   fontSize: 10,
                   whiteSpace: 'nowrap'
@@ -7451,7 +7451,7 @@ export default function ScreenplayEditor() {
                     </span>
                   )}
                   <div style={{
-                    background: msg.senderId === myId ? '#3b82f6' : (darkMode ? '#374151' : '#f3f4f6'),
+                    background: msg.senderId === myId ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'),
                     color: msg.senderId === myId ? 'white' : (darkMode ? 'white' : 'black'),
                     padding: '6px 10px',
                     borderRadius: 10,
@@ -7474,7 +7474,7 @@ export default function ScreenplayEditor() {
           {/* Input */}
           <div style={{ 
             padding: 10, 
-            borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+            borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
             display: 'flex',
             gap: 6,
             flexShrink: 0
@@ -7488,8 +7488,8 @@ export default function ScreenplayEditor() {
                 flex: 1,
                 padding: '8px 12px',
                 borderRadius: 16,
-                border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`,
-                background: darkMode ? '#374151' : 'white',
+                border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`,
+                background: darkMode ? '#484848' : 'white',
                 color: darkMode ? 'white' : 'black',
                 fontSize: 12,
                 outline: 'none'
@@ -7503,7 +7503,7 @@ export default function ScreenplayEditor() {
                 height: 34,
                 borderRadius: '50%',
                 border: 'none',
-                background: chatInput.trim() ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'),
+                background: chatInput.trim() ? '#3b82f6' : (darkMode ? '#484848' : '#e5e7eb'),
                 color: chatInput.trim() ? 'white' : '#9ca3af',
                 cursor: chatInput.trim() ? 'pointer' : 'default',
                 fontSize: 14,
@@ -7526,8 +7526,8 @@ export default function ScreenplayEditor() {
             position: 'fixed',
             left: timerPosition.x,
             top: timerPosition.y,
-            background: darkMode ? '#1f2937' : 'white',
-            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+            background: darkMode ? '#333333' : 'white',
+            border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
             borderRadius: 10,
             boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
             zIndex: 200,
@@ -7540,7 +7540,7 @@ export default function ScreenplayEditor() {
                 alignItems: 'center',
                 gap: 10,
                 cursor: 'grab',
-                background: darkMode ? '#374151' : '#f3f4f6'
+                background: darkMode ? '#484848' : '#f3f4f6'
               }}
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -7587,10 +7587,10 @@ export default function ScreenplayEditor() {
                 onClick={resetTimer}
                 style={{ 
                   width: 28, height: 28,
-                  background: darkMode ? '#4b5563' : '#e5e7eb', 
+                  background: darkMode ? '#555555' : '#e5e7eb', 
                   border: 'none', 
                   borderRadius: 6, 
-                  color: darkMode ? 'white' : '#374151', 
+                  color: darkMode ? 'white' : '#484848', 
                   cursor: 'pointer', 
                   fontSize: 12,
                   display: 'flex',
@@ -7642,8 +7642,8 @@ export default function ScreenplayEditor() {
             position: 'fixed',
             left: timerPosition.x,
             top: timerPosition.y,
-            background: darkMode ? '#1f2937' : 'white',
-            border: `1px solid ${darkMode ? '#374151' : '#d1d5db'}`,
+            background: darkMode ? '#333333' : 'white',
+            border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
             borderRadius: 12,
             boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
             zIndex: 200,
@@ -7654,12 +7654,12 @@ export default function ScreenplayEditor() {
             <div 
               style={{ 
                 padding: '10px 16px', 
-                borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 cursor: 'grab',
-                background: darkMode ? '#374151' : '#f3f4f6'
+                background: darkMode ? '#484848' : '#f3f4f6'
               }}
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -7667,7 +7667,7 @@ export default function ScreenplayEditor() {
                 setIsDraggingTimer(true);
               }}
             >
-              <span style={{ fontSize: 12, color: darkMode ? 'white' : '#374151', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Timer</span>
+              <span style={{ fontSize: 12, color: darkMode ? 'white' : '#484848', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Timer</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button 
                   onClick={() => setTimerCompact(true)} 
@@ -7682,13 +7682,13 @@ export default function ScreenplayEditor() {
             
             <div style={{ padding: 16 }}>
               {/* Mode selector */}
-              <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 6, padding: 3 }}>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: darkMode ? '#484848' : '#e5e7eb', borderRadius: 6, padding: 3 }}>
                 <button 
                   onClick={() => { setTimerMode('chrono'); if (!timerRunning) resetTimer(); }}
                   style={{ 
                     flex: 1, 
                     padding: '6px 10px', 
-                    background: timerMode === 'chrono' ? (darkMode ? '#1f2937' : 'white') : 'transparent', 
+                    background: timerMode === 'chrono' ? (darkMode ? '#333333' : 'white') : 'transparent', 
                     border: 'none', 
                     borderRadius: 4, 
                     color: timerMode === 'chrono' ? (darkMode ? 'white' : 'black') : '#6b7280', 
@@ -7709,7 +7709,7 @@ export default function ScreenplayEditor() {
                   style={{ 
                     flex: 1, 
                     padding: '6px 10px', 
-                    background: timerMode === 'sprint' ? (darkMode ? '#1f2937' : 'white') : 'transparent', 
+                    background: timerMode === 'sprint' ? (darkMode ? '#333333' : 'white') : 'transparent', 
                     border: 'none', 
                     borderRadius: 4, 
                     color: timerMode === 'sprint' ? (darkMode ? 'white' : 'black') : '#6b7280', 
@@ -7741,10 +7741,10 @@ export default function ScreenplayEditor() {
                       onClick={() => setSprintMinutes(mins)}
                       style={{ 
                         padding: '4px 8px', 
-                        background: sprintDuration === mins * 60 ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), 
+                        background: sprintDuration === mins * 60 ? '#3b82f6' : (darkMode ? '#484848' : '#e5e7eb'), 
                         border: 'none', 
                         borderRadius: 4, 
-                        color: sprintDuration === mins * 60 ? 'white' : (darkMode ? '#d1d5db' : '#374151'), 
+                        color: sprintDuration === mins * 60 ? 'white' : (darkMode ? '#d1d5db' : '#484848'), 
                         cursor: 'pointer', 
                         fontSize: 10 
                       }}
@@ -7782,7 +7782,7 @@ export default function ScreenplayEditor() {
                   onClick={resetTimer}
                   style={{ 
                     padding: '8px 12px', 
-                    background: darkMode ? '#374151' : '#e5e7eb', 
+                    background: darkMode ? '#484848' : '#e5e7eb', 
                     border: 'none', 
                     borderRadius: 6, 
                     color: darkMode ? 'white' : 'black', 
@@ -7795,7 +7795,7 @@ export default function ScreenplayEditor() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
                 </button>
               </div>
-              <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: 12, fontSize: 12, color: '#6b7280' }}>
+              <div style={{ borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, paddingTop: 12, fontSize: 12, color: '#6b7280' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span>Mots cette session</span>
                   <span style={{ color: sessionWordCount > 0 ? '#22c55e' : (darkMode ? 'white' : 'black'), fontWeight: 500 }}>+{sessionWordCount}</span>
@@ -7807,14 +7807,14 @@ export default function ScreenplayEditor() {
               </div>
               
               {/* Daily Goal Section */}
-              <div style={{ borderTop: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, paddingTop: 12, marginTop: 12 }}>
+              <div style={{ borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, paddingTop: 12, marginTop: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <span style={{ fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Objectif du jour</span>
-                  <span style={{ fontSize: 11, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : (darkMode ? 'white' : '#374151') }}>
+                  <span style={{ fontSize: 11, color: writingGoal.todayWords >= writingGoal.daily ? '#22c55e' : (darkMode ? 'white' : '#484848') }}>
                     {writingGoal.todayWords} / {writingGoal.daily}
                   </span>
                 </div>
-                <div style={{ height: 6, background: darkMode ? '#374151' : '#e5e7eb', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                <div style={{ height: 6, background: darkMode ? '#484848' : '#e5e7eb', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
                   <div style={{ 
                     height: '100%', 
                     width: `${Math.min(100, Math.round((writingGoal.todayWords / writingGoal.daily) * 100))}%`, 
@@ -7831,7 +7831,7 @@ export default function ScreenplayEditor() {
                       style={{ 
                         flex: 1, 
                         padding: '4px', 
-                        background: writingGoal.daily === preset ? '#3b82f6' : (darkMode ? '#374151' : '#e5e7eb'), 
+                        background: writingGoal.daily === preset ? '#3b82f6' : (darkMode ? '#484848' : '#e5e7eb'), 
                         border: 'none', 
                         borderRadius: 4, 
                         color: writingGoal.daily === preset ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'), 
@@ -7871,7 +7871,7 @@ export default function ScreenplayEditor() {
           left: 50%;
           transform: translateX(-50%);
           padding: 6px 10px;
-          background: ${darkMode ? '#1f2937' : '#374151'};
+          background: ${darkMode ? '#333333' : '#484848'};
           color: white;
           font-size: 11px;
           font-weight: 500;
@@ -7890,7 +7890,7 @@ export default function ScreenplayEditor() {
           left: 50%;
           transform: translateX(-50%);
           border: 5px solid transparent;
-          border-bottom-color: ${darkMode ? '#1f2937' : '#374151'};
+          border-bottom-color: ${darkMode ? '#333333' : '#484848'};
           opacity: 0;
           pointer-events: none;
           transition: opacity 0.15s ease;
