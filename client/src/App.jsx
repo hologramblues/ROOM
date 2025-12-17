@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V180 - Fixed lock icon overlap, improved assignment menu
+// V181 - Fixed assignment menu: merge collaborators + online users
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -6233,8 +6233,17 @@ export default function ScreenplayEditor() {
               >
                 <option value="">Assigné</option>
                 <option value="unassigned">Non assigné</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.name}>{u.name}</option>
+                {(() => {
+                  // Merge collaborators and online users for filter dropdown
+                  const allUsers = [...collaborators];
+                  users.forEach(onlineUser => {
+                    if (!allUsers.find(c => c.name === onlineUser.name)) {
+                      allUsers.push({ name: onlineUser.name, color: onlineUser.color });
+                    }
+                  });
+                  return allUsers;
+                })().map(u => (
+                  <option key={u.name} value={u.name}>{u.name}</option>
                 ))}
               </select>
             </div>
@@ -6761,8 +6770,17 @@ export default function ScreenplayEditor() {
               <span style={{ width: 24, height: 24, borderRadius: 4, border: '1px dashed #6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>✕</span>
               <span>Aucun</span>
             </button>
-            {/* List all collaborators (fallback to online users if empty) */}
-            {(collaborators.length > 0 ? collaborators : users).map(user => (
+            {/* List all users: collaborators + online users merged */}
+            {(() => {
+              // Merge collaborators and online users, avoiding duplicates
+              const allUsers = [...collaborators];
+              users.forEach(onlineUser => {
+                if (!allUsers.find(c => c.name === onlineUser.name)) {
+                  allUsers.push({ name: onlineUser.name, color: onlineUser.color });
+                }
+              });
+              return allUsers;
+            })().map(user => (
               <button
                 key={user.name}
                 onClick={() => {
@@ -6806,7 +6824,7 @@ export default function ScreenplayEditor() {
                 }}>
                   {getInitials(user.name)}
                 </span>
-                <span>{user.name}{user.isOwner ? ' 👑' : ''}</span>
+                <span>{user.name}{user.role === 'owner' ? ' 👑' : ''}</span>
                 {users.find(u => u.name === user.name) && (
                   <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} title="En ligne" />
                 )}
