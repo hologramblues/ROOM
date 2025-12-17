@@ -410,6 +410,17 @@ io.on('connection', (socket) => {
       let role = 'viewer';
       if (socket.user) { if (doc.ownerId.equals(socket.user._id)) role = 'editor'; else { const c = doc.collaborators.find(c => c.userId.equals(socket.user._id)); if (c) role = c.role; } }
       if (doc.publicAccess.enabled && doc.publicAccess.role === 'editor') role = 'editor';
+      
+      // Auto-add as collaborator if authenticated user and not already owner/collaborator
+      if (socket.user && !doc.ownerId.equals(socket.user._id)) {
+        const isAlreadyCollaborator = doc.collaborators.some(c => c.userId.equals(socket.user._id));
+        if (!isAlreadyCollaborator) {
+          doc.collaborators.push({ userId: socket.user._id, role: role });
+          await doc.save();
+          console.log('Auto-added collaborator:', socket.user.name, 'to document:', docId);
+        }
+      }
+      
       currentDocId = docId; socket.join(docId);
       if (!activeRooms.has(docId)) activeRooms.set(docId, new Map());
       const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: getUserColor(socket.user?._id?.toString() || socket.user?.name || socket.id), role, cursor: null };

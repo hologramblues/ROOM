@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V183 - Synced user colors everywhere, title tooltip
+// V184 - Title tooltip CSS, auto-add collaborator on join
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -5851,23 +5851,24 @@ export default function ScreenplayEditor() {
         
         {/* CENTER ZONE: Title only */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center', minWidth: 0 }}>
-          <input 
-            value={title} 
-            onChange={e => docId ? emitTitle(e.target.value) : setTitle(e.target.value)} 
-            placeholder="Nouveau document"
-            title={title}
-            style={{ 
-              background: 'transparent', 
-              border: 'none', 
-              color: darkMode ? 'white' : 'black', 
-              fontSize: 14, 
-              fontWeight: 600, 
-              outline: 'none', 
-              maxWidth: 250,
-              textOverflow: 'ellipsis',
-              textAlign: 'center'
-            }} 
-          />
+          <div className="header-btn" data-tooltip={title} style={{ position: 'relative' }}>
+            <input 
+              value={title} 
+              onChange={e => docId ? emitTitle(e.target.value) : setTitle(e.target.value)} 
+              placeholder="Nouveau document"
+              style={{ 
+                background: 'transparent', 
+                border: 'none', 
+                color: darkMode ? 'white' : 'black', 
+                fontSize: 14, 
+                fontWeight: 600, 
+                outline: 'none', 
+                maxWidth: 250,
+                textOverflow: 'ellipsis',
+                textAlign: 'center'
+              }} 
+            />
+          </div>
           {docId && lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
           {docId && !canEdit && <span style={{ fontSize: 10, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
           {loading && <span style={{ fontSize: 11, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ display: 'inline-block', width: 8, height: 8, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Chargement...</span>}
@@ -6469,9 +6470,12 @@ export default function ScreenplayEditor() {
                           height: 18, 
                           borderRadius: 4, 
                           border: sceneAssignments[scene.id] ? 'none' : '1px dashed #6b7280', 
-                          background: sceneAssignments[scene.id] 
-                            ? (users.find(u => u.name === sceneAssignments[scene.id].userName)?.color || sceneAssignments[scene.id].userColor)
-                            : 'transparent', 
+                          background: (() => {
+                            if (!sceneAssignments[scene.id]) return 'transparent';
+                            const assignedName = sceneAssignments[scene.id].userName?.toLowerCase().trim();
+                            const onlineUser = users.find(u => u.name?.toLowerCase().trim() === assignedName);
+                            return onlineUser?.color || sceneAssignments[scene.id].userColor || '#6b7280';
+                          })(), 
                           cursor: 'pointer', 
                           padding: '0 4px',
                           fontSize: 9,
