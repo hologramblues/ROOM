@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V173 - Full SVG icons + Styled tooltips + Homogeneous outline dropdowns
+// V174 - Custom status dropdown with colored dots
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3334,6 +3334,7 @@ export default function ScreenplayEditor() {
   const [sessionStartWords, setSessionStartWords] = useState(0);
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
   const [outlineFilter, setOutlineFilter] = useState({ status: '', assignee: '' });
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false); // Custom dropdown for status filter
   const [outlineChapters, setOutlineChapters] = useState({}); // { sceneId: 'Acte 1' } - chapter before this scene
   const [editingChapter, setEditingChapter] = useState(null); // sceneId being edited
   const [lastSaved, setLastSaved] = useState(null);
@@ -6042,33 +6043,74 @@ export default function ScreenplayEditor() {
             
             {/* Filters */}
             <div style={{ padding: '10px 12px', borderBottom: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, display: 'flex', gap: 6 }}>
-              <select 
-                value={outlineFilter.status} 
-                onChange={e => setOutlineFilter(f => ({ ...f, status: e.target.value }))}
-                style={{ 
-                  flex: 1,
-                  minWidth: 0,
-                  padding: '6px 10px', 
-                  background: outlineFilter.status ? (darkMode ? '#1e3a5f' : '#dbeafe') : (darkMode ? '#374151' : '#f3f4f6'), 
-                  border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
-                  borderRadius: 6, 
-                  color: darkMode ? '#e5e7eb' : '#374151', 
-                  fontSize: 11,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 8l3-3.5H3z'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 6px center',
-                  paddingRight: 22
-                }}
-              >
-                <option value="">Statut</option>
-                <option value="progress">● En cours</option>
-                <option value="done">● Validé</option>
-                <option value="urgent">● Urgent</option>
-                <option value="none">○ Non défini</option>
-              </select>
+              {/* Custom Status Dropdown */}
+              <div style={{ flex: 1, position: 'relative' }}>
+                <button
+                  onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                  style={{ 
+                    width: '100%',
+                    padding: '6px 10px', 
+                    background: outlineFilter.status ? (darkMode ? '#1e3a5f' : '#dbeafe') : (darkMode ? '#374151' : '#f3f4f6'), 
+                    border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                    borderRadius: 6, 
+                    color: darkMode ? '#e5e7eb' : '#374151', 
+                    fontSize: 11,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 6
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {outlineFilter.status === 'progress' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />}
+                    {outlineFilter.status === 'done' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />}
+                    {outlineFilter.status === 'urgent' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />}
+                    {outlineFilter.status === 'none' && <span style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #6b7280', background: 'transparent' }} />}
+                    {outlineFilter.status === 'progress' ? 'En cours' : outlineFilter.status === 'done' ? 'Validé' : outlineFilter.status === 'urgent' ? 'Urgent' : outlineFilter.status === 'none' ? 'Non défini' : 'Statut'}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="#6b7280"><path d="M3 4.5L6 8l3-3.5H3z"/></svg>
+                </button>
+                {showStatusDropdown && (
+                  <>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setShowStatusDropdown(false)} />
+                    <div style={{ 
+                      position: 'absolute', 
+                      top: '100%', 
+                      left: 0, 
+                      right: 0,
+                      marginTop: 4,
+                      background: darkMode ? '#1f2937' : 'white', 
+                      border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`,
+                      borderRadius: 6,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      zIndex: 999,
+                      overflow: 'hidden'
+                    }}>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: '' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        Tous les statuts
+                      </button>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'progress' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                        En cours
+                      </button>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'done' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
+                        Validé
+                      </button>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'urgent' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
+                        Urgent
+                      </button>
+                      <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'none' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#374151', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#374151' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #6b7280', background: 'transparent' }} />
+                        Non défini
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <select 
                 value={outlineFilter.assignee} 
                 onChange={e => setOutlineFilter(f => ({ ...f, assignee: e.target.value }))}
