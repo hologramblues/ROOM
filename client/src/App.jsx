@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V184 - Title tooltip CSS, auto-add collaborator on join
+// V185 - Landing page when logged out, auto-collaborator on join
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3855,7 +3855,7 @@ export default function ScreenplayEditor() {
   // Load document via REST API
   useEffect(() => {
     const loadDocument = async () => {
-      if (!docId) {
+      if (!docId || docId === 'local') {
         setElements([{ id: generateId(), type: 'scene', content: '' }]);
         setTitle('SANS TITRE');
         return;
@@ -3888,12 +3888,14 @@ export default function ScreenplayEditor() {
     loadDocument();
   }, [docId, token]);
 
-  // Socket connection
+  // Socket connection (skip for local mode)
   useEffect(() => {
+    if (docId === 'local') return; // Don't connect socket in local mode
+    
     const socket = io(SERVER_URL, { transports: ['websocket', 'polling'], auth: { token }, reconnectionAttempts: 10, timeout: 30000 });
     socketRef.current = socket;
     
-    socket.on('connect', () => { setConnected(true); setMyId(socket.id); if (docId) socket.emit('join-document', { docId }); });
+    socket.on('connect', () => { setConnected(true); setMyId(socket.id); if (docId && docId !== 'local') socket.emit('join-document', { docId }); });
     socket.on('disconnect', () => setConnected(false));
     socket.on('document-state', data => { 
       setUsers(data.users || []); 
@@ -3953,14 +3955,14 @@ export default function ScreenplayEditor() {
     localStorage.removeItem('screenplay-user'); 
     setCurrentUser(null); 
     setToken(null); 
-    // Return to blank document state
+    // Disconnect socket
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    // Return to landing page
     window.location.hash = '';
-    setElements([{ id: Date.now().toString(), type: 'scene', content: '' }]);
-    setTitle('Sans titre');
-    setComments({});
-    setNotes({});
-    setChatMessages([]);
-    loadedDocRef.current = null;
+    window.location.reload();
   };
 
   // Send chat message
@@ -5590,6 +5592,105 @@ export default function ScreenplayEditor() {
   };
 
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
+
+  // Show landing page if not logged in and no document (or empty hash)
+  if (!currentUser && (!docId || docId === '')) {
+    return (
+      <div style={{ 
+        height: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        background: '#1a1a1a',
+        color: 'white'
+      }}>
+        <div style={{ 
+          textAlign: 'center',
+          maxWidth: 400,
+          padding: 40
+        }}>
+          {/* Logo */}
+          <div style={{ marginBottom: 40 }}>
+            <Logo darkMode={true} />
+          </div>
+          
+          <h1 style={{ 
+            fontSize: 28, 
+            fontWeight: 600, 
+            marginBottom: 12,
+            color: 'white'
+          }}>
+            Bienvenue
+          </h1>
+          <p style={{ 
+            fontSize: 15, 
+            color: '#9ca3af', 
+            marginBottom: 40,
+            lineHeight: 1.6
+          }}>
+            L'éditeur de scénario collaboratif en temps réel
+          </p>
+          
+          {/* Connexion button */}
+          <button 
+            onClick={() => setShowAuthModal(true)}
+            style={{ 
+              width: '100%',
+              padding: '16px 24px', 
+              background: '#3b82f6', 
+              border: 'none', 
+              borderRadius: 10, 
+              color: 'white', 
+              fontSize: 16, 
+              fontWeight: 600, 
+              cursor: 'pointer',
+              marginBottom: 12,
+              transition: 'background 0.2s'
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#2563eb'}
+            onMouseLeave={e => e.currentTarget.style.background = '#3b82f6'}
+          >
+            Se connecter / S'inscrire
+          </button>
+          
+          {/* Continue without account */}
+          <button 
+            onClick={() => {
+              // Set a flag to show editor without account
+              setTitle('Sans titre');
+              window.location.hash = 'local';
+            }}
+            style={{ 
+              width: '100%',
+              padding: '14px 24px', 
+              background: 'transparent', 
+              border: '1px solid #484848', 
+              borderRadius: 10, 
+              color: '#9ca3af', 
+              fontSize: 14, 
+              cursor: 'pointer',
+              transition: 'border-color 0.2s, color 0.2s'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#6b7280'; e.currentTarget.style.color = 'white'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#484848'; e.currentTarget.style.color = '#9ca3af'; }}
+          >
+            Continuer sans compte
+          </button>
+          
+          <p style={{ 
+            marginTop: 32, 
+            fontSize: 12, 
+            color: '#6b7280' 
+          }}>
+            Sans compte, vos documents ne seront pas sauvegardés
+          </p>
+        </div>
+        
+        {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
+      </div>
+    );
+  }
 
   return (
     <div className={focusMode ? 'focus-mode-active' : ''} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: darkMode ? '#2b2b2b' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#2b2b2b', transition: 'background 0.3s, color 0.3s', overflow: 'hidden' }}>
