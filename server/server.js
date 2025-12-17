@@ -47,7 +47,8 @@ function checkDocumentAccess(doc, user, requiredRole) {
 }
 
 function getRandomColor() {
-  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
+  // Couleurs très distinctes pour les utilisateurs
+  const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
