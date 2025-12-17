@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V185 - Landing page when logged out, auto-collaborator on join
+// V186 - Simplified landing page
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -5610,23 +5610,15 @@ export default function ScreenplayEditor() {
           maxWidth: 400,
           padding: 40
         }}>
-          {/* Logo */}
-          <div style={{ marginBottom: 40 }}>
+          {/* Logo centered */}
+          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}>
             <Logo darkMode={true} />
           </div>
           
-          <h1 style={{ 
-            fontSize: 28, 
-            fontWeight: 600, 
-            marginBottom: 12,
-            color: 'white'
-          }}>
-            Bienvenue
-          </h1>
           <p style={{ 
-            fontSize: 15, 
-            color: '#9ca3af', 
-            marginBottom: 40,
+            fontSize: 14, 
+            color: '#6b7280', 
+            marginBottom: 48,
             lineHeight: 1.6
           }}>
             L'éditeur de scénario collaboratif en temps réel
