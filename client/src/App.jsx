@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V182 - Custom assignee dropdown, outline tooltips
+// V183 - Synced user colors everywhere, title tooltip
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -5855,6 +5855,7 @@ export default function ScreenplayEditor() {
             value={title} 
             onChange={e => docId ? emitTitle(e.target.value) : setTitle(e.target.value)} 
             placeholder="Nouveau document"
+            title={title}
             style={{ 
               background: 'transparent', 
               border: 'none', 
@@ -6262,22 +6263,29 @@ export default function ScreenplayEditor() {
                         Non assigné
                       </button>
                       {(() => {
-                        const allUsers = [...collaborators];
+                        // Merge and sync colors with online users
+                        const allUsers = collaborators.map(collab => {
+                          const onlineUser = users.find(u => u.name === collab.name);
+                          return { ...collab, color: onlineUser?.color || collab.color };
+                        });
                         users.forEach(onlineUser => {
                           if (!allUsers.find(c => c.name === onlineUser.name)) {
                             allUsers.push({ name: onlineUser.name, color: onlineUser.color });
                           }
                         });
                         return allUsers;
-                      })().map(u => (
+                      })().map(u => {
+                        const onlineUser = users.find(online => online.name === u.name);
+                        const displayColor = onlineUser?.color || u.color;
+                        return (
                         <button key={u.name} onClick={() => { setOutlineFilter(f => ({ ...f, assignee: u.name })); setShowAssigneeDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                          <span style={{ width: 16, height: 16, borderRadius: 3, background: u.color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 'bold' }}>{getInitials(u.name)}</span>
+                          <span style={{ width: 16, height: 16, borderRadius: 3, background: displayColor, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 'bold' }}>{getInitials(u.name)}</span>
                           {u.name}
-                          {users.find(online => online.name === u.name) && (
+                          {onlineUser && (
                             <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
                           )}
                         </button>
-                      ))}
+                      );})}
                     </div>
                   </>
                 )}
@@ -6461,7 +6469,9 @@ export default function ScreenplayEditor() {
                           height: 18, 
                           borderRadius: 4, 
                           border: sceneAssignments[scene.id] ? 'none' : '1px dashed #6b7280', 
-                          background: sceneAssignments[scene.id]?.userColor || 'transparent', 
+                          background: sceneAssignments[scene.id] 
+                            ? (users.find(u => u.name === sceneAssignments[scene.id].userName)?.color || sceneAssignments[scene.id].userColor)
+                            : 'transparent', 
                           cursor: 'pointer', 
                           padding: '0 4px',
                           fontSize: 9,
@@ -6812,14 +6822,25 @@ export default function ScreenplayEditor() {
             {/* List all users: collaborators + online users merged */}
             {(() => {
               // Merge collaborators and online users, avoiding duplicates
-              const allUsers = [...collaborators];
+              // Priority: use online user's color if they're connected (same as header avatars)
+              const allUsers = collaborators.map(collab => {
+                const onlineUser = users.find(u => u.name === collab.name);
+                return {
+                  ...collab,
+                  color: onlineUser?.color || collab.color // Use online color if available
+                };
+              });
               users.forEach(onlineUser => {
                 if (!allUsers.find(c => c.name === onlineUser.name)) {
                   allUsers.push({ name: onlineUser.name, color: onlineUser.color });
                 }
               });
               return allUsers;
-            })().map(user => (
+            })().map(user => {
+              // Get the current color (prioritize online user's color)
+              const onlineUser = users.find(u => u.name === user.name);
+              const displayColor = onlineUser?.color || user.color;
+              return (
               <button
                 key={user.name}
                 onClick={() => {
@@ -6827,7 +6848,7 @@ export default function ScreenplayEditor() {
                     ...prev,
                     [assignmentMenu.sceneId]: {
                       userName: user.name,
-                      userColor: user.color
+                      userColor: displayColor
                     }
                   }));
                   setAssignmentMenu(null);
@@ -6853,7 +6874,7 @@ export default function ScreenplayEditor() {
                   width: 24, 
                   height: 24, 
                   borderRadius: 4, 
-                  background: user.color, 
+                  background: displayColor, 
                   color: 'white', 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -6864,11 +6885,11 @@ export default function ScreenplayEditor() {
                   {getInitials(user.name)}
                 </span>
                 <span>{user.name}{user.role === 'owner' ? ' 👑' : ''}</span>
-                {users.find(u => u.name === user.name) && (
+                {onlineUser && (
                   <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} title="En ligne" />
                 )}
               </button>
-            ))}
+            );})}
           </div>
         </div>
       )}
