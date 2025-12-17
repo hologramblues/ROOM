@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V179 - Dark script page (Final Draft style)
+// V180 - Fixed lock icon overlap, improved assignment menu
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3018,9 +3018,9 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       {/* Remote cursors */}
       {usersOnLine.map(u => <RemoteCursor key={u.id} user={u} />)}
       
-      {/* Lock icon for locked scenes */}
-      {element.type === 'scene' && isLocked && (
-        <span style={{ position: 'absolute', left: showSceneNumbers ? -65 : -30, top: 4, fontSize: 14, color: '#f59e0b', display: 'flex', alignItems: 'center' }} title="Scène verrouillée"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+      {/* Lock icon for locked scenes - only show if not active (active shows label with lock) */}
+      {element.type === 'scene' && isLocked && !isActive && (
+        <span style={{ position: 'absolute', left: showSceneNumbers ? -55 : -25, top: 4, fontSize: 14, color: '#f59e0b', display: 'flex', alignItems: 'center' }} title="Scène verrouillée"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
       )}
       
       {/* Scene number left */}
