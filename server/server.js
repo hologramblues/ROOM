@@ -52,6 +52,17 @@ function getRandomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
+// Couleur déterministe basée sur le nom/id de l'utilisateur
+function getUserColor(identifier) {
+  const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#14b8a6', '#f97316', '#6366f1', '#a855f7'];
+  let hash = 0;
+  const str = String(identifier);
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
 app.post('/api/documents', authMiddleware, async (req, res) => {
   try {
     const shortId = uuidv4().slice(0, 8);
@@ -401,7 +412,7 @@ io.on('connection', (socket) => {
       if (doc.publicAccess.enabled && doc.publicAccess.role === 'editor') role = 'editor';
       currentDocId = docId; socket.join(docId);
       if (!activeRooms.has(docId)) activeRooms.set(docId, new Map());
-      const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: socket.user?.color || getRandomColor(), role, cursor: null };
+      const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: getUserColor(socket.user?._id?.toString() || socket.user?.name || socket.id), role, cursor: null };
       activeRooms.get(docId).set(socket.id, userInfo);
       
       // Get collaborators with their user info
@@ -411,13 +422,13 @@ io.on('connection', (socket) => {
         const collabUsers = await User.find({ _id: { $in: collabUserIds } }).select('name color');
         collaboratorsList = doc.collaborators.map(c => {
           const user = collabUsers.find(u => u._id.equals(c.userId));
-          return { userId: c.userId, name: user?.name || 'Inconnu', color: user?.color || '#6b7280', role: c.role };
+          return { userId: c.userId, name: user?.name || 'Inconnu', color: getUserColor(c.userId.toString()), role: c.role };
         });
       }
       // Add owner to collaborators list
       const owner = await User.findById(doc.ownerId).select('name color');
       if (owner) {
-        collaboratorsList.unshift({ userId: doc.ownerId, name: owner.name, color: owner.color, role: 'owner' });
+        collaboratorsList.unshift({ userId: doc.ownerId, name: owner.name, color: getUserColor(doc.ownerId.toString()), role: 'owner' });
       }
       
       socket.emit('document-state', { 
@@ -604,6 +615,28 @@ io.on('connection', (socket) => {
         console.log('Suggestion rejected:', suggestionId);
       }
     } catch (error) { console.error('Suggestion reject error:', error); }
+  });
+
+  // ============ CHAT ============
+  
+  // Store for chat messages per document (in-memory, resets on server restart)
+  if (!global.chatHistory) global.chatHistory = new Map();
+  
+  socket.on('chat-message', ({ docId, message }) => {
+    if (!currentDocId || currentDocId !== docId) return;
+    
+    // Store message in history
+    if (!global.chatHistory.has(docId)) {
+      global.chatHistory.set(docId, []);
+    }
+    const history = global.chatHistory.get(docId);
+    history.push(message);
+    // Keep only last 100 messages
+    if (history.length > 100) history.shift();
+    
+    // Broadcast to all OTHER users in the room (not sender - they already added it locally)
+    socket.to(currentDocId).emit('chat-message', message);
+    console.log('Chat message:', message.senderName, '->', message.content.substring(0, 50));
   });
 
   // ============ CURSOR & DISCONNECT ============

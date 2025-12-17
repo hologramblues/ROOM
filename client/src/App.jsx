@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V176 - Fixed auth modal layout, deterministic user colors based on ID
+// V177 - Fixed chat messaging, deterministic user colors
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3926,7 +3926,11 @@ export default function ScreenplayEditor() {
     
     // Chat messages
     socket.on('chat-message', (message) => {
-      setChatMessages(prev => [...prev, message]);
+      // Deduplicate - don't add if already exists
+      setChatMessages(prev => {
+        if (prev.some(m => m.id === message.id)) return prev;
+        return [...prev, message];
+      });
       // Increment unread if chat is closed and message is from someone else
       if (message.senderId !== socket.id) {
         setUnreadMessages(prev => prev + 1);
