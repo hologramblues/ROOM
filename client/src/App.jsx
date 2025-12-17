@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V178 - Gray neutral dark mode (Final Draft style)
+// V179 - Dark script page (Final Draft style)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3025,12 +3025,12 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       
       {/* Scene number left */}
       {element.type === 'scene' && showSceneNumbers && sceneNumber && (
-        <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
+        <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: 'inherit', fontWeight: 'bold' }}>{sceneNumber}</span>
       )}
       
       {/* Scene number right */}
       {element.type === 'scene' && showSceneNumbers && sceneNumber && (
-        <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: '#111', fontWeight: 'bold' }}>{sceneNumber}</span>
+        <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: 'inherit', fontWeight: 'bold' }}>{sceneNumber}</span>
       )}
       
       {/* Note indicator */}
@@ -6460,13 +6460,13 @@ export default function ScreenplayEditor() {
               <div key={page.number} style={{ position: 'relative' }}>
                 {/* Page content */}
                 <div style={{ 
-                  background: 'white', 
-                  color: '#111', 
+                  background: darkMode ? '#3a3a3a' : 'white', 
+                  color: darkMode ? '#e0e0e0' : '#111', 
                   width: '210mm', 
                   minHeight: '297mm',
                   padding: '20mm 25mm 25mm 38mm', 
                   boxSizing: 'border-box', 
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                  boxShadow: darkMode ? '0 4px 20px rgba(0,0,0,0.6)' : '0 4px 20px rgba(0,0,0,0.4)',
                   position: 'relative'
                 }}>
                   {/* Page number inside, top right */}
@@ -6476,7 +6476,7 @@ export default function ScreenplayEditor() {
                     right: '25mm', 
                     fontSize: '12pt', 
                     fontFamily: 'Courier Prime, Courier New, monospace',
-                    color: '#111'
+                    color: darkMode ? '#e0e0e0' : '#111'
                   }}>
                     {page.number}.
                   </div>
