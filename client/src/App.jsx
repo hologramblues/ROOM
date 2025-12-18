@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V190 - Google Docs style context menu (always visible when script focused, comment full element)
+// V191 - Context menu: 3 buttons always visible, overlay on script edge, fixed position on scroll
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -6673,6 +6673,10 @@ export default function ScreenplayEditor() {
                       onTextSelect={(selection) => {
                         if (canComment) {
                           setTextSelection(selection);
+                          // Update menu position to selection position
+                          if (selection && selection.rect) {
+                            setContextMenuTop(selection.rect.top);
+                          }
                         }
                       }}
                       onHighlightClick={(commentId) => {
@@ -7042,21 +7046,29 @@ export default function ScreenplayEditor() {
       
       {/* Context Action Menu - Google Docs style */}
       {/* Shows when script has focus OR when there's a text selection */}
-      {canComment && (scriptHasFocus || textSelection) && contextMenuTop !== null && !showOutline && (() => {
-        // Use text selection position if available, otherwise use element position
-        const menuTop = textSelection?.rect?.top || contextMenuTop;
+      {canComment && (scriptHasFocus || textSelection) && contextMenuTop !== null && (() => {
         const hasSelection = textSelection && textSelection.text;
         const currentElement = elements[activeIndex];
         
-        // Clamp to viewport
-        const clampedTop = Math.max(100, Math.min(window.innerHeight - 150, menuTop));
+        // Calculate horizontal position - overlay on script edge
+        // Script is 210mm wide, centered in viewport
+        const scriptWidth = 793; // 210mm in pixels approx
+        const viewportCenter = window.innerWidth / 2;
+        const outlineOffset = showOutline ? 175 : 0; // Half of outline width (350/2)
+        const commentsOffset = showComments ? 160 : 0; // Half of comments width (320/2)
+        const scriptCenter = viewportCenter + outlineOffset - commentsOffset;
+        const scriptRightEdge = scriptCenter + (scriptWidth / 2);
+        const menuRight = window.innerWidth - scriptRightEdge + 8; // 8px inside the edge
+        
+        // Clamp Y position to viewport
+        const clampedTop = Math.max(80, Math.min(window.innerHeight - 120, contextMenuTop));
         
         return (
         <div 
           className="context-action-menu"
           style={{
             position: 'fixed',
-            right: showComments ? 340 : 60,
+            right: Math.max(showComments ? 340 : 20, menuRight),
             top: clampedTop,
             transform: 'translateY(-50%)',
             display: 'flex',
@@ -7067,14 +7079,13 @@ export default function ScreenplayEditor() {
             borderRadius: 24,
             boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
             padding: 6,
-            border: '1px solid #e0e0e0',
-            transition: 'right 0.2s ease'
+            border: '1px solid #e0e0e0'
           }}
         >
-          {/* Suggestion button - only when text is selected */}
-          {hasSelection && (
-            <button 
-              onClick={() => {
+          {/* Suggestion button */}
+          <button 
+            onClick={() => {
+              if (hasSelection) {
                 setPendingSuggestion({
                   elementId: textSelection.elementId,
                   elementIndex: textSelection.elementIndex,
@@ -7082,38 +7093,46 @@ export default function ScreenplayEditor() {
                   startOffset: textSelection.startOffset,
                   endOffset: textSelection.endOffset
                 });
-                setShowComments(true);
-                setTextSelection(null);
-              }}
-              className="floating-action-btn"
-              data-tooltip="Suggérer une modification"
-              style={{
-                width: 36,
-                height: 36,
-                background: 'transparent',
-                border: 'none',
-                borderRadius: 18,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'background 0.15s ease'
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            </button>
-          )}
+              } else {
+                // Suggest on entire element
+                setPendingSuggestion({
+                  elementId: currentElement?.id,
+                  elementIndex: activeIndex,
+                  originalText: currentElement?.content || '',
+                  startOffset: 0,
+                  endOffset: currentElement?.content?.length || 0
+                });
+              }
+              setShowComments(true);
+              setTextSelection(null);
+            }}
+            className="floating-action-btn"
+            data-tooltip={hasSelection ? "Suggérer" : "Suggérer"}
+            style={{
+              width: 36,
+              height: 36,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 18,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'background 0.15s ease'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </button>
           
-          {/* Comment button - always available */}
+          {/* Comment button */}
           <button 
             onClick={() => {
               if (hasSelection) {
-                // Comment on selected text
                 setPendingInlineComment({
                   elementId: textSelection.elementId,
                   elementIndex: textSelection.elementIndex,
@@ -7135,7 +7154,7 @@ export default function ScreenplayEditor() {
               setTextSelection(null);
             }}
             className="floating-action-btn"
-            data-tooltip={hasSelection ? "Commenter la sélection" : "Commenter le paragraphe"}
+            data-tooltip="Commenter"
             style={{
               width: 36,
               height: 36,
@@ -7158,10 +7177,10 @@ export default function ScreenplayEditor() {
             </svg>
           </button>
           
-          {/* AI Rewrite button - only when text is selected */}
-          {hasSelection && (
-            <button 
-              onClick={() => {
+          {/* AI Rewrite button */}
+          <button 
+            onClick={() => {
+              if (hasSelection) {
                 setAiRewriteSelection({
                   elementId: textSelection.elementId,
                   elementIndex: textSelection.elementIndex,
@@ -7169,35 +7188,44 @@ export default function ScreenplayEditor() {
                   startOffset: textSelection.startOffset,
                   endOffset: textSelection.endOffset
                 });
-                setShowAIRewrite(true);
-                setAiRewriteMode(null);
-                setAiRewriteResult(null);
-                setTextSelection(null);
-              }}
-              className="floating-action-btn"
-              data-tooltip="Réécrire avec IA"
-              style={{
-                width: 36,
-                height: 36,
-                background: 'transparent',
-                border: 'none',
-                borderRadius: 18,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'background 0.15s ease'
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5" />
-                <path d="M2 12l10 5 10-5" />
-              </svg>
-            </button>
-          )}
+              } else {
+                // AI on entire element
+                setAiRewriteSelection({
+                  elementId: currentElement?.id,
+                  elementIndex: activeIndex,
+                  text: currentElement?.content || '',
+                  startOffset: 0,
+                  endOffset: currentElement?.content?.length || 0
+                });
+              }
+              setShowAIRewrite(true);
+              setAiRewriteMode(null);
+              setAiRewriteResult(null);
+              setTextSelection(null);
+            }}
+            className="floating-action-btn"
+            data-tooltip="Réécrire avec IA"
+            style={{
+              width: 36,
+              height: 36,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 18,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'background 0.15s ease'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" />
+              <path d="M2 17l10 5 10-5" />
+              <path d="M2 12l10 5 10-5" />
+            </svg>
+          </button>
         </div>
         );
       })()}
