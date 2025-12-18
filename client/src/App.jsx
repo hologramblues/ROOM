@@ -1,12 +1,354 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { io } from 'socket.io-client';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V191 - Context menu: 3 buttons always visible, overlay on script edge, fixed position on scroll
+// V192 - Internationalization FR/EN (menu Outils > Langue)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
+
+// ============ TRANSLATIONS ============
+const translations = {
+  fr: {
+    // Landing page
+    tagline: "L'éditeur de scénario collaboratif en temps réel",
+    login: "Se connecter / S'inscrire",
+    continueWithoutAccount: "Continuer sans compte",
+    noAccountWarning: "Sans compte, vos documents ne seront pas sauvegardés",
+    
+    // Auth modal
+    connection: "Connexion",
+    registration: "Inscription",
+    email: "Email",
+    password: "Mot de passe",
+    name: "Nom",
+    signingIn: "Connexion...",
+    registering: "Inscription...",
+    signIn: "Se connecter",
+    register: "S'inscrire",
+    noAccount: "Pas de compte ?",
+    createOne: "Créer un compte",
+    alreadyAccount: "Déjà un compte ?",
+    
+    // Menu Document
+    document: "Document",
+    new: "Nouveau",
+    myDocuments: "Mes documents",
+    snapshot: "Snapshot",
+    history: "Historique",
+    import: "Importer",
+    export: "Exporter",
+    
+    // Menu Outils
+    tools: "Outils",
+    search: "Rechercher",
+    renameCharacter: "Renommer personnage",
+    characters: "Personnages",
+    statistics: "Statistiques",
+    goToScene: "Aller à la scène",
+    sceneNumbers: "Numéros de scènes",
+    chatNotifications: "Notifications chat",
+    shortcuts: "Raccourcis",
+    language: "Langue",
+    
+    // Element types
+    scene: "Séquence",
+    action: "Action",
+    character: "Personnage",
+    dialogue: "Dialogue",
+    parenthetical: "Parenthèse",
+    transition: "Transition",
+    note: "Note",
+    
+    // Outline
+    outline: "Outline",
+    status: "Statut",
+    assigned: "Assigné",
+    all: "Tous",
+    inProgress: "En cours",
+    validated: "Validé",
+    urgent: "Urgent",
+    noStatus: "Sans statut",
+    unassigned: "Non assigné",
+    none: "Aucun",
+    assignTo: "Assigner à",
+    lock: "Verrouiller",
+    unlock: "Déverrouiller",
+    
+    // Comments sidebar
+    comments: "Commentaires",
+    suggestions: "Suggestions",
+    addComment: "Ajouter un commentaire",
+    reply: "Répondre",
+    resolve: "Résoudre",
+    delete: "Supprimer",
+    accept: "Accepter",
+    reject: "Rejeter",
+    cancel: "Annuler",
+    send: "Envoyer",
+    writeComment: "Écrire un commentaire...",
+    suggestReplacement: "Suggérer un remplacement...",
+    
+    // Search & Replace
+    searchReplace: "Rechercher / Remplacer",
+    replaceWith: "Remplacer par",
+    replace: "Remplacer",
+    replaceAll: "Tout",
+    noResults: "Aucun résultat",
+    
+    // Statistics
+    statsTitle: "Statistiques du scénario",
+    totalScenes: "Total séquences",
+    totalPages: "Pages estimées",
+    totalCharacters: "Personnages",
+    totalDialogues: "Répliques",
+    totalWords: "Mots",
+    estimates: "Estimations",
+    minutesPerPage: "min/page",
+    estimatedDuration: "Durée estimée",
+    
+    // Templates
+    newScreenplay: "Nouveau scénario",
+    chooseTemplate: "Choisissez un modèle",
+    blankDocument: "Document vierge",
+    startFromScratch: "Commencez de zéro",
+    
+    // History
+    versionHistory: "Historique des versions",
+    restore: "Restaurer",
+    autoSave: "Sauvegarde auto",
+    
+    // My documents
+    myDocumentsTitle: "Mes documents",
+    newDocument: "+ Nouveau document",
+    owner: "Propriétaire",
+    collaborator: "Collaborateur",
+    modified: "Modifié",
+    open: "Ouvrir",
+    
+    // Context menu tooltips
+    suggest: "Suggérer",
+    comment: "Commenter",
+    rewriteWithAI: "Réécrire avec IA",
+    
+    // AI Rewrite
+    aiRewrite: "Réécriture IA",
+    selectStyle: "Choisissez un style de réécriture",
+    moreConscise: "Plus concis",
+    moreDetailed: "Plus détaillé",
+    moreDramatic: "Plus dramatique",
+    moreHumorous: "Plus humoristique",
+    customPrompt: "Instructions personnalisées",
+    customPromptPlaceholder: "Ex: Rendre plus poétique, ajouter du suspense...",
+    generating: "Génération en cours...",
+    originalText: "Texte original",
+    suggestedText: "Texte suggéré",
+    applySuggestion: "Appliquer",
+    
+    // Chat
+    chat: "Chat",
+    typeMessage: "Tapez un message...",
+    
+    // Misc
+    close: "Fermer",
+    save: "Sauvegarder",
+    loading: "Chargement...",
+    untitled: "SANS TITRE",
+    you: "(vous)",
+    online: "en ligne",
+    deleteConfirm: "Supprimer ?",
+    
+    // Keyboard shortcuts
+    keyboardShortcuts: "Raccourcis clavier",
+    navigation: "Navigation",
+    editing: "Édition",
+    formatting: "Formatage",
+    
+    // Rename character
+    renameCharacterTitle: "Renommer un personnage",
+    oldName: "Ancien nom",
+    newName: "Nouveau nom",
+    renameAll: "Renommer toutes les occurrences",
+    
+    // Writing goal
+    writingGoal: "Objectif d'écriture",
+    dailyGoal: "Objectif quotidien",
+    words: "mots",
+    pages: "pages",
+  },
+  
+  en: {
+    // Landing page
+    tagline: "Real-time collaborative screenplay editor",
+    login: "Sign in / Sign up",
+    continueWithoutAccount: "Continue without account",
+    noAccountWarning: "Without an account, your documents won't be saved",
+    
+    // Auth modal
+    connection: "Sign In",
+    registration: "Sign Up",
+    email: "Email",
+    password: "Password",
+    name: "Name",
+    signingIn: "Signing in...",
+    registering: "Signing up...",
+    signIn: "Sign In",
+    register: "Sign Up",
+    noAccount: "No account?",
+    createOne: "Create one",
+    alreadyAccount: "Already have an account?",
+    
+    // Menu Document
+    document: "Document",
+    new: "New",
+    myDocuments: "My Documents",
+    snapshot: "Snapshot",
+    history: "History",
+    import: "Import",
+    export: "Export",
+    
+    // Menu Outils
+    tools: "Tools",
+    search: "Search",
+    renameCharacter: "Rename Character",
+    characters: "Characters",
+    statistics: "Statistics",
+    goToScene: "Go to Scene",
+    sceneNumbers: "Scene Numbers",
+    chatNotifications: "Chat Notifications",
+    shortcuts: "Shortcuts",
+    language: "Language",
+    
+    // Element types
+    scene: "Scene Heading",
+    action: "Action",
+    character: "Character",
+    dialogue: "Dialogue",
+    parenthetical: "Parenthetical",
+    transition: "Transition",
+    note: "Note",
+    
+    // Outline
+    outline: "Outline",
+    status: "Status",
+    assigned: "Assigned",
+    all: "All",
+    inProgress: "In Progress",
+    validated: "Done",
+    urgent: "Urgent",
+    noStatus: "No Status",
+    unassigned: "Unassigned",
+    none: "None",
+    assignTo: "Assign to",
+    lock: "Lock",
+    unlock: "Unlock",
+    
+    // Comments sidebar
+    comments: "Comments",
+    suggestions: "Suggestions",
+    addComment: "Add comment",
+    reply: "Reply",
+    resolve: "Resolve",
+    delete: "Delete",
+    accept: "Accept",
+    reject: "Reject",
+    cancel: "Cancel",
+    send: "Send",
+    writeComment: "Write a comment...",
+    suggestReplacement: "Suggest a replacement...",
+    
+    // Search & Replace
+    searchReplace: "Search / Replace",
+    replaceWith: "Replace with",
+    replace: "Replace",
+    replaceAll: "All",
+    noResults: "No results",
+    
+    // Statistics
+    statsTitle: "Screenplay Statistics",
+    totalScenes: "Total Scenes",
+    totalPages: "Estimated Pages",
+    totalCharacters: "Characters",
+    totalDialogues: "Dialogues",
+    totalWords: "Words",
+    estimates: "Estimates",
+    minutesPerPage: "min/page",
+    estimatedDuration: "Estimated Duration",
+    
+    // Templates
+    newScreenplay: "New Screenplay",
+    chooseTemplate: "Choose a template",
+    blankDocument: "Blank Document",
+    startFromScratch: "Start from scratch",
+    
+    // History
+    versionHistory: "Version History",
+    restore: "Restore",
+    autoSave: "Auto save",
+    
+    // My documents
+    myDocumentsTitle: "My Documents",
+    newDocument: "+ New Document",
+    owner: "Owner",
+    collaborator: "Collaborator",
+    modified: "Modified",
+    open: "Open",
+    
+    // Context menu tooltips
+    suggest: "Suggest",
+    comment: "Comment",
+    rewriteWithAI: "Rewrite with AI",
+    
+    // AI Rewrite
+    aiRewrite: "AI Rewrite",
+    selectStyle: "Choose a rewrite style",
+    moreConscise: "More concise",
+    moreDetailed: "More detailed",
+    moreDramatic: "More dramatic",
+    moreHumorous: "More humorous",
+    customPrompt: "Custom instructions",
+    customPromptPlaceholder: "E.g.: Make it more poetic, add suspense...",
+    generating: "Generating...",
+    originalText: "Original text",
+    suggestedText: "Suggested text",
+    applySuggestion: "Apply",
+    
+    // Chat
+    chat: "Chat",
+    typeMessage: "Type a message...",
+    
+    // Misc
+    close: "Close",
+    save: "Save",
+    loading: "Loading...",
+    untitled: "UNTITLED",
+    you: "(you)",
+    online: "online",
+    deleteConfirm: "Delete?",
+    
+    // Keyboard shortcuts
+    keyboardShortcuts: "Keyboard Shortcuts",
+    navigation: "Navigation",
+    editing: "Editing",
+    formatting: "Formatting",
+    
+    // Rename character
+    renameCharacterTitle: "Rename Character",
+    oldName: "Old name",
+    newName: "New name",
+    renameAll: "Rename all occurrences",
+    
+    // Writing goal
+    writingGoal: "Writing Goal",
+    dailyGoal: "Daily goal",
+    words: "words",
+    pages: "pages",
+  }
+};
+
+// Language Context
+const LanguageContext = createContext({ language: 'fr', t: (key) => key, setLanguage: () => {} });
 
 // ============ TIPTAP COMMENT MARK ============
 const CommentMark = Mark.create({
@@ -119,7 +461,7 @@ const FDX_TO_TYPE = { 'Scene Heading': 'scene', 'Action': 'action', 'Character':
 const LINES_PER_PAGE = 55;
 
 // ============ AUTH MODAL ============
-const AuthModal = ({ onLogin, onClose }) => {
+const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -161,13 +503,13 @@ const AuthModal = ({ onLogin, onClose }) => {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: '#333333', borderRadius: 12, padding: 32, width: 'calc(100% - 32px)', maxWidth: 380, boxShadow: '0 25px 50px rgba(0,0,0,0.5)', border: '1px solid #484848' }}>
-        <h2 style={{ color: 'white', fontSize: 22, marginBottom: 24, textAlign: 'center', fontWeight: 600 }}>{mode === 'login' ? 'Connexion' : 'Inscription'}</h2>
+        <h2 style={{ color: 'white', fontSize: 22, marginBottom: 24, textAlign: 'center', fontWeight: 600 }}>{mode === 'login' ? t('connection') : t('registration')}</h2>
         <form onSubmit={handleSubmit}>
           {mode === 'register' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
               <input 
                 type="text" 
-                placeholder="Prénom" 
+                placeholder={t('name')} 
                 value={firstName} 
                 onChange={e => setFirstName(e.target.value)} 
                 style={inputStyle}
@@ -177,7 +519,7 @@ const AuthModal = ({ onLogin, onClose }) => {
               />
               <input 
                 type="text" 
-                placeholder="Nom" 
+                placeholder={t('name')} 
                 value={lastName} 
                 onChange={e => setLastName(e.target.value)} 
                 style={inputStyle}
@@ -189,7 +531,7 @@ const AuthModal = ({ onLogin, onClose }) => {
           )}
           <input 
             type="email" 
-            placeholder="Email" 
+            placeholder={t('email')} 
             value={email} 
             onChange={e => setEmail(e.target.value)} 
             style={{ ...inputStyle, marginBottom: 12 }}
@@ -199,7 +541,7 @@ const AuthModal = ({ onLogin, onClose }) => {
           />
           <input 
             type="password" 
-            placeholder="Mot de passe" 
+            placeholder={t('password')} 
             value={password} 
             onChange={e => setPassword(e.target.value)} 
             style={{ ...inputStyle, marginBottom: 16 }}
@@ -225,16 +567,16 @@ const AuthModal = ({ onLogin, onClose }) => {
               transition: 'opacity 0.2s'
             }}
           >
-            {loading ? 'Chargement...' : mode === 'login' ? 'Se connecter' : "S'inscrire"}
+            {loading ? t('loading') : mode === 'login' ? t('signIn') : t('register')}
           </button>
         </form>
         <p style={{ marginTop: 20, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-          {mode === 'login' ? 'Pas de compte ?' : 'Déjà un compte ?'}
+          {mode === 'login' ? t('noAccount') : t('alreadyAccount')}
           <button 
             onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }} 
             style={{ marginLeft: 8, color: '#60a5fa', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
           >
-            {mode === 'login' ? "S'inscrire" : 'Se connecter'}
+            {mode === 'login' ? t('createOne') : t('signIn')}
           </button>
         </p>
         <button 
@@ -251,7 +593,7 @@ const AuthModal = ({ onLogin, onClose }) => {
             fontSize: 13 
           }}
         >
-          Continuer sans compte
+          {t('continueWithoutAccount')}
         </button>
       </div>
     </div>
@@ -3396,6 +3738,18 @@ export default function ScreenplayEditor() {
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
+  const [language, setLanguage] = useState(() => localStorage.getItem('rooms-language') || 'fr');
+  
+  // Translation function
+  const t = useCallback((key) => {
+    return translations[language]?.[key] || translations['fr']?.[key] || key;
+  }, [language]);
+  
+  // Save language preference
+  useEffect(() => {
+    localStorage.setItem('rooms-language', language);
+  }, [language]);
+  
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [replaceQuery, setReplaceQuery] = useState('');
@@ -5620,8 +5974,32 @@ export default function ScreenplayEditor() {
         alignItems: 'center', 
         justifyContent: 'center', 
         background: '#1a1a1a',
-        color: 'white'
+        color: 'white',
+        position: 'relative'
       }}>
+        {/* Language toggle */}
+        <button
+          onClick={() => setLanguage(language === 'fr' ? 'en' : 'fr')}
+          style={{
+            position: 'absolute',
+            top: 20,
+            right: 20,
+            padding: '8px 12px',
+            background: 'transparent',
+            border: '1px solid #484848',
+            borderRadius: 6,
+            color: '#9ca3af',
+            fontSize: 12,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          {language === 'fr' ? '🇫🇷 FR' : '🇺🇸 EN'}
+        </button>
+        
         <div style={{ 
           textAlign: 'center',
           maxWidth: 400,
@@ -5638,7 +6016,7 @@ export default function ScreenplayEditor() {
             marginBottom: 48,
             lineHeight: 1.6
           }}>
-            L'éditeur de scénario collaboratif en temps réel
+            {t('tagline')}
           </p>
           
           {/* Connexion button */}
@@ -5660,14 +6038,14 @@ export default function ScreenplayEditor() {
             onMouseEnter={e => e.currentTarget.style.background = '#2563eb'}
             onMouseLeave={e => e.currentTarget.style.background = '#3b82f6'}
           >
-            Se connecter / S'inscrire
+            {t('login')}
           </button>
           
           {/* Continue without account */}
           <button 
             onClick={() => {
               // Set a flag to show editor without account
-              setTitle('Sans titre');
+              setTitle(t('untitled'));
               window.location.hash = 'local';
             }}
             style={{ 
@@ -5684,7 +6062,7 @@ export default function ScreenplayEditor() {
             onMouseEnter={e => { e.currentTarget.style.borderColor = '#6b7280'; e.currentTarget.style.color = 'white'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = '#484848'; e.currentTarget.style.color = '#9ca3af'; }}
           >
-            Continuer sans compte
+            {t('continueWithoutAccount')}
           </button>
           
           <p style={{ 
@@ -5692,18 +6070,18 @@ export default function ScreenplayEditor() {
             fontSize: 12, 
             color: '#6b7280' 
           }}>
-            Sans compte, vos documents ne seront pas sauvegardés
+            {t('noAccountWarning')}
           </p>
         </div>
         
-        {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
+        {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} t={t} />}
       </div>
     );
   }
 
   return (
     <div className={focusMode ? 'focus-mode-active' : ''} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: darkMode ? '#2b2b2b' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#2b2b2b', transition: 'background 0.3s, color 0.3s', overflow: 'hidden' }}>
-      {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} />}
+      {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} t={t} />}
       
       {/* Template Selector Modal */}
       {showTemplateModal && (
@@ -5825,29 +6203,29 @@ export default function ScreenplayEditor() {
           {/* DOCUMENT MENU */}
           <div style={{ position: 'relative' }}>
             <button onClick={(e) => { e.stopPropagation(); setShowDocMenu(!showDocMenu); setShowToolsMenu(false); setShowImportSubmenu(false); setShowExportSubmenu(false); }} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: showDocMenu ? (darkMode ? '#484848' : '#e5e7eb') : 'transparent', color: darkMode ? '#e5e7eb' : '#484848', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
-              Document ▾
+              {t('document')} ▾
             </button>
             {showDocMenu && (
               <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'visible', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                 <button onClick={() => { if (!token) { setShowAuthModal(true); } else { setShowTemplateModal(true); } setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', borderRadius: '8px 8px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                  Nouveau
+                  {t('new')}
                 </button>
                 {token && (
                   <button onClick={() => { setShowDocsList(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                    Mes documents
+                    {t('myDocuments')}
                   </button>
                 )}
                 {docId && token && (
                   <>
                     <div style={{ height: 1, background: darkMode ? '#484848' : '#e5e7eb', margin: '4px 0' }} />
                     <button onClick={() => { createSnapshot(); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Snapshot</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘S</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>{t('snapshot')}</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘S</span>
                     </button>
                     <button onClick={() => { setShowHistory(true); setShowDocMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                      Historique
+                      {t('history')}
                     </button>
                   </>
                 )}
@@ -5861,7 +6239,7 @@ export default function ScreenplayEditor() {
                   onMouseLeave={() => setShowImportSubmenu(false)}
                 >
                   <button style={{ width: '100%', padding: '10px 14px', background: showImportSubmenu ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Importer</span><span style={{ color: '#6b7280' }}>▸</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>{t('import')}</span><span style={{ color: '#6b7280' }}>▸</span>
                   </button>
                   {showImportSubmenu && (
                     <div style={{ position: 'absolute', left: '100%', top: 0, marginLeft: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 501, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
@@ -5880,7 +6258,7 @@ export default function ScreenplayEditor() {
                   onMouseLeave={() => setShowExportSubmenu(false)}
                 >
                   <button style={{ width: '100%', padding: '10px 14px', background: showExportSubmenu ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '0 0 8px 8px' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Exporter</span><span style={{ color: '#6b7280' }}>▸</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>{t('export')}</span><span style={{ color: '#6b7280' }}>▸</span>
                   </button>
                   {showExportSubmenu && (
                     <div style={{ position: 'absolute', left: '100%', top: 0, marginLeft: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 160, zIndex: 501, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
@@ -5914,39 +6292,43 @@ export default function ScreenplayEditor() {
           {/* TOOLS MENU */}
           <div style={{ position: 'relative' }}>
             <button onClick={(e) => { e.stopPropagation(); setShowToolsMenu(!showToolsMenu); setShowDocMenu(false); }} style={{ padding: '5px 10px', border: 'none', borderRadius: 6, background: showToolsMenu ? (darkMode ? '#484848' : '#e5e7eb') : 'transparent', color: darkMode ? '#e5e7eb' : '#484848', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>
-              Outils ▾
+              {t('tools')} ▾
             </button>
             {showToolsMenu && (
               <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 200, zIndex: 500, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
                 <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Rechercher</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>{t('search')}</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
                 </button>
                 <button onClick={() => { setShowRenameChar(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                  Renommer personnage
+                  {t('renameCharacter')}
                 </button>
                 <button onClick={() => { setShowCharactersPanel(!showCharactersPanel); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showCharactersPanel ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                  Personnages {showCharactersPanel && '✓'}
+                  {t('characters')} {showCharactersPanel && '✓'}
                 </button>
                 <button onClick={() => { setShowStats(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                  Statistiques
+                  {t('statistics')}
                 </button>
                 <button onClick={() => { setShowGoToScene(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>Aller à la scène</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘G</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>{t('goToScene')}</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘G</span>
                 </button>
                 <button onClick={() => { setShowSceneNumbers(!showSceneNumbers); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: showSceneNumbers ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
-                  Numéros de scènes {showSceneNumbers && '✓'}
+                  {t('sceneNumbers')} {showSceneNumbers && '✓'}
                 </button>
                 <div style={{ height: 1, background: darkMode ? '#484848' : '#e5e7eb', margin: '4px 0' }} />
                 <button onClick={() => { setChatNotificationSound(!chatNotificationSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: chatNotificationSound ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                  Notifications chat {chatNotificationSound && '✓'}
+                  {t('chatNotifications')} {chatNotificationSound && '✓'}
+                </button>
+                <button onClick={() => { setLanguage(language === 'fr' ? 'en' : 'fr'); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  {t('language')}: {language === 'fr' ? '🇫🇷 Français' : '🇺🇸 English'}
                 </button>
                 <button onClick={() => { setShowShortcuts(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 8h.001"/><path d="M10 8h.001"/><path d="M14 8h.001"/><path d="M18 8h.001"/><path d="M8 12h.001"/><path d="M12 12h.001"/><path d="M16 12h.001"/><path d="M7 16h10"/></svg>Raccourcis</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 8h.001"/><path d="M10 8h.001"/><path d="M14 8h.001"/><path d="M18 8h.001"/><path d="M8 12h.001"/><path d="M12 12h.001"/><path d="M16 12h.001"/><path d="M7 16h10"/></svg>{t('shortcuts')}</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
                 </button>
               </div>
             )}
@@ -7107,7 +7489,7 @@ export default function ScreenplayEditor() {
               setTextSelection(null);
             }}
             className="floating-action-btn"
-            data-tooltip={hasSelection ? "Suggérer" : "Suggérer"}
+            data-tooltip={t('suggest')}
             style={{
               width: 36,
               height: 36,
@@ -7154,7 +7536,7 @@ export default function ScreenplayEditor() {
               setTextSelection(null);
             }}
             className="floating-action-btn"
-            data-tooltip="Commenter"
+            data-tooltip={t('comment')}
             style={{
               width: 36,
               height: 36,
@@ -7204,7 +7586,7 @@ export default function ScreenplayEditor() {
               setTextSelection(null);
             }}
             className="floating-action-btn"
-            data-tooltip="Réécrire avec IA"
+            data-tooltip={t('rewriteWithAI')}
             style={{
               width: 36,
               height: 36,
