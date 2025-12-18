@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V187 - Import/Export always visible in Document menu
+// V189 - Cleaned up Tools menu, improved floating action menu (closer, tooltips, no emoji)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -5904,9 +5904,6 @@ export default function ScreenplayEditor() {
                 <button onClick={() => { setShowSearch(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Rechercher</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘F</span>
                 </button>
-                <button onClick={() => { setShowNoteFor(elements[activeIndex]?.id); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Ajouter note</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘N</span>
-                </button>
                 <button onClick={() => { setShowRenameChar(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                   Renommer personnage
@@ -5927,10 +5924,6 @@ export default function ScreenplayEditor() {
                   Numéros de scènes {showSceneNumbers && '✓'}
                 </button>
                 <div style={{ height: 1, background: darkMode ? '#484848' : '#e5e7eb', margin: '4px 0' }} />
-                <button onClick={() => { setTypewriterSound(!typewriterSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: typewriterSound ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="M18 2l4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/></svg>
-                  Son machine à écrire {typewriterSound && '✓'}
-                </button>
                 <button onClick={() => { setChatNotificationSound(!chatNotificationSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: chatNotificationSound ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                   Notifications chat {chatNotificationSound && '✓'}
@@ -5975,7 +5968,7 @@ export default function ScreenplayEditor() {
           {currentUser ? (
             <>
               <div style={{ position: 'relative' }}>
-                <UserAvatar user={{ name: currentUser.name, color: currentUser.color || '#3b82f6' }} isYou={true} />
+                <UserAvatar user={{ name: currentUser.name, color: users.find(u => u.name === currentUser.name)?.color || currentUser.color || '#3b82f6' }} isYou={true} />
                 <button 
                   onClick={handleLogout} 
                   style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }} 
@@ -7046,7 +7039,7 @@ export default function ScreenplayEditor() {
           className="text-selection-popup"
           style={{
             position: 'fixed',
-            right: showComments ? 340 : 20,
+            right: showComments ? 340 : 80,
             top: finalTop,
             display: 'flex',
             flexDirection: 'column',
@@ -7055,7 +7048,7 @@ export default function ScreenplayEditor() {
             background: 'white',
             borderRadius: 24,
             boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
-            padding: 8,
+            padding: 6,
             border: '1px solid #e0e0e0'
           }}
         >
@@ -7072,12 +7065,14 @@ export default function ScreenplayEditor() {
               setShowComments(true);
               setTextSelection(null);
             }}
+            className="floating-action-btn"
+            data-tooltip="Suggérer"
             style={{
-              width: 40,
-              height: 40,
+              width: 36,
+              height: 36,
               background: 'transparent',
               border: 'none',
-              borderRadius: 20,
+              borderRadius: 18,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -7086,9 +7081,8 @@ export default function ScreenplayEditor() {
             }}
             onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-            title="Proposer une modification"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
@@ -7107,12 +7101,14 @@ export default function ScreenplayEditor() {
               setShowComments(true);
               setTextSelection(null);
             }}
+            className="floating-action-btn"
+            data-tooltip="Commenter"
             style={{
-              width: 40,
-              height: 40,
+              width: 36,
+              height: 36,
               background: 'transparent',
               border: 'none',
-              borderRadius: 20,
+              borderRadius: 18,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -7121,37 +7117,11 @@ export default function ScreenplayEditor() {
             }}
             onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-            title="Ajouter un commentaire"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               <line x1="12" y1="8" x2="12" y2="14" />
               <line x1="9" y1="11" x2="15" y2="11" />
-            </svg>
-          </button>
-          
-          {/* Emoji button (placeholder) */}
-          <button 
-            style={{
-              width: 40,
-              height: 40,
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 20,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'not-allowed',
-              opacity: 0.4
-            }}
-            title="Réactions (bientôt)"
-            disabled
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-              <line x1="9" y1="9" x2="9.01" y2="9" />
-              <line x1="15" y1="9" x2="15.01" y2="9" />
             </svg>
           </button>
           
@@ -7170,12 +7140,14 @@ export default function ScreenplayEditor() {
               setAiRewriteResult(null);
               setTextSelection(null);
             }}
+            className="floating-action-btn"
+            data-tooltip="Réécrire avec IA"
             style={{
-              width: 40,
-              height: 40,
+              width: 36,
+              height: 36,
               background: 'transparent',
               border: 'none',
-              borderRadius: 20,
+              borderRadius: 18,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -7184,9 +7156,12 @@ export default function ScreenplayEditor() {
             }}
             onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-            title="Réécrire avec l'IA"
           >
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', fontFamily: 'system-ui, sans-serif' }}>IA</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" />
+              <path d="M2 17l10 5 10-5" />
+              <path d="M2 12l10 5 10-5" />
+            </svg>
           </button>
         </div>
         );
@@ -8118,6 +8093,47 @@ export default function ScreenplayEditor() {
         }
         .outline-btn:hover::after,
         .outline-btn:hover::before {
+          opacity: 1;
+        }
+        
+        /* Floating action buttons tooltips (Google Docs style - appears on LEFT) */
+        .floating-action-btn {
+          position: relative;
+        }
+        .floating-action-btn::after {
+          content: attr(data-tooltip);
+          position: absolute;
+          right: calc(100% + 8px);
+          top: 50%;
+          transform: translateY(-50%);
+          padding: 6px 10px;
+          background: #202124;
+          color: white;
+          font-size: 11px;
+          font-weight: 500;
+          white-space: nowrap;
+          border-radius: 4px;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease;
+          z-index: 1001;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .floating-action-btn::before {
+          content: '';
+          position: absolute;
+          right: calc(100% + 2px);
+          top: 50%;
+          transform: translateY(-50%);
+          border: 5px solid transparent;
+          border-left-color: #202124;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease;
+          z-index: 1001;
+        }
+        .floating-action-btn:hover::after,
+        .floating-action-btn:hover::before {
           opacity: 1;
         }
       `}</style>
