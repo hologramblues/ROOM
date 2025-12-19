@@ -236,6 +236,12 @@ const translations = {
     noCommentsOrSuggestions: "Aucun commentaire ou suggestion",
     sequence: "Séquence",
     newDocumentPlaceholder: "Nouveau document",
+    
+    // Suggestions
+    replaceLabel: "Remplacer :",
+    by: "par",
+    replaceBy: "Remplacer par :",
+    typeSuggestion: "Tapez votre suggestion...",
   },
   
   en: {
@@ -464,6 +470,12 @@ const translations = {
     noCommentsOrSuggestions: "No comments or suggestions",
     sequence: "Sequence",
     newDocumentPlaceholder: "New document",
+    
+    // Suggestions
+    replaceLabel: "Replace:",
+    by: "with",
+    replaceBy: "Replace with:",
+    typeSuggestion: "Type your suggestion...",
   }
 };
 
@@ -2220,12 +2232,12 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   
                   {/* Suggested text input */}
                   <div style={{ marginBottom: 8 }}>
-                    <span style={{ fontSize: 11, color: '#6b7280' }}>Remplacer par :</span>
+                    <span style={{ fontSize: 11, color: '#6b7280' }}>{t('replaceBy')}</span>
                     <textarea
                       ref={suggestionInputRef}
                       value={suggestionText}
                       onChange={(e) => setSuggestionText(e.target.value)}
-                      placeholder="Tapez votre suggestion..."
+                      placeholder={t('typeSuggestion')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
@@ -2410,7 +2422,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                               {/* Compact view - one line description */}
                               {!isSelected && (
                                 <div style={{ fontSize: 12, color: darkMode ? '#9ca3af' : '#555555', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  <strong>Remplacer :</strong> <span style={{ fontStyle: 'italic' }}>"{s.originalText.substring(0, 20)}{s.originalText.length > 20 ? '...' : ''}"</span> par <span style={{ fontStyle: 'italic' }}>"{s.suggestedText.substring(0, 20)}{s.suggestedText.length > 20 ? '...' : ''}"</span>
+                                  <strong>{t('replaceLabel')}</strong> <span style={{ fontStyle: 'italic' }}>"{s.originalText.substring(0, 20)}{s.originalText.length > 20 ? '...' : ''}"</span> {t('by')} <span style={{ fontStyle: 'italic' }}>"{s.suggestedText.substring(0, 20)}{s.suggestedText.length > 20 ? '...' : ''}"</span>
                                 </div>
                               )}
                             </div>
@@ -2420,7 +2432,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                           {isSelected && (
                             <>
                               <div style={{ fontSize: 13, margin: '12px 0' }}>
-                                <div style={{ color: '#6b7280', fontSize: 11, marginBottom: 4, fontWeight: 500 }}>Remplacer :</div>
+                                <div style={{ color: '#6b7280', fontSize: 11, marginBottom: 4, fontWeight: 500 }}>{t('replaceLabel')}</div>
                                 <div style={{ 
                                   textDecoration: 'line-through', 
                                   color: '#dc2626',
@@ -2441,7 +2453,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                               
                               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); onRejectSuggestion && onRejectSuggestion(s.id); }}
+                                  onClick={(e) => { e.stopPropagation(); onRejectSuggestion && onRejectSuggestion(sId); }}
                                   style={{
                                     padding: '6px 12px',
                                     background: 'transparent',
@@ -2455,7 +2467,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                                   {t('reject')}
                                 </button>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); onAcceptSuggestion && onAcceptSuggestion(s.id); }}
+                                  onClick={(e) => { e.stopPropagation(); onAcceptSuggestion && onAcceptSuggestion(sId); }}
                                   style={{
                                     padding: '6px 12px',
                                     background: '#10b981',
@@ -5615,6 +5627,9 @@ export default function ScreenplayEditor() {
     setActiveIndex(index);
     setCursorOffset(offset);
     setScriptHasFocus(true);
+    // Deselect any selected comment/suggestion when clicking in script
+    setSelectedCommentId(null);
+    setSelectedSuggestionId(null);
     // Calculate menu position based on element
     setTimeout(() => {
       const el = document.querySelector(`[data-element-index="${index}"]`);
