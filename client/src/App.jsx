@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V192 - Internationalization FR/EN (menu Outils > Langue)
+// V193 - i18n complete: language submenu, tooltips, comments sidebar
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -87,6 +87,7 @@ const translations = {
     reject: "Rejeter",
     cancel: "Annuler",
     send: "Envoyer",
+    edit: "Modifier",
     writeComment: "Écrire un commentaire...",
     suggestReplacement: "Suggérer un remplacement...",
     
@@ -176,6 +177,51 @@ const translations = {
     dailyGoal: "Objectif quotidien",
     words: "mots",
     pages: "pages",
+    
+    // Header tooltips
+    invite: "Inviter (copier le lien)",
+    teamChat: "Chat d'équipe",
+    writingTimer: "Timer d'écriture",
+    focusMode: "Mode focus",
+    lightMode: "Mode clair",
+    darkModeTooltip: "Mode sombre",
+    logout: "Déconnexion",
+    linkCopied: "Lien copié !",
+    reading: "Lecture",
+    
+    // Outline panel
+    filterByStatus: "Filtrer par statut",
+    filterByAssigned: "Filtrer par assigné",
+    lockScene: "Verrouiller",
+    unlockScene: "Déverrouiller",
+    sceneLocked: "Scène verrouillée",
+    
+    // Comments panel
+    filterComments: "Filtrer les commentaires",
+    filterSuggestions: "Filtrer les suggestions",
+    previousComment: "Commentaire précédent",
+    nextComment: "Commentaire suivant",
+    previousSuggestion: "Suggestion précédente",
+    nextSuggestion: "Suggestion suivante",
+    reopen: "Rouvrir",
+    markResolved: "Marquer comme résolu",
+    moreOptions: "Plus d'options",
+    clickToViewComment: "Cliquer pour voir le commentaire",
+    
+    // Misc UI
+    expand: "Agrandir",
+    collapse: "Réduire",
+    scenes: "scènes",
+    sceneCount: "scène",
+    position: "Position",
+    rightClickHint: "💡 Clic droit sur une scène = ajouter un chapitre",
+    chapter: "Chapitre",
+    replies: "réponses",
+    replyCount: "réponse",
+    noDocuments: "Aucun document",
+    noHistory: "Aucun historique",
+    loadingDocument: "Chargement du document...",
+    validated: "Validé",
   },
   
   en: {
@@ -255,6 +301,7 @@ const translations = {
     reject: "Reject",
     cancel: "Cancel",
     send: "Send",
+    edit: "Edit",
     writeComment: "Write a comment...",
     suggestReplacement: "Suggest a replacement...",
     
@@ -344,6 +391,51 @@ const translations = {
     dailyGoal: "Daily goal",
     words: "words",
     pages: "pages",
+    
+    // Header tooltips
+    invite: "Invite (copy link)",
+    teamChat: "Team Chat",
+    writingTimer: "Writing Timer",
+    focusMode: "Focus Mode",
+    lightMode: "Light Mode",
+    darkModeTooltip: "Dark Mode",
+    logout: "Sign out",
+    linkCopied: "Link copied!",
+    reading: "Read only",
+    
+    // Outline panel
+    filterByStatus: "Filter by status",
+    filterByAssigned: "Filter by assigned",
+    lockScene: "Lock",
+    unlockScene: "Unlock",
+    sceneLocked: "Scene locked",
+    
+    // Comments panel
+    filterComments: "Filter comments",
+    filterSuggestions: "Filter suggestions",
+    previousComment: "Previous comment",
+    nextComment: "Next comment",
+    previousSuggestion: "Previous suggestion",
+    nextSuggestion: "Next suggestion",
+    reopen: "Reopen",
+    markResolved: "Mark as resolved",
+    moreOptions: "More options",
+    clickToViewComment: "Click to view comment",
+    
+    // Misc UI
+    expand: "Expand",
+    collapse: "Collapse",
+    scenes: "scenes",
+    sceneCount: "scene",
+    position: "Position",
+    rightClickHint: "💡 Right-click on a scene = add chapter",
+    chapter: "Chapter",
+    replies: "replies",
+    replyCount: "reply",
+    noDocuments: "No documents",
+    noHistory: "No history",
+    loadingDocument: "Loading document...",
+    validated: "Done",
   }
 };
 
@@ -601,7 +693,7 @@ const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
 };
 
 // ============ DOCUMENTS LIST ============
-const DocumentsList = ({ token, onSelectDoc, onCreateDoc, onClose }) => {
+const DocumentsList = ({ token, onSelectDoc, onCreateDoc, onClose, t = (k) => k }) => {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -621,11 +713,11 @@ const DocumentsList = ({ token, onSelectDoc, onCreateDoc, onClose }) => {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: '#333333', borderRadius: 12, padding: 32, width: '100%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h2 style={{ color: 'white', fontSize: 24, margin: 0 }}>Mes documents</h2>
+          <h2 style={{ color: 'white', fontSize: 24, margin: 0 }}>{t('myDocumentsTitle')}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
         </div>
-        <button onClick={onCreateDoc} style={{ width: '100%', padding: 16, background: '#059669', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, fontWeight: 'bold', cursor: 'pointer', marginBottom: 24 }}>+ Nouveau document</button>
-        {loading ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Chargement...</p> : docs.length === 0 ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Aucun document</p> : (
+        <button onClick={onCreateDoc} style={{ width: '100%', padding: 16, background: '#059669', border: 'none', borderRadius: 8, color: 'white', fontSize: 16, fontWeight: 'bold', cursor: 'pointer', marginBottom: 24 }}>{t('newDocument')}</button>
+        {loading ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>{t('loading')}</p> : docs.length === 0 ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>{t('noDocuments')}</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {docs.map(doc => (
               <button key={doc.shortId} onClick={() => onSelectDoc(doc.shortId)} style={{ padding: 16, background: '#484848', border: 'none', borderRadius: 8, color: 'white', textAlign: 'left', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={e => e.target.style.background = '#555555'} onMouseOut={e => e.target.style.background = '#484848'}>
@@ -641,7 +733,7 @@ const DocumentsList = ({ token, onSelectDoc, onCreateDoc, onClose }) => {
 };
 
 // ============ HISTORY PANEL ============
-const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
+const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose, t = (k) => k }) => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [restoring, setRestoring] = useState(false);
@@ -700,11 +792,11 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: '#333333', borderRadius: 12, padding: 32, width: '100%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h2 style={{ color: 'white', fontSize: 24, margin: 0 }}>Historique</h2>
+          <h2 style={{ color: 'white', fontSize: 24, margin: 0 }}>{t('versionHistory')}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
         </div>
-        {restoring && <p style={{ color: '#60a5fa', textAlign: 'center', marginBottom: 16 }}>Restauration en cours...</p>}
-        {loading ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Chargement...</p> : history.length === 0 ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>Aucun historique</p> : (
+        {restoring && <p style={{ color: '#60a5fa', textAlign: 'center', marginBottom: 16 }}>{t('loading')}</p>}
+        {loading ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>{t('loading')}</p> : history.length === 0 ? <p style={{ color: '#9ca3af', textAlign: 'center' }}>{t('noHistory')}</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {history.map(entry => {
               // Generate snapshot name from date if not provided
@@ -727,7 +819,7 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose }) => {
                     </div>
                     <div style={{ fontSize: 12, color: '#9ca3af' }}>{entry.userName} • {new Date(entry.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
                   </div>
-                  {entry.action === 'snapshot' && <button onClick={() => handleRestore(entry)} disabled={restoring} style={{ padding: '8px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12, opacity: restoring ? 0.5 : 1 }}>Restaurer</button>}
+                  {entry.action === 'snapshot' && <button onClick={() => handleRestore(entry)} disabled={restoring} style={{ padding: '8px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 12, opacity: restoring ? 0.5 : 1 }}>{t('restore')}</button>}
                 </div>
               );
             })}
@@ -764,7 +856,7 @@ const renderWithMentions = (text, darkMode) => {
   });
 };
 
-const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdit, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode, isSelected, mentionableUsers }) => {
+const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdit, canComment, isReplying, replyContent, onReplyChange, onSubmitReply, onCancelReply, darkMode, isSelected, mentionableUsers, t = (k) => k }) => {
   const replyInputRef = useRef(null);
   const editInputRef = useRef(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -883,7 +975,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
             </p>
             {comment.replies?.length > 0 && (
               <span style={{ color: '#6b7280', fontSize: 11, marginTop: 4, display: 'block' }}>
-                {comment.replies.length} réponse{comment.replies.length > 1 ? 's' : ''}
+                {comment.replies.length} {comment.replies.length > 1 ? t('replies') : t('replyCount')}
               </span>
             )}
           </div>
@@ -935,7 +1027,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
           <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
             <button 
               onClick={(e) => { e.stopPropagation(); onResolve(comment.id); }}
-              title={comment.resolved ? 'Rouvrir' : 'Marquer comme résolu'}
+              title={comment.resolved ? t('reopen') : t('markResolved')}
               style={{ 
                 width: 28, 
                 height: 28, 
@@ -971,7 +1063,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
             </button>
             <button 
               onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
-              title="Plus d'options"
+              title={t('moreOptions')}
               style={{ 
                 width: 28, 
                 height: 28, 
@@ -1032,7 +1124,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
                     </svg>
-                    Modifier
+                    {t('edit')}
                   </button>
                   <button
                     onClick={(e) => { 
@@ -1054,7 +1146,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                     onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#555555' : '#f3f4f6'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                   >
-                    🗑️ Supprimer
+                    🗑️ {t('delete')}
                   </button>
                 </div>
               )}
@@ -1110,7 +1202,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                 fontSize: 12
               }}
             >
-              Annuler
+              {t('cancel')}
             </button>
             <button
               onClick={() => {
@@ -1190,7 +1282,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
               ref={replyInputRef} 
               value={replyContent} 
               onChange={handleReplyChange} 
-              placeholder="Répondre... (@mention)" 
+              placeholder={`${t('reply')}... (@mention)`} 
               onKeyDown={(e) => {
                 // Handle mention navigation
                 if (showReplyMentions && filteredReplyMentions.length > 0) {
@@ -1319,7 +1411,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                   fontWeight: 500
                 }}
               >
-                Répondre
+                {t('reply')}
               </button>
               <button 
                 onClick={onCancelReply} 
@@ -1333,7 +1425,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
                   fontSize: 12 
                 }}
               >
-                Annuler
+                {t('cancel')}
               </button>
             </div>
           </div>
@@ -1360,7 +1452,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 });
 
 // ============ COMMENTS SIDEBAR (scrolls with content) ============
-const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollContainerRef, scriptScrollHeight, token, docId, canComment, onClose, darkMode, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
+const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollContainerRef, scriptScrollHeight, token, docId, canComment, onClose, darkMode, t = (k) => k, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [newCommentFor, setNewCommentFor] = useState(null);
@@ -1739,7 +1831,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
               fontSize: 13,
               fontWeight: filter === 'comments' ? 600 : 400
             }}
-            title="Filtrer les commentaires"
+            title={t('filterComments')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
@@ -1764,7 +1856,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                 fontSize: 13,
                 fontWeight: filter === 'suggestions' ? 600 : 400
               }}
-              title="Filtrer les suggestions"
+              title={t('filterSuggestions')}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
@@ -1788,7 +1880,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
               padding: '4px 8px',
               lineHeight: 1
             }}
-            title={filter === 'suggestions' ? 'Suggestion précédente' : 'Commentaire précédent'}
+            title={filter === 'suggestions' ? t('previousSuggestion') : t('previousComment')}
           >
             ↑
           </button>
@@ -1805,7 +1897,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
               padding: '4px 8px',
               lineHeight: 1
             }}
-            title={filter === 'suggestions' ? 'Suggestion suivante' : 'Commentaire suivant'}
+            title={filter === 'suggestions' ? t('nextSuggestion') : t('nextComment')}
           >
             ↓
           </button>
@@ -2007,7 +2099,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                         cursor: 'pointer'
                       }}
                     >
-                      Annuler
+                      {t('cancel')}
                     </button>
                     <button
                       onClick={() => {
@@ -2149,7 +2241,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                         cursor: 'pointer'
                       }}
                     >
-                      Annuler
+                      {t('cancel')}
                     </button>
                     <button
                       onClick={() => {
@@ -2227,6 +2319,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                           darkMode={darkMode}
                           isSelected={isThisCommentSelected}
                           mentionableUsers={mentionableUsers}
+                          t={t}
                         />
                       </div>
                     );
@@ -2331,7 +2424,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                                     cursor: 'pointer'
                                   }}
                                 >
-                                  Rejeter
+                                  {t('reject')}
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); onAcceptSuggestion && onAcceptSuggestion(s.id); }}
@@ -2346,7 +2439,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                                     fontWeight: 500
                                   }}
                                 >
-                                  ✓ Accepter
+                                  ✓ {t('accept')}
                                 </button>
                               </div>
                             </>
@@ -2815,7 +2908,7 @@ const ShortcutsPanel = ({ onClose, darkMode }) => {
 };
 
 // ============ RENAME CHARACTER MODAL ============
-const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
+const RenameCharacterModal = ({ characters, onRename, onClose, darkMode, t = (k) => k }) => {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
@@ -2831,12 +2924,12 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }} onClick={onClose}>
       <div style={{ background: darkMode ? '#333333' : 'white', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>Renommer un personnage</h3>
+          <h3 style={{ margin: 0, fontSize: 18, color: darkMode ? 'white' : 'black', display: 'flex', alignItems: 'center', gap: 8 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>{t('renameCharacterTitle')}</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
         </div>
         
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#6b7280' }}>Personnage actuel</label>
+          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#6b7280' }}>{t('oldName')}</label>
           <select 
             value={from} 
             onChange={e => setFrom(e.target.value)}
@@ -2866,7 +2959,7 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
         </div>
         
         <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#6b7280' }}>Nouveau nom</label>
+          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#6b7280' }}>{t('newName')}</label>
           <input 
             type="text"
             value={to} 
@@ -2887,14 +2980,14 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode }) => {
         
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ padding: '10px 20px', background: 'transparent', border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, borderRadius: 6, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14 }}>
-            Annuler
+            {t('cancel')}
           </button>
           <button 
             onClick={handleRename} 
             disabled={!from || !to || from === to}
             style={{ padding: '10px 20px', background: (!from || !to || from === to) ? '#6b7280' : '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: (!from || !to || from === to) ? 'default' : 'pointer', fontSize: 14, fontWeight: 500 }}
           >
-            Renommer
+            {t('renameCharacter')}
           </button>
         </div>
       </div>
@@ -3363,7 +3456,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       
       {/* Lock icon for locked scenes - only show if not active (active shows label with lock) */}
       {element.type === 'scene' && isLocked && !isActive && (
-        <span style={{ position: 'absolute', left: showSceneNumbers ? -55 : -25, top: 4, fontSize: 14, color: '#f59e0b', display: 'flex', alignItems: 'center' }} title="Scène verrouillée"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+        <span style={{ position: 'absolute', left: showSceneNumbers ? -55 : -25, top: 4, fontSize: 14, color: '#f59e0b', display: 'flex', alignItems: 'center' }} title={t('sceneLocked')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
       )}
       
       {/* Scene number left */}
@@ -3764,6 +3857,7 @@ export default function ScreenplayEditor() {
   const [showDocMenu, setShowDocMenu] = useState(false);
   const [showImportSubmenu, setShowImportSubmenu] = useState(false);
   const [showExportSubmenu, setShowExportSubmenu] = useState(false);
+  const [showLanguageSubmenu, setShowLanguageSubmenu] = useState(false);
   const [lockedScenes, setLockedScenes] = useState(new Set()); // Set of scene element IDs
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showRenameChar, setShowRenameChar] = useState(false);
@@ -6161,8 +6255,8 @@ export default function ScreenplayEditor() {
           </div>
         </div>
       )}
-      {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={() => { setShowDocsList(false); setShowTemplateModal(true); }} onClose={() => setShowDocsList(false)} />}
-      {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} />}
+      {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={() => { setShowDocsList(false); setShowTemplateModal(true); }} onClose={() => setShowDocsList(false)} t={t} />}
+      {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} t={t} />}
       
       {/* Search Panel */}
       {showSearch && (
@@ -6323,10 +6417,32 @@ export default function ScreenplayEditor() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                   {t('chatNotifications')} {chatNotificationSound && '✓'}
                 </button>
-                <button onClick={() => { setLanguage(language === 'fr' ? 'en' : 'fr'); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                  {t('language')}: {language === 'fr' ? '🇫🇷 Français' : '🇺🇸 English'}
-                </button>
+                
+                {/* Language Submenu */}
+                <div 
+                  style={{ position: 'relative' }}
+                  onMouseEnter={() => setShowLanguageSubmenu(true)}
+                  onMouseLeave={() => setShowLanguageSubmenu(false)}
+                >
+                  <button style={{ width: '100%', padding: '10px 14px', background: showLanguageSubmenu ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                      {t('language')}
+                    </span>
+                    <span style={{ color: '#6b7280' }}>▸</span>
+                  </button>
+                  {showLanguageSubmenu && (
+                    <div style={{ position: 'absolute', left: '100%', top: 0, marginLeft: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 140, zIndex: 501, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                      <button onClick={() => { setLanguage('fr'); setShowToolsMenu(false); setShowLanguageSubmenu(false); }} style={{ width: '100%', padding: '10px 14px', background: language === 'fr' ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        🇫🇷 Français {language === 'fr' && '✓'}
+                      </button>
+                      <button onClick={() => { setLanguage('en'); setShowToolsMenu(false); setShowLanguageSubmenu(false); }} style={{ width: '100%', padding: '10px 14px', background: language === 'en' ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        🇺🇸 English {language === 'en' && '✓'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
                 <button onClick={() => { setShowShortcuts(true); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 8h.001"/><path d="M10 8h.001"/><path d="M14 8h.001"/><path d="M18 8h.001"/><path d="M8 12h.001"/><path d="M12 12h.001"/><path d="M16 12h.001"/><path d="M7 16h10"/></svg>{t('shortcuts')}</span><span style={{ color: '#6b7280', fontSize: 10 }}>⌘?</span>
                 </button>
@@ -6356,8 +6472,8 @@ export default function ScreenplayEditor() {
             />
           </div>
           {docId && lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
-          {docId && !canEdit && <span style={{ fontSize: 10, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>Lecture</span>}
-          {loading && <span style={{ fontSize: 11, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ display: 'inline-block', width: 8, height: 8, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Chargement...</span>}
+          {docId && !canEdit && <span style={{ fontSize: 10, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>{t('reading')}</span>}
+          {loading && <span style={{ fontSize: 11, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ display: 'inline-block', width: 8, height: 8, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> {t('loading')}</span>}
           {importing && <span style={{ fontSize: 11, color: '#f59e0b' }}>Import en cours...</span>}
         </div>
         
@@ -6371,7 +6487,7 @@ export default function ScreenplayEditor() {
                 <button 
                   onClick={handleLogout} 
                   style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }} 
-                  title="Déconnexion"
+                  title={t('logout')}
                 >×</button>
               </div>
               {docId && users.filter(u => u.id !== myId).slice(0, 3).map((u) => (
@@ -6380,15 +6496,15 @@ export default function ScreenplayEditor() {
               {docId && users.length > 4 && <span style={{ color: '#9ca3af', fontSize: 10, marginLeft: 2 }}>+{users.length - 4}</span>}
             </>
           ) : (
-            <button onClick={() => setShowAuthModal(true)} style={{ padding: '4px 10px', border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>Connexion</button>
-          )}
+            <button onClick={() => setShowAuthModal(true)} style={{ padding: '4px 10px', border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>{t('connection')}</button>
+          )}}
           
           {docId && (
             <>
               <button 
                 onClick={copyLink} 
                 className="header-btn"
-                data-tooltip="Inviter (copier le lien)"
+                data-tooltip={t('invite')}
                 style={{ marginLeft: 4, width: 24, height: 24, borderRadius: '50%', border: `1px dashed ${darkMode ? '#555555' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -6399,7 +6515,7 @@ export default function ScreenplayEditor() {
               <button
                 onClick={() => setShowChat(!showChat)}
                 className="header-btn"
-                data-tooltip="Chat d'équipe"
+                data-tooltip={t('teamChat')}
                 style={{ marginLeft: 2, width: 24, height: 24, borderRadius: '50%', border: 'none', background: showChat ? '#3b82f6' : (darkMode ? '#484848' : '#e5e7eb'), color: showChat ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6416,7 +6532,7 @@ export default function ScreenplayEditor() {
           <button
             onClick={() => setShowDocsList(true)}
             className="header-btn"
-            data-tooltip="Mes documents"
+            data-tooltip={t('myDocuments')}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#484848' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6427,7 +6543,7 @@ export default function ScreenplayEditor() {
           <button
             onClick={() => setShowExportMenu(!showExportMenu)}
             className="header-btn"
-            data-tooltip="Exporter"
+            data-tooltip={t('export')}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showExportMenu ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: showExportMenu ? 'white' : '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6490,7 +6606,7 @@ export default function ScreenplayEditor() {
           <button
             onClick={() => setShowOutline(!showOutline)}
             className="header-btn"
-            data-tooltip="Outline (⌘O)"
+            data-tooltip={`${t('outline')} (⌘O)`}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showOutline ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: showOutline ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6506,7 +6622,7 @@ export default function ScreenplayEditor() {
           <button
             onClick={() => setShowComments(!showComments)}
             className="header-btn"
-            data-tooltip="Commentaires"
+            data-tooltip={t('comments')}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showComments ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: showComments ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6518,7 +6634,7 @@ export default function ScreenplayEditor() {
           <button
             onClick={() => setShowTimer(!showTimer)}
             className="header-btn"
-            data-tooltip="Timer d'écriture"
+            data-tooltip={t('writingTimer')}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: showTimer ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: showTimer ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6532,7 +6648,7 @@ export default function ScreenplayEditor() {
           <button
             onClick={() => setFocusMode(!focusMode)}
             className="header-btn"
-            data-tooltip="Mode focus"
+            data-tooltip={t('focusMode')}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: focusMode ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), color: focusMode ? 'white' : '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6545,7 +6661,7 @@ export default function ScreenplayEditor() {
           <button
             onClick={() => setDarkMode(!darkMode)}
             className="header-btn"
-            data-tooltip={darkMode ? 'Mode clair' : 'Mode sombre'}
+            data-tooltip={darkMode ? t('lightMode') : t('darkModeTooltip')}
             style={{ width: 32, height: 32, borderRadius: 6, border: 'none', background: darkMode ? '#484848' : '#f3f4f6', color: '#6b7280', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             {darkMode ? (
@@ -6592,7 +6708,7 @@ export default function ScreenplayEditor() {
               <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
             </svg>
             <p style={{ marginTop: 16, color: darkMode ? '#9ca3af' : '#6b7280', fontSize: 14 }}>
-              Chargement du document...
+              {t('loadingDocument')}
             </p>
             <style>{`
               @keyframes spin {
@@ -6897,7 +7013,7 @@ export default function ScreenplayEditor() {
                           justifyContent: 'center'
                         }}
                         className="outline-btn"
-                        data-tooltip={lockedScenes.has(scene.id) ? 'Déverrouiller' : 'Verrouiller'}
+                        data-tooltip={lockedScenes.has(scene.id) ? t('unlockScene') : t('lockScene')}
                       >
                         {lockedScenes.has(scene.id) ? (
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -6931,10 +7047,10 @@ export default function ScreenplayEditor() {
                           justifyContent: 'center'
                         }}
                         className="outline-btn"
-                        data-tooltip={sceneStatus[scene.id] === 'done' ? 'Validé' 
-                          : sceneStatus[scene.id] === 'progress' ? 'En cours' 
-                          : sceneStatus[scene.id] === 'urgent' ? 'Urgent'
-                          : 'Statut'}
+                        data-tooltip={sceneStatus[scene.id] === 'done' ? t('validated') 
+                          : sceneStatus[scene.id] === 'progress' ? t('inProgress') 
+                          : sceneStatus[scene.id] === 'urgent' ? t('urgent')
+                          : t('status')}
                       >
                         {sceneStatus[scene.id] === 'done' ? '✓' 
                           : sceneStatus[scene.id] === 'progress' ? '…' 
@@ -6972,7 +7088,7 @@ export default function ScreenplayEditor() {
                           justifyContent: 'center'
                         }}
                         className="outline-btn"
-                        data-tooltip={sceneAssignments[scene.id] ? `Assigné à ${sceneAssignments[scene.id].userName}` : 'Assigner'}
+                        data-tooltip={sceneAssignments[scene.id] ? `${t('assigned')} ${sceneAssignments[scene.id].userName}` : t('assignTo')}
                       >
                         {getInitials(sceneAssignments[scene.id]?.userName) || ''}
                       </button>
@@ -6983,8 +7099,8 @@ export default function ScreenplayEditor() {
               )}
             </div>
             <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', textAlign: 'center' }}>
-              <div>{outline.length} scène{outline.length > 1 ? 's' : ''} • Position: {currentSceneNumber}/{outline.length}</div>
-              <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7 }}>💡 Clic droit sur une scène = ajouter un chapitre</div>
+              <div>{outline.length} {outline.length > 1 ? t('scenes') : t('sceneCount')} • {t('position')}: {currentSceneNumber}/{outline.length}</div>
+              <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7 }}>{t('rightClickHint')}</div>
             </div>
           </div>
         )}
@@ -7122,6 +7238,7 @@ export default function ScreenplayEditor() {
             canComment={canComment}
             onClose={() => { setShowComments(false); setSelectedCommentIndex(null); setSelectedCommentId(null); setSelectedSuggestionId(null); setPendingInlineComment(null); setPendingSuggestion(null); }}
             darkMode={darkMode}
+            t={t}
             onNavigateToElement={(idx) => {
               setActiveIndex(idx);
               setSelectedCommentIndex(idx);
@@ -7380,7 +7497,7 @@ export default function ScreenplayEditor() {
                 </span>
                 <span>{user.name}{user.role === 'owner' ? ' 👑' : ''}</span>
                 {onlineUser && (
-                  <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} title="En ligne" />
+                  <span style={{ marginLeft: 'auto', width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} title={t('online')} />
                 )}
               </button>
             );})}
@@ -7413,6 +7530,7 @@ export default function ScreenplayEditor() {
           onRename={renameCharacter}
           onClose={() => setShowRenameChar(false)}
           darkMode={darkMode}
+          t={t}
         />
       )}
       
