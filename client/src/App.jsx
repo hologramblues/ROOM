@@ -4209,6 +4209,17 @@ export default function ScreenplayEditor() {
     return () => window.removeEventListener('hashchange', handleHash);
   }, [docId]);
 
+  // Redirect to landing page if trying to access a document without being logged in
+  useEffect(() => {
+    if (docId && docId !== 'local' && !token) {
+      // Clear the hash to go back to landing page
+      window.location.hash = '';
+      setDocId(null);
+      // Show auth modal so user can login
+      setShowAuthModal(true);
+    }
+  }, [docId, token]);
+
   // Auto-backup to localStorage every 30 seconds
   useEffect(() => {
     if (!docId || elements.length === 0) return;
@@ -6126,8 +6137,8 @@ export default function ScreenplayEditor() {
 
   const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
 
-  // Show landing page if not logged in and no document (or empty hash)
-  if (!currentUser && (!docId || docId === '')) {
+  // Show landing page if not logged in (no token)
+  if (!token && (!docId || docId === '' || docId === 'local')) {
     return (
       <div style={{ 
         height: '100vh', 
