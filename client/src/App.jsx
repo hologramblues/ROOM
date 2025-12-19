@@ -57,7 +57,7 @@ const translations = {
     action: "Action",
     character: "Personnage",
     dialogue: "Dialogue",
-    parenthetical: "Parenthèse",
+    parenthetical: "Didascalie",
     transition: "Transition",
     note: "Note",
     
@@ -222,6 +222,20 @@ const translations = {
     noHistory: "Aucun historique",
     loadingDocument: "Chargement du document...",
     validated: "Validé",
+    
+    // Outline filters
+    allStatuses: "Tous les statuts",
+    inProgress: "En cours",
+    urgent: "Urgent",
+    notDefined: "Non défini",
+    status: "Statut",
+    assigned: "Assigné à",
+    assignTo: "Assigner",
+    allAssignees: "Tous",
+    unassigned: "Non assigné",
+    noCommentsOrSuggestions: "Aucun commentaire ou suggestion",
+    sequence: "Séquence",
+    newDocumentPlaceholder: "Nouveau document",
   },
   
   en: {
@@ -267,7 +281,7 @@ const translations = {
     language: "Language",
     
     // Element types
-    scene: "Scene Heading",
+    scene: "Sequence",
     action: "Action",
     character: "Character",
     dialogue: "Dialogue",
@@ -436,6 +450,20 @@ const translations = {
     noHistory: "No history",
     loadingDocument: "Loading document...",
     validated: "Done",
+    
+    // Outline filters
+    allStatuses: "All statuses",
+    inProgress: "In progress",
+    urgent: "Urgent",
+    notDefined: "Not defined",
+    status: "Status",
+    assigned: "Assigned to",
+    assignTo: "Assign",
+    allAssignees: "All",
+    unassigned: "Unassigned",
+    noCommentsOrSuggestions: "No comments or suggestions",
+    sequence: "Sequence",
+    newDocumentPlaceholder: "New document",
   }
 };
 
@@ -2268,7 +2296,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
           })()}
           
           {sortedIndices.length === 0 && !pendingInlineComment && !pendingSuggestion ? (
-            <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>Aucun commentaire ou suggestion</p>
+            <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>{t('noCommentsOrSuggestions')}</p>
           ) : sortedIndices.length > 0 ? (
             sortedIndices.map((idx, arrayIndex) => {
               const element = elements[idx];
@@ -2523,7 +2551,7 @@ const CharactersPanel = ({ characterStats, darkMode, onClose, onNavigate }) => {
 };
 
 // ============ NOTE EDITOR MODAL ============
-const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, darkMode, canPush, position, onDragStart }) => {
+const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, darkMode, canPush, position, onDragStart, t = (k) => k }) => {
   const [content, setContent] = useState(note?.content || '');
   const [color, setColor] = useState(note?.color || '#fef3c7');
   const colors = ['#fef3c7', '#dcfce7', '#dbeafe', '#fce7f3', '#f3e8ff'];
@@ -2604,14 +2632,14 @@ const NoteEditorModal = ({ elementId, note, onSave, onPushToComment, onClose, da
               onClick={() => onSave(elementId, content, color)} 
               style={{ padding: '8px 16px', background: '#2563eb', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
             >
-              Sauvegarder
+              {t('save')}
             </button>
             {note && (
               <button 
                 onClick={() => onSave(elementId, '', '')} 
                 style={{ padding: '8px 16px', background: '#ef4444', border: 'none', borderRadius: 6, color: 'white', cursor: 'pointer', fontSize: 13 }}
               >
-                Supprimer
+                {t('delete')}
               </button>
             )}
           </div>
@@ -3481,7 +3509,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       {/* Element type label when active */}
       {isActive && (
         <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-          {isLocked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>}{ELEMENT_TYPES.find(t => t.id === element.type)?.label}
+          {isLocked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>}{t(element.type)}
         </span>
       )}
       
@@ -6459,7 +6487,7 @@ export default function ScreenplayEditor() {
             <input 
               value={title} 
               onChange={e => docId ? emitTitle(e.target.value) : setTitle(e.target.value)} 
-              placeholder="Nouveau document"
+              placeholder={t('newDocumentPlaceholder')}
               style={{ 
                 background: 'transparent', 
                 border: 'none', 
@@ -6774,7 +6802,7 @@ export default function ScreenplayEditor() {
                     {outlineFilter.status === 'done' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />}
                     {outlineFilter.status === 'urgent' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />}
                     {outlineFilter.status === 'none' && <span style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #6b7280', background: 'transparent' }} />}
-                    {outlineFilter.status === 'progress' ? 'En cours' : outlineFilter.status === 'done' ? 'Validé' : outlineFilter.status === 'urgent' ? 'Urgent' : outlineFilter.status === 'none' ? 'Non défini' : 'Statut'}
+                    {outlineFilter.status === 'progress' ? t('inProgress') : outlineFilter.status === 'done' ? t('validated') : outlineFilter.status === 'urgent' ? t('urgent') : outlineFilter.status === 'none' ? t('notDefined') : t('status')}
                   </span>
                   <svg width="10" height="10" viewBox="0 0 12 12" fill="#6b7280"><path d="M3 4.5L6 8l3-3.5H3z"/></svg>
                 </button>
@@ -6795,23 +6823,23 @@ export default function ScreenplayEditor() {
                       overflow: 'hidden'
                     }}>
                       <button onClick={() => { setOutlineFilter(f => ({ ...f, status: '' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        Tous les statuts
+                        {t('allStatuses')}
                       </button>
                       <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'progress' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                        En cours
+                        {t('inProgress')}
                       </button>
                       <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'done' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
-                        Validé
+                        {t('validated')}
                       </button>
                       <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'urgent' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
-                        Urgent
+                        {t('urgent')}
                       </button>
                       <button onClick={() => { setOutlineFilter(f => ({ ...f, status: 'none' })); setShowStatusDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #6b7280', background: 'transparent' }} />
-                        Non défini
+                        {t('notDefined')}
                       </button>
                     </div>
                   </>
@@ -6838,7 +6866,7 @@ export default function ScreenplayEditor() {
                   }}
                 >
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {outlineFilter.assignee === 'unassigned' ? 'Non assigné' : outlineFilter.assignee || 'Assigné'}
+                    {outlineFilter.assignee === 'unassigned' ? t('unassigned') : outlineFilter.assignee || t('assigned')}
                   </span>
                   <svg width="10" height="10" viewBox="0 0 12 12" fill="#6b7280" style={{ flexShrink: 0 }}><path d="M3 4.5L6 8l3-3.5H3z"/></svg>
                 </button>
@@ -6861,11 +6889,11 @@ export default function ScreenplayEditor() {
                       overflowY: 'auto'
                     }}>
                       <button onClick={() => { setOutlineFilter(f => ({ ...f, assignee: '' })); setShowAssigneeDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        Tous
+                        {t('allAssignees')}
                       </button>
                       <button onClick={() => { setOutlineFilter(f => ({ ...f, assignee: 'unassigned' })); setShowAssigneeDropdown(false); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = darkMode ? '#484848' : '#f3f4f6'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <span style={{ width: 16, height: 16, borderRadius: 3, border: '1px dashed #6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8 }}>✕</span>
-                        Non assigné
+                        {t('unassigned')}
                       </button>
                       {(() => {
                         // Merge and sync colors with online users
@@ -7371,6 +7399,7 @@ export default function ScreenplayEditor() {
           darkMode={darkMode}
           canPush={!!token && !!docId && canComment}
           position={notePosition}
+          t={t}
           onDragStart={(e) => {
             e.preventDefault();
             if (e.target.tagName === 'BUTTON') return;
