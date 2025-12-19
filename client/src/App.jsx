@@ -1977,9 +1977,11 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             return (
               <div style={{ 
                 position: 'absolute',
-                top: pendingTop,
+                top: 0,
                 left: 8,
                 right: 8,
+                transform: `translateY(${pendingTop}px)`,
+                willChange: 'transform',
                 background: darkMode ? '#484848' : 'white',
                 borderRadius: 8,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
@@ -2185,9 +2187,11 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             return (
               <div style={{ 
                 position: 'absolute',
-                top: pendingTop,
+                top: 0,
                 left: 8,
                 right: 8,
+                transform: `translateY(${pendingTop}px)`,
+                willChange: 'transform',
                 background: darkMode ? '#484848' : 'white',
                 borderRadius: 8,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
@@ -2322,9 +2326,11 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                   ref={(el) => measureCard(idx, el)}
                   style={{ 
                     position: 'absolute',
-                    top: topPosition,
+                    top: 0,
                     left: 8,
-                    right: 8
+                    right: 8,
+                    transform: `translateY(${topPosition}px)`,
+                    willChange: 'transform'
                   }}
                 >
                   {/* Comments for this element */}
