@@ -6421,7 +6421,7 @@ export default function ScreenplayEditor() {
                 {/* Language Submenu */}
                 <div 
                   style={{ position: 'relative' }}
-                  onMouseEnter={() => setShowLanguageSubmenu(true)}
+                  onMouseEnter={() => { setShowLanguageSubmenu(true); setShowImportSubmenu(false); setShowExportSubmenu(false); }}
                   onMouseLeave={() => setShowLanguageSubmenu(false)}
                 >
                   <button style={{ width: '100%', padding: '10px 14px', background: showLanguageSubmenu ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -6432,13 +6432,15 @@ export default function ScreenplayEditor() {
                     <span style={{ color: '#6b7280' }}>▸</span>
                   </button>
                   {showLanguageSubmenu && (
-                    <div style={{ position: 'absolute', left: '100%', top: 0, marginLeft: 4, background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 140, zIndex: 501, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
-                      <button onClick={() => { setLanguage('fr'); setShowToolsMenu(false); setShowLanguageSubmenu(false); }} style={{ width: '100%', padding: '10px 14px', background: language === 'fr' ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        🇫🇷 Français {language === 'fr' && '✓'}
-                      </button>
-                      <button onClick={() => { setLanguage('en'); setShowToolsMenu(false); setShowLanguageSubmenu(false); }} style={{ width: '100%', padding: '10px 14px', background: language === 'en' ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        🇺🇸 English {language === 'en' && '✓'}
-                      </button>
+                    <div style={{ position: 'absolute', left: '100%', top: 0, paddingLeft: 4, zIndex: 501 }}>
+                      <div style={{ background: darkMode ? '#333333' : 'white', border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, overflow: 'hidden', minWidth: 140, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                        <button onClick={() => { setLanguage('fr'); setShowToolsMenu(false); setShowLanguageSubmenu(false); }} style={{ width: '100%', padding: '10px 14px', background: language === 'fr' ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          🇫🇷 Français {language === 'fr' && '✓'}
+                        </button>
+                        <button onClick={() => { setLanguage('en'); setShowToolsMenu(false); setShowLanguageSubmenu(false); }} style={{ width: '100%', padding: '10px 14px', background: language === 'en' ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          🇺🇸 English {language === 'en' && '✓'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -6497,7 +6499,7 @@ export default function ScreenplayEditor() {
             </>
           ) : (
             <button onClick={() => setShowAuthModal(true)} style={{ padding: '4px 10px', border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>{t('connection')}</button>
-          )}}
+          )}
           
           {docId && (
             <>
