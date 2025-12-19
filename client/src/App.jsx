@@ -3096,7 +3096,7 @@ const renderContentWithHighlights = (content, highlights) => {
 };
 
 // ============ SCENE LINE (TIPTAP VERSION) ============
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset, t = (k) => k }) => {
   const containerRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
@@ -7201,6 +7201,7 @@ export default function ScreenplayEditor() {
                           }
                         }, 150);
                       }}
+                      t={t}
                     />
                   </div>
                 ))}
