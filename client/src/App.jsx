@@ -4230,36 +4230,55 @@ export default function ScreenplayEditor() {
   // Track last saved state for auto-save comparison
   const lastSavedElementsRef = useRef(null);
   const lastSavedTitleRef = useRef(null);
+  const elementsRef = useRef(elements);
+  const titleRef = useRef(title);
   
-  // Auto-save to cloud every 5 seconds (only if changes detected)
+  // Keep refs in sync
   useEffect(() => {
-    if (!docId || !token || elements.length === 0) return;
+    elementsRef.current = elements;
+  }, [elements]);
+  
+  useEffect(() => {
+    titleRef.current = title;
+  }, [title]);
+  
+  // Auto-save to cloud every 10 seconds (only if changes detected)
+  useEffect(() => {
+    if (!docId || !token) return;
     
     const autoSaveInterval = setInterval(async () => {
+      const currentElements = elementsRef.current;
+      const currentTitle = titleRef.current;
+      
+      if (!currentElements || currentElements.length === 0) return;
+      
       // Check if there are changes since last save
-      const elementsChanged = JSON.stringify(elements) !== JSON.stringify(lastSavedElementsRef.current);
-      const titleChanged = title !== lastSavedTitleRef.current;
+      const elementsChanged = JSON.stringify(currentElements) !== JSON.stringify(lastSavedElementsRef.current);
+      const titleChanged = currentTitle !== lastSavedTitleRef.current;
       
       if (elementsChanged || titleChanged) {
         try {
           const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/autosave', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-            body: JSON.stringify({ title, elements })
+            body: JSON.stringify({ title: currentTitle, elements: currentElements })
           });
           if (res.ok) {
-            lastSavedElementsRef.current = JSON.parse(JSON.stringify(elements));
-            lastSavedTitleRef.current = title;
+            lastSavedElementsRef.current = JSON.parse(JSON.stringify(currentElements));
+            lastSavedTitleRef.current = currentTitle;
             setLastSaved(new Date());
+            console.log('[AUTOSAVE] Saved at', new Date().toLocaleTimeString());
+          } else {
+            console.error('[AUTOSAVE] Server error:', res.status);
           }
         } catch (err) { 
           console.error('[AUTOSAVE] Error:', err); 
         }
       }
-    }, 5000);
+    }, 10000); // Every 10 seconds
     
     return () => clearInterval(autoSaveInterval);
-  }, [docId, token, elements, title]);
+  }, [docId, token]); // Only recreate when docId or token changes
 
   // Helper to format snapshot name: "Title - MMDDYY HH:MM"
   const formatSnapshotName = (docTitle, isAuto = false) => {

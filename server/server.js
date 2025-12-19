@@ -1,4 +1,4 @@
-// Server V2 - Added autosave and snapshot endpoints
+// Server V7 - Require authentication for document access
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -34,123 +34,32 @@ app.get('/api/health', async (req, res) => {
   res.json({ status: 'ok', documents: docCount, users: userCount, aiEnabled: !!anthropic });
 });
 
-// ============ ADMIN ROUTES ============
-// Protected by a simple secret key (set ADMIN_SECRET in Railway env vars)
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'rooms-admin-2024';
-
-const adminAuth = (req, res, next) => {
-  const secret = req.headers['x-admin-secret'] || req.query.secret;
-  if (secret !== ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  next();
-};
-
-// Stats overview
-app.get('/api/admin/stats', adminAuth, async (req, res) => {
-  try {
-    const users = await User.countDocuments();
-    const documents = await Document.countDocuments();
-    const history = await HistoryEntry.countDocuments();
-    res.json({ users, documents, history });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// List all users
-app.get('/api/admin/users', adminAuth, async (req, res) => {
-  try {
-    const users = await User.find().select('name email createdAt').sort({ createdAt: -1 });
-    res.json({ users });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete a user
-app.delete('/api/admin/users/:id', adminAuth, async (req, res) => {
-  try {
-    await User.findByIdAndDelete(req.params.id);
-    res.json({ success: true, message: 'User deleted' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// List all documents
-app.get('/api/admin/documents', adminAuth, async (req, res) => {
-  try {
-    const documents = await Document.find().select('shortId title ownerId updatedAt').sort({ updatedAt: -1 });
-    res.json({ documents });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete a document
-app.delete('/api/admin/documents/:id', adminAuth, async (req, res) => {
-  try {
-    await Document.findOneAndDelete({ shortId: req.params.id });
-    await HistoryEntry.deleteMany({ documentId: req.params.id });
-    res.json({ success: true, message: 'Document and history deleted' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// DANGER: Reset everything
-app.post('/api/admin/reset', adminAuth, async (req, res) => {
-  try {
-    const { confirm } = req.body;
-    if (confirm !== 'DELETE_ALL') {
-      return res.status(400).json({ error: 'Send { confirm: "DELETE_ALL" } to confirm' });
-    }
-    
-    const userCount = await User.deleteMany({});
-    const docCount = await Document.deleteMany({});
-    const historyCount = await HistoryEntry.deleteMany({});
-    
-    res.json({ 
-      success: true, 
-      deleted: {
-        users: userCount.deletedCount,
-        documents: docCount.deletedCount,
-        history: historyCount.deletedCount
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 function checkDocumentAccess(doc, user, requiredRole) {
+  // REQUIRE authentication - no access without a logged-in user
+  if (!user) return false;
+  
+  // Owner always has full access
+  if (doc.ownerId.equals(user._id)) return true;
+  
+  // Check collaborator role
+  const collab = doc.collaborators.find(c => c.userId.equals(user._id));
+  if (collab) { 
+    const h = { viewer: 0, commenter: 1, editor: 2 }; 
+    return h[collab.role] >= h[requiredRole]; 
+  }
+  
+  // Check public access (only for authenticated users)
   if (doc.publicAccess.enabled) {
     const h = { viewer: 0, commenter: 1, editor: 2 };
     if (h[doc.publicAccess.role] >= h[requiredRole]) return true;
   }
-  if (!user) return false;
-  if (doc.ownerId.equals(user._id)) return true;
-  const collab = doc.collaborators.find(c => c.userId.equals(user._id));
-  if (collab) { const h = { viewer: 0, commenter: 1, editor: 2 }; return h[collab.role] >= h[requiredRole]; }
+  
   return false;
 }
 
 function getRandomColor() {
-  // Couleurs très distinctes pour les utilisateurs
-  const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
   return colors[Math.floor(Math.random() * colors.length)];
-}
-
-// Couleur déterministe basée sur le nom/id de l'utilisateur
-function getUserColor(identifier) {
-  const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#14b8a6', '#f97316', '#6366f1', '#a855f7'];
-  let hash = 0;
-  const str = String(identifier);
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
 }
 
 app.post('/api/documents', authMiddleware, async (req, res) => {
@@ -500,20 +409,9 @@ io.on('connection', (socket) => {
       let role = 'viewer';
       if (socket.user) { if (doc.ownerId.equals(socket.user._id)) role = 'editor'; else { const c = doc.collaborators.find(c => c.userId.equals(socket.user._id)); if (c) role = c.role; } }
       if (doc.publicAccess.enabled && doc.publicAccess.role === 'editor') role = 'editor';
-      
-      // Auto-add as collaborator if authenticated user and not already owner/collaborator
-      if (socket.user && !doc.ownerId.equals(socket.user._id)) {
-        const isAlreadyCollaborator = doc.collaborators.some(c => c.userId.equals(socket.user._id));
-        if (!isAlreadyCollaborator) {
-          doc.collaborators.push({ userId: socket.user._id, role: role });
-          await doc.save();
-          console.log('Auto-added collaborator:', socket.user.name, 'to document:', docId);
-        }
-      }
-      
       currentDocId = docId; socket.join(docId);
       if (!activeRooms.has(docId)) activeRooms.set(docId, new Map());
-      const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: getUserColor(socket.user?._id?.toString() || socket.user?.name || socket.id), role, cursor: null };
+      const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: socket.user?.color || getRandomColor(), role, cursor: null };
       activeRooms.get(docId).set(socket.id, userInfo);
       
       // Get collaborators with their user info
@@ -523,13 +421,13 @@ io.on('connection', (socket) => {
         const collabUsers = await User.find({ _id: { $in: collabUserIds } }).select('name color');
         collaboratorsList = doc.collaborators.map(c => {
           const user = collabUsers.find(u => u._id.equals(c.userId));
-          return { userId: c.userId, name: user?.name || 'Inconnu', color: getUserColor(c.userId.toString()), role: c.role };
+          return { userId: c.userId, name: user?.name || 'Inconnu', color: user?.color || '#6b7280', role: c.role };
         });
       }
       // Add owner to collaborators list
       const owner = await User.findById(doc.ownerId).select('name color');
       if (owner) {
-        collaboratorsList.unshift({ userId: doc.ownerId, name: owner.name, color: getUserColor(doc.ownerId.toString()), role: 'owner' });
+        collaboratorsList.unshift({ userId: doc.ownerId, name: owner.name, color: owner.color, role: 'owner' });
       }
       
       socket.emit('document-state', { 
@@ -716,28 +614,6 @@ io.on('connection', (socket) => {
         console.log('Suggestion rejected:', suggestionId);
       }
     } catch (error) { console.error('Suggestion reject error:', error); }
-  });
-
-  // ============ CHAT ============
-  
-  // Store for chat messages per document (in-memory, resets on server restart)
-  if (!global.chatHistory) global.chatHistory = new Map();
-  
-  socket.on('chat-message', ({ docId, message }) => {
-    if (!currentDocId || currentDocId !== docId) return;
-    
-    // Store message in history
-    if (!global.chatHistory.has(docId)) {
-      global.chatHistory.set(docId, []);
-    }
-    const history = global.chatHistory.get(docId);
-    history.push(message);
-    // Keep only last 100 messages
-    if (history.length > 100) history.shift();
-    
-    // Broadcast to all OTHER users in the room (not sender - they already added it locally)
-    socket.to(currentDocId).emit('chat-message', message);
-    console.log('Chat message:', message.senderName, '->', message.content.substring(0, 50));
   });
 
   // ============ CURSOR & DISCONNECT ============
