@@ -1,4 +1,4 @@
-// Server V7 - Require authentication for document access
+// Server V8 - Added Waitlist feature
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -16,6 +16,30 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/screenplay-collab';
 mongoose.connect(MONGODB_URI).then(() => console.log('Connected to MongoDB')).catch(err => console.error('MongoDB connection error:', err));
 
+// ============ WAITLIST SCHEMA ============
+const waitlistSchema = new mongoose.Schema({
+  email: { 
+    type: String, 
+    required: true, 
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
+  source: {
+    type: String,
+    default: 'landing-page'
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  },
+  notified: {
+    type: Boolean,
+    default: false
+  }
+});
+const Waitlist = mongoose.model('Waitlist', waitlistSchema);
+
 // Anthropic client (initialized only if API key is present)
 let anthropic = null;
 if (process.env.ANTHROPIC_API_KEY) {
@@ -23,7 +47,20 @@ if (process.env.ANTHROPIC_API_KEY) {
   console.log('Anthropic API initialized');
 }
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://writers-rooms.com',
+    'https://www.writers-rooms.com',
+    /\.vercel\.app$/,
+    /\.netlify\.app$/,
+    /\.railway\.app$/,
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5500'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/api/auth', authRouter);
@@ -31,7 +68,121 @@ app.use('/api/auth', authRouter);
 app.get('/api/health', async (req, res) => {
   const docCount = await Document.countDocuments();
   const userCount = await User.countDocuments();
-  res.json({ status: 'ok', documents: docCount, users: userCount, aiEnabled: !!anthropic });
+  const waitlistCount = await Waitlist.countDocuments();
+  res.json({ status: 'ok', documents: docCount, users: userCount, waitlist: waitlistCount, aiEnabled: !!anthropic });
+});
+
+// ============ WAITLIST ROUTES ============
+
+// POST /api/waitlist - Add email to waitlist (public)
+app.post('/api/waitlist', async (req, res) => {
+  try {
+    const { email, source } = req.body;
+    
+    // Basic validation
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+    
+    // Check if email already exists
+    const existing = await Waitlist.findOne({ email: email.toLowerCase() });
+    if (existing) {
+      return res.status(200).json({ 
+        message: 'Already on the list',
+        alreadyExists: true 
+      });
+    }
+    
+    // Create entry
+    const entry = new Waitlist({ 
+      email: email.toLowerCase(),
+      source: source || 'landing-page'
+    });
+    await entry.save();
+    
+    // Log for monitoring
+    console.log(`[Waitlist] New signup: ${email}`);
+    
+    res.status(201).json({ 
+      message: 'Successfully added to waitlist',
+      alreadyExists: false
+    });
+    
+  } catch (error) {
+    console.error('[Waitlist] Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/waitlist/count - Public count
+app.get('/api/waitlist/count', async (req, res) => {
+  try {
+    const count = await Waitlist.countDocuments();
+    res.json({ count });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/waitlist - Full list (admin protected)
+app.get('/api/waitlist', async (req, res) => {
+  try {
+    const adminSecret = req.headers['x-admin-secret'];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const entries = await Waitlist.find().sort({ createdAt: -1 });
+    res.json({ 
+      count: entries.length,
+      entries 
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/waitlist/export - CSV export (admin protected)
+app.get('/api/waitlist/export', async (req, res) => {
+  try {
+    const adminSecret = req.headers['x-admin-secret'];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const entries = await Waitlist.find().sort({ createdAt: -1 });
+    
+    // Generate CSV
+    const csv = ['email,source,createdAt,notified'];
+    entries.forEach(e => {
+      csv.push(`${e.email},${e.source},${e.createdAt.toISOString()},${e.notified}`);
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=waitlist.csv');
+    res.send(csv.join('\n'));
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/waitlist/:email - Remove from waitlist (admin protected)
+app.delete('/api/waitlist/:email', async (req, res) => {
+  try {
+    const adminSecret = req.headers['x-admin-secret'];
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const result = await Waitlist.deleteOne({ email: req.params.email.toLowerCase() });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Email not found' });
+    }
+    
+    res.json({ success: true, deleted: req.params.email });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 function checkDocumentAccess(doc, user, requiredRole) {
