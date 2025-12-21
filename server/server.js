@@ -51,6 +51,7 @@ app.use(cors({
   origin: [
     'https://writers-rooms.com',
     'https://www.writers-rooms.com',
+    'https://app.writers-rooms.com',
     /\.vercel\.app$/,
     /\.netlify\.app$/,
     /\.railway\.app$/,
