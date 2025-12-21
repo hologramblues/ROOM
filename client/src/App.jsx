@@ -3992,19 +3992,83 @@ export default function ScreenplayEditor() {
 
   // Simple 1:1 scroll sync between Script and Comments (like they're glued together)
   // + Scene-based sync between Script and Outline
-  // On Safari, we throttle more aggressively to avoid jank
+  // DISABLED on Safari due to performance issues
   useEffect(() => {
     const script = scriptContainerRef.current;
     if (!script) return;
     
+    // Detect Safari for this effect
+    const safariDetected = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    
+    // On Safari, completely disable scroll sync for comments - it causes too much jank
+    // Users can scroll each panel independently
+    if (safariDetected && showComments) {
+      // Only keep outline sync on Safari, skip comments sync entirely
+      let isScrollingOutline = false;
+      let outlineRAF = null;
+      let lastTopScene = null;
+      
+      const findTopSceneInScript = () => {
+        const scriptRect = script.getBoundingClientRect();
+        const sceneElements = script.querySelectorAll('[data-element-index]');
+        
+        for (const el of sceneElements) {
+          const idx = parseInt(el.getAttribute('data-element-index'), 10);
+          if (isNaN(idx) || elements[idx]?.type !== 'scene') continue;
+          
+          const rect = el.getBoundingClientRect();
+          if (rect.top >= scriptRect.top - 50 && rect.top <= scriptRect.top + 150) {
+            return idx;
+          }
+          if (rect.bottom > scriptRect.top + 50) {
+            return idx;
+          }
+        }
+        return null;
+      };
+      
+      const scrollOutlineToScene = (sceneIndex) => {
+        const outline = outlineSidebarRef.current;
+        if (!outline) return;
+        const sceneEl = outline.querySelector(`[data-outline-element-index="${sceneIndex}"]`);
+        if (sceneEl) {
+          const outlineRect = outline.getBoundingClientRect();
+          const sceneRect = sceneEl.getBoundingClientRect();
+          const targetScroll = outline.scrollTop + (sceneRect.top - outlineRect.top) - 10;
+          outline.scrollTop = Math.max(0, targetScroll);
+        }
+      };
+      
+      const handleScriptScroll = () => {
+        const outline = outlineSidebarRef.current;
+        // Only sync outline, NOT comments
+        if (!isScrollingOutline && outline) {
+          if (outlineRAF) cancelAnimationFrame(outlineRAF);
+          outlineRAF = requestAnimationFrame(() => {
+            const topScene = findTopSceneInScript();
+            if (topScene !== null && topScene !== lastTopScene) {
+              lastTopScene = topScene;
+              isScrollingOutline = true;
+              scrollOutlineToScene(topScene);
+              setTimeout(() => { isScrollingOutline = false; }, 200);
+            }
+          });
+        }
+      };
+      
+      script.addEventListener('scroll', handleScriptScroll, { passive: true });
+      
+      return () => {
+        script.removeEventListener('scroll', handleScriptScroll);
+        if (outlineRAF) cancelAnimationFrame(outlineRAF);
+      };
+    }
+    
+    // Chrome/Firefox: Full scroll sync
     let isScrollingComments = false;
     let isScrollingOutline = false;
     let outlineRAF = null;
     let lastTopScene = null;
-    let scrollThrottleTimeout = null;
-    
-    // Detect Safari for this effect
-    const safariDetected = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     
     // Find which scene element is at the top of the script viewport
     const findTopSceneInScript = () => {
@@ -4075,14 +4139,6 @@ export default function ScreenplayEditor() {
       const comments = commentsSidebarRef.current;
       const outline = outlineSidebarRef.current;
       
-      // On Safari, throttle scroll sync to avoid jank
-      if (safariDetected) {
-        if (scrollThrottleTimeout) return;
-        scrollThrottleTimeout = setTimeout(() => {
-          scrollThrottleTimeout = null;
-        }, 50); // 50ms throttle on Safari
-      }
-      
       // 1:1 sync with comments
       if (!isScrollingComments && comments) {
         isScrollingComments = true;
@@ -4099,7 +4155,7 @@ export default function ScreenplayEditor() {
             lastTopScene = topScene;
             isScrollingOutline = true;
             scrollOutlineToScene(topScene);
-            setTimeout(() => { isScrollingOutline = false; }, safariDetected ? 200 : 100);
+            setTimeout(() => { isScrollingOutline = false; }, 100);
           }
         });
       }
@@ -4174,7 +4230,6 @@ export default function ScreenplayEditor() {
         outline.removeEventListener('scroll', outlineListener);
       }
       if (outlineRAF) cancelAnimationFrame(outlineRAF);
-      if (scrollThrottleTimeout) clearTimeout(scrollThrottleTimeout);
       clearTimeout(attachTimeout);
       clearTimeout(attachTimeout2);
     };
