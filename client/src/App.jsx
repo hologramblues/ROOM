@@ -5019,6 +5019,12 @@ export default function ScreenplayEditor() {
     setSprintTimeLeft(seconds);
   };
 
+  // Detect Safari browser for performance optimizations
+  const isSafari = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  }, []);
+
   // Track element positions for comments sync (Google Docs style)
   useEffect(() => {
     if (!showComments) return;
@@ -5112,12 +5118,6 @@ export default function ScreenplayEditor() {
   const getElementHighlights = useCallback((elementId) => {
     return highlightsByElement[elementId] || [];
   }, [highlightsByElement]);
-
-  // Detect Safari browser
-  const isSafari = useMemo(() => {
-    if (typeof navigator === 'undefined') return false;
-    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  }, []);
 
   // Apply CSS Highlights globally (throttled for performance)
   const highlightsTimeoutRef = useRef(null);
