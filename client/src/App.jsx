@@ -1710,11 +1710,18 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const unresolvedComments = comments.filter(c => !c.resolved);
   const pendingSuggestions = suggestions ? suggestions.filter(s => s.status === 'pending') : [];
   
+  // Detect Safari for performance optimizations
+  const isSafariBrowser = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  }, []);
+  
   // Track measured heights of each comment card
   const [cardHeights, setCardHeights] = useState({});
   const observersRef = useRef({});
   
   // Measure card height when rendered and observe for changes
+  // On Safari: skip ResizeObserver entirely, use estimated heights
   const measureCard = useCallback((idx, element) => {
     // Clean up old observer
     if (observersRef.current[idx]) {
@@ -1732,7 +1739,12 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
         return prev;
       });
       
-      // Observe for size changes (e.g., when replies are added)
+      // On Safari, skip ResizeObserver to avoid performance issues
+      if (isSafariBrowser) {
+        return;
+      }
+      
+      // Observe for size changes (e.g., when replies are added) - Chrome/Firefox only
       const observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
           const newHeight = entry.contentRect.height + 20; // Add padding
@@ -1747,7 +1759,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
       observer.observe(element);
       observersRef.current[idx] = observer;
     }
-  }, []);
+  }, [isSafariBrowser]);
   
   // Cleanup observers on unmount
   useEffect(() => {
@@ -1948,6 +1960,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
       {/* Content area - allow scrolling */}
       <div 
         ref={sidebarRef}
+        className="comments-sidebar-scroll-container"
         style={{ 
           flex: 1, 
           overflowY: 'auto',
@@ -3979,6 +3992,7 @@ export default function ScreenplayEditor() {
 
   // Simple 1:1 scroll sync between Script and Comments (like they're glued together)
   // + Scene-based sync between Script and Outline
+  // On Safari, we throttle more aggressively to avoid jank
   useEffect(() => {
     const script = scriptContainerRef.current;
     if (!script) return;
@@ -3987,6 +4001,10 @@ export default function ScreenplayEditor() {
     let isScrollingOutline = false;
     let outlineRAF = null;
     let lastTopScene = null;
+    let scrollThrottleTimeout = null;
+    
+    // Detect Safari for this effect
+    const safariDetected = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     
     // Find which scene element is at the top of the script viewport
     const findTopSceneInScript = () => {
@@ -4057,6 +4075,14 @@ export default function ScreenplayEditor() {
       const comments = commentsSidebarRef.current;
       const outline = outlineSidebarRef.current;
       
+      // On Safari, throttle scroll sync to avoid jank
+      if (safariDetected) {
+        if (scrollThrottleTimeout) return;
+        scrollThrottleTimeout = setTimeout(() => {
+          scrollThrottleTimeout = null;
+        }, 50); // 50ms throttle on Safari
+      }
+      
       // 1:1 sync with comments
       if (!isScrollingComments && comments) {
         isScrollingComments = true;
@@ -4073,7 +4099,7 @@ export default function ScreenplayEditor() {
             lastTopScene = topScene;
             isScrollingOutline = true;
             scrollOutlineToScene(topScene);
-            setTimeout(() => { isScrollingOutline = false; }, 100);
+            setTimeout(() => { isScrollingOutline = false; }, safariDetected ? 200 : 100);
           }
         });
       }
@@ -4148,6 +4174,7 @@ export default function ScreenplayEditor() {
         outline.removeEventListener('scroll', outlineListener);
       }
       if (outlineRAF) cancelAnimationFrame(outlineRAF);
+      if (scrollThrottleTimeout) clearTimeout(scrollThrottleTimeout);
       clearTimeout(attachTimeout);
       clearTimeout(attachTimeout2);
     };
@@ -4158,13 +4185,37 @@ export default function ScreenplayEditor() {
     const script = scriptContainerRef.current;
     if (!script) return;
     
+    // Detect Safari
+    const safariDetected = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    let throttleTimeout = null;
+    
     const updateHeight = () => {
-      setScriptScrollHeight(script.scrollHeight);
+      // Throttle on Safari
+      if (safariDetected) {
+        if (throttleTimeout) return;
+        throttleTimeout = setTimeout(() => {
+          throttleTimeout = null;
+          setScriptScrollHeight(script.scrollHeight);
+        }, 500);
+      } else {
+        setScriptScrollHeight(script.scrollHeight);
+      }
     };
     
     updateHeight();
     
-    // Use ResizeObserver to track content height changes
+    // On Safari, use interval instead of ResizeObserver (much less CPU)
+    if (safariDetected) {
+      const interval = setInterval(() => {
+        setScriptScrollHeight(script.scrollHeight);
+      }, 2000);
+      return () => {
+        clearInterval(interval);
+        if (throttleTimeout) clearTimeout(throttleTimeout);
+      };
+    }
+    
+    // Use ResizeObserver on Chrome/Firefox
     const observer = new ResizeObserver(updateHeight);
     observer.observe(script);
     
@@ -5026,49 +5077,59 @@ export default function ScreenplayEditor() {
   }, []);
 
   // Track element positions for comments sync (Google Docs style)
+  // On Safari, update much less frequently to avoid jank
+  const positionsUpdateTimeoutRef = useRef(null);
   useEffect(() => {
     if (!showComments) return;
     
     // Collect element positions - only update when needed
     const updatePositions = () => {
-      requestAnimationFrame(() => {
-        const positions = {};
-        const elementDivs = document.querySelectorAll('[data-element-index]');
-        elementDivs.forEach(div => {
-          const index = parseInt(div.getAttribute('data-element-index'), 10);
-          if (!isNaN(index)) {
-            const rect = div.getBoundingClientRect();
-            const containerRect = scriptContainerRef.current?.getBoundingClientRect();
-            const containerScrollTop = scriptContainerRef.current?.scrollTop || 0;
-            if (containerRect) {
-              positions[index] = rect.top - containerRect.top + containerScrollTop;
-            } else {
-              positions[index] = rect.top + window.scrollY - 60;
+      if (positionsUpdateTimeoutRef.current) return; // Throttle
+      
+      positionsUpdateTimeoutRef.current = setTimeout(() => {
+        positionsUpdateTimeoutRef.current = null;
+        requestAnimationFrame(() => {
+          const positions = {};
+          const elementDivs = document.querySelectorAll('[data-element-index]');
+          elementDivs.forEach(div => {
+            const index = parseInt(div.getAttribute('data-element-index'), 10);
+            if (!isNaN(index)) {
+              const rect = div.getBoundingClientRect();
+              const containerRect = scriptContainerRef.current?.getBoundingClientRect();
+              const containerScrollTop = scriptContainerRef.current?.scrollTop || 0;
+              if (containerRect) {
+                positions[index] = rect.top - containerRect.top + containerScrollTop;
+              } else {
+                positions[index] = rect.top + window.scrollY - 60;
+              }
             }
-          }
+          });
+          setElementPositions(positions);
         });
-        setElementPositions(positions);
-      });
+      }, isSafari ? 500 : 100); // Much longer throttle on Safari
     };
     
-    // Initial update
-    updatePositions();
+    // Initial update (delayed on Safari)
+    setTimeout(updatePositions, isSafari ? 300 : 0);
     
-    // Update on resize (throttled)
+    // Update on resize (heavily throttled)
     let resizeTimeout;
     const handleResize = () => {
       clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(updatePositions, 100);
+      resizeTimeout = setTimeout(updatePositions, isSafari ? 500 : 100);
     };
     window.addEventListener('resize', handleResize);
     
-    // Update positions less frequently on Safari
-    const positionInterval = setInterval(updatePositions, isSafari ? 3000 : 2000);
+    // Update positions very infrequently on Safari
+    const positionInterval = setInterval(updatePositions, isSafari ? 5000 : 2000);
     
     return () => {
       window.removeEventListener('resize', handleResize);
       clearInterval(positionInterval);
       clearTimeout(resizeTimeout);
+      if (positionsUpdateTimeoutRef.current) {
+        clearTimeout(positionsUpdateTimeoutRef.current);
+      }
     };
   }, [showComments, elements.length, isSafari]);
 
@@ -5120,14 +5181,20 @@ export default function ScreenplayEditor() {
   }, [highlightsByElement]);
 
   // Apply CSS Highlights globally (throttled for performance)
+  // DISABLED on Safari due to performance issues
   const highlightsTimeoutRef = useRef(null);
   useEffect(() => {
+    // Disable on Safari - use span-based highlighting instead
+    if (isSafari) {
+      return;
+    }
+    
     // Check if CSS Highlight API is supported
     if (typeof CSS === 'undefined' || !CSS.highlights) {
       return;
     }
     
-    // Throttle highlights calculation - especially important for Safari
+    // Throttle highlights calculation
     if (highlightsTimeoutRef.current) {
       clearTimeout(highlightsTimeoutRef.current);
     }
@@ -7211,6 +7278,7 @@ export default function ScreenplayEditor() {
         {/* CENTER - Script content */}
         <div 
           ref={scriptContainerRef}
+          className="script-container"
           style={{ 
             flex: 1,
             minWidth: 'fit-content',
@@ -8689,6 +8757,24 @@ export default function ScreenplayEditor() {
           .comments-sidebar-card {
             -webkit-transform: translateZ(0);
             transform: translateZ(0);
+            contain: layout style paint;
+          }
+          
+          /* Force GPU compositing for smooth scrolling */
+          .comments-sidebar-scroll-container {
+            -webkit-overflow-scrolling: touch;
+            transform: translateZ(0);
+          }
+          
+          /* Reduce repaints during scroll */
+          .script-container {
+            -webkit-overflow-scrolling: touch;
+            transform: translateZ(0);
+          }
+          
+          /* Disable animations on Safari for better perf */
+          * {
+            scroll-behavior: auto !important;
           }
         }
         
