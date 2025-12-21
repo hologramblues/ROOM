@@ -1981,7 +1981,6 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                 left: 8,
                 right: 8,
                 transform: `translateY(${pendingTop}px)`,
-                willChange: 'transform',
                 background: darkMode ? '#484848' : 'white',
                 borderRadius: 8,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
@@ -2191,7 +2190,6 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                 left: 8,
                 right: 8,
                 transform: `translateY(${pendingTop}px)`,
-                willChange: 'transform',
                 background: darkMode ? '#484848' : 'white',
                 borderRadius: 8,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
@@ -2329,8 +2327,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                     top: 0,
                     left: 8,
                     right: 8,
-                    transform: `translateY(${topPosition}px)`,
-                    willChange: 'transform'
+                    transform: `translateY(${topPosition}px)`
                   }}
                 >
                   {/* Comments for this element */}
@@ -5028,38 +5025,46 @@ export default function ScreenplayEditor() {
     
     // Collect element positions - only update when needed
     const updatePositions = () => {
-      const positions = {};
-      const elementDivs = document.querySelectorAll('[data-element-index]');
-      elementDivs.forEach(div => {
-        const index = parseInt(div.getAttribute('data-element-index'), 10);
-        if (!isNaN(index)) {
-          const rect = div.getBoundingClientRect();
-          const containerRect = scriptContainerRef.current?.getBoundingClientRect();
-          const containerScrollTop = scriptContainerRef.current?.scrollTop || 0;
-          if (containerRect) {
-            positions[index] = rect.top - containerRect.top + containerScrollTop;
-          } else {
-            positions[index] = rect.top + window.scrollY - 60;
+      requestAnimationFrame(() => {
+        const positions = {};
+        const elementDivs = document.querySelectorAll('[data-element-index]');
+        elementDivs.forEach(div => {
+          const index = parseInt(div.getAttribute('data-element-index'), 10);
+          if (!isNaN(index)) {
+            const rect = div.getBoundingClientRect();
+            const containerRect = scriptContainerRef.current?.getBoundingClientRect();
+            const containerScrollTop = scriptContainerRef.current?.scrollTop || 0;
+            if (containerRect) {
+              positions[index] = rect.top - containerRect.top + containerScrollTop;
+            } else {
+              positions[index] = rect.top + window.scrollY - 60;
+            }
           }
-        }
+        });
+        setElementPositions(positions);
       });
-      setElementPositions(positions);
     };
     
     // Initial update
     updatePositions();
     
-    // Update on resize
-    window.addEventListener('resize', updatePositions);
+    // Update on resize (throttled)
+    let resizeTimeout;
+    const handleResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(updatePositions, 100);
+    };
+    window.addEventListener('resize', handleResize);
     
-    // Update positions less frequently (elements rarely change height)
-    const positionInterval = setInterval(updatePositions, 2000);
+    // Update positions less frequently on Safari
+    const positionInterval = setInterval(updatePositions, isSafari ? 3000 : 2000);
     
     return () => {
-      window.removeEventListener('resize', updatePositions);
+      window.removeEventListener('resize', handleResize);
       clearInterval(positionInterval);
+      clearTimeout(resizeTimeout);
     };
-  }, [showComments, elements.length]);
+  }, [showComments, elements.length, isSafari]);
 
   // Pre-compute highlights per element (memoized for performance)
   const highlightsByElement = useMemo(() => {
@@ -5108,96 +5113,113 @@ export default function ScreenplayEditor() {
     return highlightsByElement[elementId] || [];
   }, [highlightsByElement]);
 
-  // Apply CSS Highlights globally
+  // Detect Safari browser
+  const isSafari = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  }, []);
+
+  // Apply CSS Highlights globally (throttled for performance)
+  const highlightsTimeoutRef = useRef(null);
   useEffect(() => {
     // Check if CSS Highlight API is supported
     if (typeof CSS === 'undefined' || !CSS.highlights) {
       return;
     }
     
-    // Clear all existing highlights
-    CSS.highlights.delete('comment-highlight');
-    CSS.highlights.delete('suggestion-highlight');
+    // Throttle highlights calculation - especially important for Safari
+    if (highlightsTimeoutRef.current) {
+      clearTimeout(highlightsTimeoutRef.current);
+    }
     
-    const commentRanges = [];
-    const suggestionRanges = [];
-    
-    // Find all elements with highlights
-    elements.forEach(element => {
-      const highlights = getElementHighlights(element.id);
-      if (highlights.length === 0) return;
+    highlightsTimeoutRef.current = setTimeout(() => {
+      // Clear all existing highlights
+      CSS.highlights.delete('comment-highlight');
+      CSS.highlights.delete('suggestion-highlight');
       
-      // Find the DOM element
-      const domEl = document.querySelector(`[data-element-id="${element.id}"]`);
-      if (!domEl) return;
+      const commentRanges = [];
+      const suggestionRanges = [];
       
-      highlights.forEach(h => {
-        try {
-          // Find the correct text node and offsets using TreeWalker
-          const walker = document.createTreeWalker(domEl, NodeFilter.SHOW_TEXT, null, false);
-          let currentOffset = 0;
-          let startNode = null, startOffset = 0;
-          let endNode = null, endOffset = 0;
-          
-          let node = walker.nextNode();
-          
-          while (node) {
-            const nodeLength = node.textContent.length;
+      // Find all elements with highlights
+      elements.forEach(element => {
+        const highlights = getElementHighlights(element.id);
+        if (highlights.length === 0) return;
+        
+        // Find the DOM element
+        const domEl = document.querySelector(`[data-element-id="${element.id}"]`);
+        if (!domEl) return;
+        
+        highlights.forEach(h => {
+          try {
+            // Find the correct text node and offsets using TreeWalker
+            const walker = document.createTreeWalker(domEl, NodeFilter.SHOW_TEXT, null, false);
+            let currentOffset = 0;
+            let startNode = null, startOffset = 0;
+            let endNode = null, endOffset = 0;
             
-            // Check if start is in this node
-            if (!startNode && currentOffset + nodeLength > h.startOffset) {
-              startNode = node;
-              startOffset = h.startOffset - currentOffset;
+            let node = walker.nextNode();
+            
+            while (node) {
+              const nodeLength = node.textContent.length;
+              
+              // Check if start is in this node
+              if (!startNode && currentOffset + nodeLength > h.startOffset) {
+                startNode = node;
+                startOffset = h.startOffset - currentOffset;
+              }
+              
+              // Check if end is in this node
+              if (!endNode && currentOffset + nodeLength >= h.endOffset) {
+                endNode = node;
+                endOffset = h.endOffset - currentOffset;
+                break;
+              }
+              
+              currentOffset += nodeLength;
+              node = walker.nextNode();
             }
             
-            // Check if end is in this node
-            if (!endNode && currentOffset + nodeLength >= h.endOffset) {
-              endNode = node;
-              endOffset = h.endOffset - currentOffset;
-              break;
+            if (startNode && endNode) {
+              const range = new Range();
+              range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
+              range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
+              
+              if (h.type === 'comment') {
+                commentRanges.push(range);
+              } else if (h.type === 'suggestion') {
+                suggestionRanges.push(range);
+              }
             }
-            
-            currentOffset += nodeLength;
-            node = walker.nextNode();
+          } catch (err) {
+            // Silently ignore highlight errors
           }
-          
-          if (startNode && endNode) {
-            const range = new Range();
-            range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
-            range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
-            
-            if (h.type === 'comment') {
-              commentRanges.push(range);
-            } else if (h.type === 'suggestion') {
-              suggestionRanges.push(range);
-            }
-          }
-        } catch (err) {
-          // Silently ignore highlight errors
-        }
+        });
       });
-    });
-    
-    // Create and register the highlights
-    if (commentRanges.length > 0) {
-      // eslint-disable-next-line no-undef
-      const commentHighlight = new Highlight(...commentRanges);
-      CSS.highlights.set('comment-highlight', commentHighlight);
-    }
-    if (suggestionRanges.length > 0) {
-      // eslint-disable-next-line no-undef
-      const suggestionHighlight = new Highlight(...suggestionRanges);
-      CSS.highlights.set('suggestion-highlight', suggestionHighlight);
-    }
+      
+      // Create and register the highlights
+      if (commentRanges.length > 0) {
+        // eslint-disable-next-line no-undef
+        const commentHighlight = new Highlight(...commentRanges);
+        CSS.highlights.set('comment-highlight', commentHighlight);
+      }
+      if (suggestionRanges.length > 0) {
+        // eslint-disable-next-line no-undef
+        const suggestionHighlight = new Highlight(...suggestionRanges);
+        CSS.highlights.set('suggestion-highlight', suggestionHighlight);
+      }
+    }, isSafari ? 300 : 100); // Longer throttle on Safari
     
     // Cleanup function
     return () => {
+      if (highlightsTimeoutRef.current) {
+        clearTimeout(highlightsTimeoutRef.current);
+      }
       if (typeof CSS !== 'undefined' && CSS.highlights) {
         CSS.highlights.delete('comment-highlight');
         CSS.highlights.delete('suggestion-highlight');
       }
     };
-  }, [elements, comments, suggestions, activeIndex, getElementHighlights]);
+  }, [elements, comments, suggestions, activeIndex, getElementHighlights, isSafari]);
 
   // Get initials from a name (e.g. "Jeremie Goldstein" -> "JG", "RomainV" -> "RV")
   // Render text content with highlighted comments (legacy fallback)
@@ -8655,6 +8677,19 @@ export default function ScreenplayEditor() {
         ::highlight(suggestion-highlight) {
           background-color: rgba(34, 197, 94, 0.3);
           text-decoration: underline wavy #16a34a;
+        }
+        
+        /* Safari performance optimizations */
+        [data-element-index] {
+          contain: layout style;
+        }
+        
+        /* Reduce paint complexity on Safari */
+        @supports (-webkit-touch-callout: none) {
+          .comments-sidebar-card {
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+          }
         }
         
         /* Custom Tooltips */
