@@ -55,6 +55,10 @@ app.use(cors({
     /\.vercel\.app$/,
     /\.netlify\.app$/,
     /\.railway\.app$/,
+    /\.framer\.app$/,
+    /\.framercanvas\.com$/,
+    /\.framer\.website$/,
+    'https://framer.com',
     'http://localhost:3000',
     'http://localhost:5173',
     'http://127.0.0.1:5500'
