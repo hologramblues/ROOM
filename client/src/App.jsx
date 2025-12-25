@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V201 - Beat Board: instant view switching (keep both views mounted)
+// V202 - Beat Board: separate zooms, timeline slider, canvas overlay controls
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3632,12 +3632,14 @@ const BeatBoard = React.memo(({
   const [draggedCard, setDraggedCard] = useState(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isOverTimeline, setIsOverTimeline] = useState(false);
-  const [zoom, setZoom] = useState(1);
+  const [canvasZoom, setCanvasZoom] = useState(1);
+  const [timelineZoom, setTimelineZoom] = useState(1); // Separate zoom for timeline
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [editingCard, setEditingCard] = useState(null);
   const canvasRef = useRef(null);
+  const timelineRef = useRef(null);
   
   const cardColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
   
@@ -3683,11 +3685,11 @@ const BeatBoard = React.memo(({
   const handleDragMove = useCallback((e) => {
     if (!draggedCard || !canvasRef.current) return;
     const canvasRect = canvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - canvasRect.left - dragOffset.x - pan.x) / zoom;
-    const y = (e.clientY - canvasRect.top - dragOffset.y - pan.y) / zoom;
+    const x = (e.clientX - canvasRect.left - dragOffset.x - pan.x) / canvasZoom;
+    const y = (e.clientY - canvasRect.top - dragOffset.y - pan.y) / canvasZoom;
     setIsOverTimeline(e.clientY - canvasRect.top < 130);
     setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, position: { x: Math.max(0, x), y: Math.max(0, y) } } : c));
-  }, [draggedCard, dragOffset, pan, zoom]);
+  }, [draggedCard, dragOffset, pan, canvasZoom]);
   
   const handleDragEnd = useCallback((e) => {
     if (!draggedCard || !canvasRef.current) return;
@@ -3725,10 +3727,10 @@ const BeatBoard = React.memo(({
   const handlePanStart = (e) => { if (e.target === canvasRef.current || e.target.classList.contains('beat-canvas-bg')) { setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); } };
   const handlePanMove = (e) => { if (isPanning) setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y }); };
   const handlePanEnd = () => setIsPanning(false);
-  const handleWheel = (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom(z => Math.min(2, Math.max(0.5, z * (e.deltaY > 0 ? 0.9 : 1.1)))); } };
+  const handleWheel = (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCanvasZoom(z => Math.min(2, Math.max(0.3, z * (e.deltaY > 0 ? 0.9 : 1.1)))); } };
   
   const addNewCard = () => {
-    const newCard = { id: 'beat_new_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle idée', synopsis: '', color: cardColors[Math.floor(Math.random() * cardColors.length)], position: { x: 100 - pan.x / zoom, y: 200 - pan.y / zoom }, timelineIndex: null, status: null, isNew: true };
+    const newCard = { id: 'beat_new_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle idée', synopsis: '', color: cardColors[Math.floor(Math.random() * cardColors.length)], position: { x: 100 - pan.x / canvasZoom, y: 200 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true };
     setBeatCards(prev => [...prev, newCard]);
     setSelectedCard(newCard.id);
     setEditingCard(newCard.id);
@@ -3843,41 +3845,53 @@ const BeatBoard = React.memo(({
   
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: darkMode ? '#1a1a1a' : '#f0f0f0', overflow: 'hidden' }}>
-      {/* Toolbar */}
+      {/* Toolbar - Simplified */}
       <div style={{ padding: '8px 16px', background: darkMode ? '#2a2a2a' : 'white', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={addNewCard} style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 14 }}>+</span> Nouvelle carte</button>
           <span style={{ fontSize: 11, color: '#6b7280' }}>{timelineCards.length} dans la timeline • {canvasCards.length} sur le canvas</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} style={{ width: 28, height: 28, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>-</button>
-          <span style={{ fontSize: 11, color: '#6b7280', minWidth: 40, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} style={{ width: 28, height: 28, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>+</button>
-          <div style={{ width: 1, height: 20, background: darkMode ? '#484848' : '#d1d5db', margin: '0 8px' }} />
-          <button onClick={applyTimelineOrder} disabled={timelineCards.filter(c => c.linkedSceneId).length === 0} style={{ padding: '6px 12px', background: '#22c55e', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', opacity: timelineCards.filter(c => c.linkedSceneId).length === 0 ? 0.5 : 1 }}>Appliquer l'ordre au script</button>
+        <button onClick={applyTimelineOrder} disabled={timelineCards.filter(c => c.linkedSceneId).length === 0} style={{ padding: '6px 12px', background: '#22c55e', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', opacity: timelineCards.filter(c => c.linkedSceneId).length === 0 ? 0.5 : 1 }}>Appliquer l'ordre au script</button>
+      </div>
+      
+      {/* Timeline zone - Video editor style */}
+      <div ref={timelineRef} style={{ padding: '8px 12px', background: isOverTimeline ? (darkMode ? '#2a4a2a' : '#dcfce7') : (darkMode ? '#252525' : '#fafafa'), borderBottom: `2px solid ${isOverTimeline ? '#22c55e' : (darkMode ? '#484848' : '#e5e7eb')}`, minHeight: 80, display: 'flex', flexDirection: 'column', gap: 6, transition: 'background 0.2s' }}>
+        {/* Timeline header with zoom slider */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
+          <span style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>TIMELINE</span>
+          <div style={{ flex: 1 }} />
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
+          <input
+            type="range"
+            min="0.3"
+            max="1.5"
+            step="0.05"
+            value={timelineZoom}
+            onChange={(e) => setTimelineZoom(parseFloat(e.target.value))}
+            style={{ width: 80, height: 4, cursor: 'pointer', accentColor: '#3b82f6' }}
+          />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
+        </div>
+        {/* Timeline cards */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+          {timelineCards.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 11, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 6, padding: 12 }}>Glissez des cartes ici pour construire votre timeline</div>
+          ) : (
+            timelineCards.map((card, idx) => (
+              <React.Fragment key={card.id}>
+                {idx > 0 && <div style={{ width: Math.max(4, 12 * timelineZoom), height: 2, background: darkMode ? '#484848' : '#d1d5db', flexShrink: 0 }} />}
+                <div style={{ transform: `scale(${timelineZoom})`, transformOrigin: 'left center', flexShrink: 0 }}>
+                  <BeatCard card={card} inTimeline={true} />
+                </div>
+              </React.Fragment>
+            ))
+          )}
         </div>
       </div>
       
-      {/* Timeline zone */}
-      <div style={{ padding: '8px 20px', background: isOverTimeline ? (darkMode ? '#2a4a2a' : '#dcfce7') : (darkMode ? '#252525' : '#fafafa'), borderBottom: `2px solid ${isOverTimeline ? '#22c55e' : (darkMode ? '#484848' : '#e5e7eb')}`, minHeight: 90, display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', transition: 'background 0.2s' }}>
-        <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, writingMode: 'vertical-rl', textOrientation: 'mixed', transform: 'rotate(180deg)', flexShrink: 0 }}>TIMELINE</div>
-        {timelineCards.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 12, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, padding: 16, margin: '0 20px' }}>Glissez des cartes ici pour construire votre timeline</div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, transform: `scale(${zoom})`, transformOrigin: 'left center' }}>
-            {timelineCards.map((card, idx) => (
-              <React.Fragment key={card.id}>
-                {idx > 0 && <div style={{ width: 16, height: 2, background: darkMode ? '#484848' : '#d1d5db', flexShrink: 0 }} />}
-                <BeatCard card={card} inTimeline={true} />
-              </React.Fragment>
-            ))}
-          </div>
-        )}
-      </div>
-      
       {/* Canvas zone */}
-      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd} onWheel={handleWheel} onClick={() => setSelectedCard(null)} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * zoom}px ${20 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}>
-        <div style={{ position: 'absolute', transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}>
+      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd} onWheel={handleWheel} onClick={() => setSelectedCard(null)} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}>
+        <div style={{ position: 'absolute', transform: `translate(${pan.x}px, ${pan.y}px) scale(${canvasZoom})`, transformOrigin: '0 0' }}>
           {canvasCards.map(card => <BeatCard key={card.id} card={card} inTimeline={false} />)}
         </div>
         {canvasCards.length === 0 && timelineCards.length > 0 && (
@@ -3887,6 +3901,13 @@ const BeatBoard = React.memo(({
             <div style={{ fontSize: 12 }}>Cliquez sur "Nouvelle carte" pour ajouter des idées</div>
           </div>
         )}
+        {/* Canvas zoom controls - Bottom right overlay */}
+        <div style={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', alignItems: 'center', gap: 4, background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.9)', padding: '6px 8px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+          <button onClick={() => setCanvasZoom(z => Math.max(0.3, z - 0.1))} style={{ width: 24, height: 24, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+          <span style={{ fontSize: 11, color: '#6b7280', minWidth: 36, textAlign: 'center' }}>{Math.round(canvasZoom * 100)}%</span>
+          <button onClick={() => setCanvasZoom(z => Math.min(2, z + 0.1))} style={{ width: 24, height: 24, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+          <button onClick={() => { setCanvasZoom(1); setPan({ x: 0, y: 0 }); }} style={{ marginLeft: 4, padding: '4px 8px', borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 10 }}>Reset</button>
+        </div>
       </div>
     </div>
   );
