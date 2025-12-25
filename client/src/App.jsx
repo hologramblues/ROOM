@@ -3769,7 +3769,7 @@ const BeatBoard = React.memo(({
     const newCard = { id: 'beat_new_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle idée', synopsis: '', color: cardColors[Math.floor(Math.random() * cardColors.length)], position: { x: 100 - pan.x / canvasZoom, y: 200 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true };
     setBeatCards(prev => [...prev, newCard]);
     setSelectedCard(newCard.id);
-    setEditingCard(newCard.id);
+    setEditModalCard(newCard);
   };
   
   const deleteCard = (cardId) => {
