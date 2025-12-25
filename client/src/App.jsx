@@ -3640,6 +3640,7 @@ const BeatBoard = React.memo(({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const canvasRef = useRef(null);
   const timelineRef = useRef(null);
   
@@ -3713,21 +3714,46 @@ const BeatBoard = React.memo(({
   const handleDragStart = (e, card) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
-    setDraggedCard(card);
-    setDragOffset({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    // Store pending drag info - actual drag starts on mouse move
+    setPendingDrag({
+      card,
+      startX: e.clientX,
+      startY: e.clientY,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top
+    });
     setSelectedCard(card.id);
   };
   
   const handleDragMove = useCallback((e) => {
+    // Check if we should start dragging (mouse moved enough from start)
+    if (pendingDrag && !draggedCard) {
+      const dx = Math.abs(e.clientX - pendingDrag.startX);
+      const dy = Math.abs(e.clientY - pendingDrag.startY);
+      if (dx > 5 || dy > 5) {
+        // Start actual drag
+        setDraggedCard(pendingDrag.card);
+        setDragOffset({ x: pendingDrag.offsetX, y: pendingDrag.offsetY });
+        setPendingDrag(null);
+      }
+      return;
+    }
+    
     if (!draggedCard || !canvasRef.current) return;
     const canvasRect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - canvasRect.left - dragOffset.x - pan.x) / canvasZoom;
     const y = (e.clientY - canvasRect.top - dragOffset.y - pan.y) / canvasZoom;
     setIsOverTimeline(e.clientY - canvasRect.top < 130);
     setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, position: { x: Math.max(0, x), y: Math.max(0, y) } } : c));
-  }, [draggedCard, dragOffset, pan, canvasZoom]);
+  }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag]);
   
   const handleDragEnd = useCallback((e) => {
+    // Clear pending drag if no actual drag happened
+    if (pendingDrag) {
+      setPendingDrag(null);
+      return;
+    }
+    
     if (!draggedCard || !canvasRef.current) return;
     const canvasRect = canvasRef.current.getBoundingClientRect();
     const isOverTL = e.clientY - canvasRect.top < 130;
@@ -3750,15 +3776,15 @@ const BeatBoard = React.memo(({
     }
     setDraggedCard(null);
     setIsOverTimeline(false);
-  }, [draggedCard]);
+  }, [draggedCard, pendingDrag]);
   
   useEffect(() => {
-    if (draggedCard) {
+    if (draggedCard || pendingDrag) {
       window.addEventListener('mousemove', handleDragMove);
       window.addEventListener('mouseup', handleDragEnd);
       return () => { window.removeEventListener('mousemove', handleDragMove); window.removeEventListener('mouseup', handleDragEnd); };
     }
-  }, [draggedCard, handleDragMove, handleDragEnd]);
+  }, [draggedCard, pendingDrag, handleDragMove, handleDragEnd]);
   
   const handlePanStart = (e) => { if (e.target === canvasRef.current || e.target.classList.contains('beat-canvas-bg')) { setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); } };
   const handlePanMove = (e) => { if (isPanning) setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y }); };
