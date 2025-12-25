@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V203 - Beat Board: timeline modes (cards/blocks), ruler with pages & time
+// V204 - Beat Board: edit modal on double-click (synopsis stays in Beat Board only)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3636,10 +3636,10 @@ const BeatBoard = React.memo(({
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [timelineMode, setTimelineMode] = useState('cards'); // 'cards' | 'blocks'
   const [hoveredBlock, setHoveredBlock] = useState(null);
+  const [editModalCard, setEditModalCard] = useState(null); // Card being edited in modal
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [editingCard, setEditingCard] = useState(null);
   const canvasRef = useRef(null);
   const timelineRef = useRef(null);
   
@@ -3825,13 +3825,12 @@ const BeatBoard = React.memo(({
   const BeatCard = ({ card, inTimeline = false }) => {
     const isSelected = selectedCard === card.id;
     const isDragging = draggedCard?.id === card.id;
-    const isEditing = editingCard === card.id;
     
     return (
       <div
         onMouseDown={(e) => handleDragStart(e, card)}
         onClick={(e) => { e.stopPropagation(); setSelectedCard(card.id); }}
-        onDoubleClick={() => setEditingCard(card.id)}
+        onDoubleClick={(e) => { e.stopPropagation(); setEditModalCard(card); }}
         style={{
           position: inTimeline ? 'relative' : 'absolute',
           left: inTimeline ? 'auto' : card.position.x,
@@ -3852,15 +3851,9 @@ const BeatBoard = React.memo(({
       >
         <div style={{ height: inTimeline ? 4 : 6, background: card.color, borderRadius: '8px 8px 0 0' }} />
         <div style={{ padding: inTimeline ? '6px 8px' : '10px 12px' }}>
-          {isEditing ? (
-            <input autoFocus value={card.title} onChange={(e) => updateCard(card.id, { title: e.target.value })} onBlur={() => setEditingCard(null)} onKeyDown={(e) => e.key === 'Enter' && setEditingCard(null)} style={{ width: '100%', background: darkMode ? '#484848' : '#f3f4f6', border: 'none', borderRadius: 4, padding: '4px 6px', color: darkMode ? 'white' : 'black', fontSize: 12, fontWeight: 600 }} />
-          ) : (
-            <div style={{ fontSize: 11, fontWeight: 600, color: darkMode ? 'white' : '#1a1a1a', marginBottom: 6, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{card.title}</div>
-          )}
-          {isEditing ? (
-            <textarea value={card.synopsis} onChange={(e) => updateCard(card.id, { synopsis: e.target.value })} placeholder="Synopsis..." style={{ width: '100%', background: darkMode ? '#484848' : '#f3f4f6', border: 'none', borderRadius: 4, padding: '4px 6px', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, resize: 'none', minHeight: 50 }} />
-          ) : !inTimeline && (
-            <div style={{ fontSize: 10, color: darkMode ? '#9ca3af' : '#6b7280', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{card.synopsis || (card.linkedSceneId ? 'Double-clic pour ajouter un synopsis' : 'Double-clic pour éditer')}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: darkMode ? 'white' : '#1a1a1a', marginBottom: 6, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{card.title}</div>
+          {!inTimeline && (
+            <div style={{ fontSize: 10, color: darkMode ? '#9ca3af' : '#6b7280', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{card.synopsis || 'Double-clic pour ajouter un résumé'}</div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: inTimeline ? 4 : 8, paddingTop: inTimeline ? 4 : 6, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}` }}>
             {card.status && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
@@ -3984,6 +3977,7 @@ const BeatBoard = React.memo(({
                     onMouseEnter={() => setHoveredBlock(card.id)}
                     onMouseLeave={() => setHoveredBlock(null)}
                     onClick={() => setSelectedCard(card.id)}
+                    onDoubleClick={() => setEditModalCard(card)}
                     style={{
                       width: blockWidth,
                       height: '100%',
@@ -4059,6 +4053,183 @@ const BeatBoard = React.memo(({
           <button onClick={() => { setCanvasZoom(1); setPan({ x: 0, y: 0 }); }} style={{ marginLeft: 4, padding: '4px 8px', borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 10 }}>Reset</button>
         </div>
       </div>
+      
+      {/* Edit Card Modal */}
+      {editModalCard && (
+        <div 
+          style={{ 
+            position: 'fixed', 
+            inset: 0, 
+            background: 'rgba(0,0,0,0.5)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            zIndex: 9999 
+          }}
+          onClick={() => setEditModalCard(null)}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              background: darkMode ? '#2a2a2a' : 'white', 
+              borderRadius: 12, 
+              width: 400, 
+              maxWidth: '90vw',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Modal Header with color bar */}
+            <div style={{ height: 8, background: editModalCard.color }} />
+            <div style={{ padding: 20 }}>
+              {/* Scene title (read-only for linked scenes) */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 6 }}>
+                  {editModalCard.linkedSceneId ? 'Scène (du script)' : 'Titre'}
+                </label>
+                {editModalCard.linkedSceneId ? (
+                  <div style={{ fontSize: 14, fontWeight: 600, color: darkMode ? 'white' : 'black', padding: '8px 12px', background: darkMode ? '#1a1a1a' : '#f3f4f6', borderRadius: 6 }}>
+                    {editModalCard.title}
+                  </div>
+                ) : (
+                  <input
+                    value={editModalCard.title}
+                    onChange={(e) => {
+                      const newTitle = e.target.value;
+                      setEditModalCard(prev => ({ ...prev, title: newTitle }));
+                      updateCard(editModalCard.id, { title: newTitle });
+                    }}
+                    style={{ 
+                      width: '100%', 
+                      padding: '8px 12px', 
+                      fontSize: 14, 
+                      fontWeight: 600,
+                      border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, 
+                      borderRadius: 6, 
+                      background: darkMode ? '#1a1a1a' : 'white',
+                      color: darkMode ? 'white' : 'black',
+                      outline: 'none'
+                    }}
+                  />
+                )}
+              </div>
+              
+              {/* Synopsis - main editable field */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 6 }}>
+                  Résumé de la scène
+                </label>
+                <textarea
+                  autoFocus
+                  value={editModalCard.synopsis || ''}
+                  onChange={(e) => {
+                    const newSynopsis = e.target.value;
+                    setEditModalCard(prev => ({ ...prev, synopsis: newSynopsis }));
+                    updateCard(editModalCard.id, { synopsis: newSynopsis });
+                  }}
+                  placeholder="Décrivez cette scène en une phrase..."
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    fontSize: 13, 
+                    border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, 
+                    borderRadius: 6, 
+                    background: darkMode ? '#1a1a1a' : 'white',
+                    color: darkMode ? 'white' : 'black',
+                    outline: 'none',
+                    resize: 'vertical',
+                    minHeight: 80,
+                    lineHeight: 1.5
+                  }}
+                />
+                <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>
+                  Ce résumé reste dans le Beat Board uniquement
+                </div>
+              </div>
+              
+              {/* Color picker */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 6 }}>Couleur</label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {cardColors.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => {
+                        setEditModalCard(prev => ({ ...prev, color }));
+                        updateCard(editModalCard.id, { color });
+                      }}
+                      style={{ 
+                        width: 28, 
+                        height: 28, 
+                        borderRadius: 6, 
+                        background: color, 
+                        border: editModalCard.color === color ? '3px solid white' : 'none',
+                        boxShadow: editModalCard.color === color ? `0 0 0 2px ${color}` : 'none',
+                        cursor: 'pointer' 
+                      }} 
+                    />
+                  ))}
+                </div>
+              </div>
+              
+              {/* Status */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 6 }}>Statut</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[
+                    { value: null, label: 'Aucun', icon: '○' },
+                    { value: 'progress', label: 'En cours', icon: '◐', bg: '#3b82f6' },
+                    { value: 'done', label: 'Terminé', icon: '✓', bg: '#22c55e' },
+                    { value: 'urgent', label: 'Urgent', icon: '!', bg: '#ef4444' }
+                  ].map(status => (
+                    <button
+                      key={status.value || 'none'}
+                      onClick={() => {
+                        setEditModalCard(prev => ({ ...prev, status: status.value }));
+                        updateCard(editModalCard.id, { status: status.value });
+                      }}
+                      style={{ 
+                        padding: '6px 12px', 
+                        borderRadius: 6, 
+                        border: editModalCard.status === status.value ? `2px solid ${status.bg || '#6b7280'}` : `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
+                        background: editModalCard.status === status.value ? (status.bg ? `${status.bg}20` : 'transparent') : 'transparent',
+                        color: darkMode ? 'white' : 'black',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }} 
+                    >
+                      <span style={{ color: status.bg || '#6b7280' }}>{status.icon}</span>
+                      {status.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button
+                  onClick={() => setEditModalCard(null)}
+                  style={{ 
+                    padding: '8px 16px', 
+                    borderRadius: 6, 
+                    border: 'none',
+                    background: '#3b82f6',
+                    color: 'white',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
