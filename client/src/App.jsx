@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V206 - Beat Board: manual double-click detection for cards
+// V207 - Beat Board: double-click handled in drag system
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3714,6 +3714,7 @@ const BeatBoard = React.memo(({
   
   const handleDragStart = (e, card) => {
     e.stopPropagation();
+    e.preventDefault(); // Prevent text selection
     const rect = e.currentTarget.getBoundingClientRect();
     // Store pending drag info - actual drag starts on mouse move
     setPendingDrag({
@@ -3721,7 +3722,8 @@ const BeatBoard = React.memo(({
       startX: e.clientX,
       startY: e.clientY,
       offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top
+      offsetY: e.clientY - rect.top,
+      time: Date.now()
     });
     setSelectedCard(card.id);
   };
@@ -3736,6 +3738,8 @@ const BeatBoard = React.memo(({
         setDraggedCard(pendingDrag.card);
         setDragOffset({ x: pendingDrag.offsetX, y: pendingDrag.offsetY });
         setPendingDrag(null);
+        // Reset double-click detection since we're dragging
+        lastClickRef.current = { cardId: null, time: 0 };
       }
       return;
     }
@@ -3749,8 +3753,22 @@ const BeatBoard = React.memo(({
   }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag]);
   
   const handleDragEnd = useCallback((e) => {
-    // Clear pending drag if no actual drag happened
+    // Handle click/double-click when no actual drag happened
     if (pendingDrag) {
+      const card = pendingDrag.card;
+      const now = Date.now();
+      const lastClick = lastClickRef.current;
+      
+      // Check for double-click (same card, within 400ms)
+      if (lastClick.cardId === card.id && now - lastClick.time < 400) {
+        // Double-click detected - open modal
+        setEditModalCard(card);
+        lastClickRef.current = { cardId: null, time: 0 };
+      } else {
+        // Single click - store for potential double-click
+        lastClickRef.current = { cardId: card.id, time: now };
+      }
+      
       setPendingDrag(null);
       return;
     }
@@ -3853,27 +3871,9 @@ const BeatBoard = React.memo(({
     const isSelected = selectedCard === card.id;
     const isDragging = draggedCard?.id === card.id;
     
-    const handleCardClick = (e) => {
-      e.stopPropagation();
-      const now = Date.now();
-      const lastClick = lastClickRef.current;
-      
-      // Check for double-click (same card, within 300ms)
-      if (lastClick.cardId === card.id && now - lastClick.time < 300) {
-        // Double-click detected
-        setEditModalCard(card);
-        lastClickRef.current = { cardId: null, time: 0 };
-      } else {
-        // Single click
-        setSelectedCard(card.id);
-        lastClickRef.current = { cardId: card.id, time: now };
-      }
-    };
-    
     return (
       <div
         onMouseDown={(e) => handleDragStart(e, card)}
-        onClick={handleCardClick}
         style={{
           position: inTimeline ? 'relative' : 'absolute',
           left: inTimeline ? 'auto' : card.position.x,
@@ -3890,6 +3890,7 @@ const BeatBoard = React.memo(({
           overflow: 'hidden',
           zIndex: isDragging ? 1000 : (isSelected ? 10 : 1),
           flexShrink: 0,
+          userSelect: 'none',
         }}
       >
         <div style={{ height: inTimeline ? 4 : 6, background: card.color, borderRadius: '8px 8px 0 0' }} />
