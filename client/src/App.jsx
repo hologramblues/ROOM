@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V209 - Beat Board: fix drag behavior, post-it style for notes
+// V210 - Beat Board: fix card/note types, restore position after timeline drop, better note colors
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3642,6 +3642,7 @@ const BeatBoard = React.memo(({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const lastClickRef = useRef({ cardId: null, time: 0 }); // For manual double-click detection
+  const dragOriginalPosRef = useRef(null); // Store original position during drag
   const canvasRef = useRef(null);
   const timelineRef = useRef(null);
   
@@ -3741,7 +3742,8 @@ const BeatBoard = React.memo(({
       startY: e.clientY,
       offsetX: e.clientX - rect.left,
       offsetY: e.clientY - rect.top,
-      time: Date.now()
+      time: Date.now(),
+      originalPosition: { ...card.position } // Store original position to restore after timeline drop
     });
     setSelectedCard(card.id);
   };
@@ -3752,7 +3754,8 @@ const BeatBoard = React.memo(({
       const dx = Math.abs(e.clientX - pendingDrag.startX);
       const dy = Math.abs(e.clientY - pendingDrag.startY);
       if (dx > 5 || dy > 5) {
-        // Start actual drag
+        // Start actual drag - store original position
+        dragOriginalPosRef.current = pendingDrag.originalPosition;
         setDraggedCard(pendingDrag.card);
         setDragOffset({ x: pendingDrag.offsetX, y: pendingDrag.offsetY });
         setPendingDrag(null);
@@ -3800,7 +3803,6 @@ const BeatBoard = React.memo(({
     }
     
     if (!draggedCard || !canvasRef.current) return;
-    const canvasRect = canvasRef.current.getBoundingClientRect();
     const timelineRect = timelineRef.current?.getBoundingClientRect();
     
     // Check if dropped specifically on the timeline zone (not just near it)
@@ -3809,11 +3811,13 @@ const BeatBoard = React.memo(({
       e.clientY <= timelineRect.bottom;
     
     if (isDroppedOnTimeline) {
-      // Add to timeline (or reorder if already in timeline)
+      // Add to timeline (or reorder if already in timeline) and RESTORE original position
       const x = e.clientX - timelineRect.left;
       const newIndex = Math.max(0, Math.floor((x - 60) / 200));
+      const originalPos = dragOriginalPosRef.current;
+      
       setBeatCards(prev => {
-        let cards = prev.map(c => c.id === draggedCard.id ? { ...c, timelineIndex: -999 } : c);
+        let cards = prev.map(c => c.id === draggedCard.id ? { ...c, timelineIndex: -999, position: originalPos || c.position } : c);
         const inTimeline = cards.filter(c => c.timelineIndex !== null && c.timelineIndex !== -999).sort((a, b) => a.timelineIndex - b.timelineIndex);
         inTimeline.splice(Math.min(newIndex, inTimeline.length), 0, cards.find(c => c.id === draggedCard.id));
         return cards.map(c => {
@@ -3822,11 +3826,11 @@ const BeatBoard = React.memo(({
         });
       });
     }
-    // If dropped in canvas, just keep the new position - do NOT change timeline status
-    // Timeline status only changes via CUT/UNCUT buttons or modal
+    // If dropped in canvas, keep the new position (user is rearranging the canvas)
     
     setDraggedCard(null);
     setIsOverTimeline(false);
+    dragOriginalPosRef.current = null; // Clean up
   }, [draggedCard, pendingDrag]);
   
   useEffect(() => {
@@ -3843,7 +3847,7 @@ const BeatBoard = React.memo(({
   const handleWheel = (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCanvasZoom(z => Math.min(2, Math.max(0.3, z * (e.deltaY > 0 ? 0.9 : 1.1)))); } };
   
   const addNewCard = () => {
-    const newCard = { id: 'beat_new_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle idée', synopsis: '', color: cardColors[Math.floor(Math.random() * cardColors.length)], position: { x: 100 - pan.x / canvasZoom, y: 200 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true };
+    const newCard = { id: 'card_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle scène', synopsis: '', color: cardColors[Math.floor(Math.random() * cardColors.length)], position: { x: 100 - pan.x / canvasZoom, y: 200 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true, type: 'scene' };
     setBeatCards(prev => [...prev, newCard]);
     setSelectedCard(newCard.id);
     setEditModalCard(newCard);
@@ -3903,20 +3907,20 @@ const BeatBoard = React.memo(({
     const isSelected = selectedCard === card.id;
     const isDragging = draggedCard?.id === card.id;
     const isCut = card.timelineIndex !== null;
-    const isNote = !card.linkedSceneId;
+    const isNote = card.type === 'note';
     
     // Post-it style for notes (solid background color)
     const noteColors = {
-      '#3b82f6': { bg: '#dbeafe', text: '#1e40af' },
-      '#22c55e': { bg: '#dcfce7', text: '#166534' },
-      '#ef4444': { bg: '#fee2e2', text: '#991b1b' },
-      '#f97316': { bg: '#ffedd5', text: '#9a3412' },
-      '#8b5cf6': { bg: '#ede9fe', text: '#5b21b6' },
-      '#ec4899': { bg: '#fce7f3', text: '#9d174d' },
-      '#06b6d4': { bg: '#cffafe', text: '#0e7490' },
-      '#fbbf24': { bg: '#fef3c7', text: '#92400e' },
+      '#3b82f6': { bg: '#dbeafe', darkBg: '#1e3a5f', text: '#1e40af', darkText: '#93c5fd' },
+      '#22c55e': { bg: '#dcfce7', darkBg: '#14532d', text: '#166534', darkText: '#86efac' },
+      '#ef4444': { bg: '#fee2e2', darkBg: '#7f1d1d', text: '#991b1b', darkText: '#fca5a5' },
+      '#f97316': { bg: '#ffedd5', darkBg: '#7c2d12', text: '#9a3412', darkText: '#fdba74' },
+      '#8b5cf6': { bg: '#ede9fe', darkBg: '#4c1d95', text: '#5b21b6', darkText: '#c4b5fd' },
+      '#ec4899': { bg: '#fce7f3', darkBg: '#831843', text: '#9d174d', darkText: '#f9a8d4' },
+      '#06b6d4': { bg: '#cffafe', darkBg: '#164e63', text: '#0e7490', darkText: '#67e8f9' },
+      '#fbbf24': { bg: '#fef3c7', darkBg: '#78350f', text: '#92400e', darkText: '#fcd34d' },
     };
-    const noteStyle = isNote ? (noteColors[card.color] || { bg: card.color + '30', text: darkMode ? 'white' : '#1a1a1a' }) : null;
+    const noteStyle = isNote ? (noteColors[card.color] || { bg: '#fef3c7', darkBg: '#78350f', text: '#92400e', darkText: '#fcd34d' }) : null;
     
     return (
       <div
@@ -3928,7 +3932,7 @@ const BeatBoard = React.memo(({
           width: inTimeline ? 160 : 200,
           minHeight: inTimeline ? 70 : 120,
           background: isNote 
-            ? (darkMode ? card.color + '40' : noteStyle?.bg || '#fef3c7')
+            ? (darkMode ? noteStyle?.darkBg : noteStyle?.bg) || '#fef3c7'
             : (darkMode ? '#3a3a3a' : 'white'),
           borderRadius: isNote ? 4 : 8,
           boxShadow: isSelected 
@@ -3952,7 +3956,7 @@ const BeatBoard = React.memo(({
             <div style={{ 
               fontSize: 11, 
               fontWeight: 600, 
-              color: isNote ? (darkMode ? '#fbbf24' : noteStyle?.text || '#92400e') : (darkMode ? 'white' : '#1a1a1a'), 
+              color: isNote ? (darkMode ? noteStyle?.darkText : noteStyle?.text) || '#92400e' : (darkMode ? 'white' : '#1a1a1a'), 
               marginBottom: 6, 
               lineHeight: 1.3, 
               overflow: 'hidden', 
@@ -3987,14 +3991,13 @@ const BeatBoard = React.memo(({
           {!inTimeline && (
             <div style={{ 
               fontSize: 10, 
-              color: isNote ? (darkMode ? '#d4a' : noteStyle?.text || '#92400e') : (darkMode ? '#9ca3af' : '#6b7280'), 
+              color: isNote ? (darkMode ? noteStyle?.darkText : noteStyle?.text) || '#92400e' : (darkMode ? '#9ca3af' : '#6b7280'), 
               lineHeight: 1.4, 
               overflow: 'hidden', 
               textOverflow: 'ellipsis', 
               display: '-webkit-box', 
               WebkitLineClamp: 3, 
               WebkitBoxOrient: 'vertical',
-              opacity: 0.8
             }}>{card.synopsis || (isNote ? 'Double-clic pour éditer' : 'Double-clic pour ajouter un résumé')}</div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: inTimeline ? 4 : 8, paddingTop: inTimeline ? 4 : 6, borderTop: `1px solid ${isNote ? (darkMode ? '#ffffff20' : '#00000015') : (darkMode ? '#484848' : '#e5e7eb')}` }}>
@@ -4024,7 +4027,7 @@ const BeatBoard = React.memo(({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={addNewCard} style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 14 }}>+</span> Carte</button>
           <button onClick={() => {
-            const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 - pan.x / canvasZoom, y: 150 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true };
+            const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 - pan.x / canvasZoom, y: 150 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true, type: 'note' };
             setBeatCards(prev => [...prev, newNote]);
             setSelectedCard(newNote.id);
             setEditModalCard(newNote);
