@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V207 - Beat Board: double-click handled in drag system
+// V208 - Beat Board: CUT/UNCUT system, all cards live on canvas, notes support
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3676,7 +3676,25 @@ const BeatBoard = React.memo(({
   }, [elements, sceneSynopsis, sceneStatus]);
   
   const timelineCards = useMemo(() => beatCards.filter(c => c.timelineIndex !== null).sort((a, b) => a.timelineIndex - b.timelineIndex), [beatCards]);
-  const canvasCards = useMemo(() => beatCards.filter(c => c.timelineIndex === null), [beatCards]);
+  // Canvas shows ALL cards (they all live here, timeline is just a "cut" view)
+  const canvasCards = useMemo(() => beatCards, [beatCards]);
+  
+  // Toggle cut/uncut status
+  const toggleCut = (cardId) => {
+    setBeatCards(prev => {
+      const card = prev.find(c => c.id === cardId);
+      if (!card) return prev;
+      
+      if (card.timelineIndex !== null) {
+        // Currently CUT -> make UNCUT
+        return prev.map(c => c.id === cardId ? { ...c, timelineIndex: null } : c);
+      } else {
+        // Currently UNCUT -> make CUT (add to end of timeline)
+        const maxIndex = Math.max(-1, ...prev.filter(c => c.timelineIndex !== null).map(c => c.timelineIndex));
+        return prev.map(c => c.id === cardId ? { ...c, timelineIndex: maxIndex + 1 } : c);
+      }
+    });
+  };
   
   // Calculate scene durations (estimated pages and time)
   const sceneMetrics = useMemo(() => {
@@ -3870,6 +3888,8 @@ const BeatBoard = React.memo(({
   const BeatCard = ({ card, inTimeline = false }) => {
     const isSelected = selectedCard === card.id;
     const isDragging = draggedCard?.id === card.id;
+    const isCut = card.timelineIndex !== null;
+    const isNote = !card.linkedSceneId;
     
     return (
       <div
@@ -3884,28 +3904,55 @@ const BeatBoard = React.memo(({
           borderRadius: 8,
           boxShadow: isSelected ? `0 0 0 2px ${card.color}, 0 8px 24px rgba(0,0,0,0.2)` : '0 2px 8px rgba(0,0,0,0.15)',
           cursor: isDragging ? 'grabbing' : 'grab',
-          opacity: isDragging ? 0.8 : 1,
+          opacity: isDragging ? 0.8 : (!inTimeline && !isCut ? 0.7 : 1),
           transform: isDragging ? 'scale(1.02) rotate(2deg)' : 'scale(1)',
-          transition: isDragging ? 'none' : 'transform 0.15s, box-shadow 0.15s',
+          transition: isDragging ? 'none' : 'transform 0.15s, box-shadow 0.15s, opacity 0.15s',
           overflow: 'hidden',
           zIndex: isDragging ? 1000 : (isSelected ? 10 : 1),
           flexShrink: 0,
           userSelect: 'none',
+          border: !inTimeline && !isCut ? `2px dashed ${darkMode ? '#555' : '#ccc'}` : 'none',
         }}
       >
         <div style={{ height: inTimeline ? 4 : 6, background: card.color, borderRadius: '8px 8px 0 0' }} />
         <div style={{ padding: inTimeline ? '6px 8px' : '10px 12px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: darkMode ? 'white' : '#1a1a1a', marginBottom: 6, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{card.title}</div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: darkMode ? 'white' : '#1a1a1a', marginBottom: 6, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', flex: 1 }}>{card.title}</div>
+            {/* CUT/UNCUT badge - only on canvas */}
+            {!inTimeline && (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleCut(card.id); }}
+                onMouseDown={(e) => e.stopPropagation()}
+                title={isCut ? 'Dans le montage (clic pour retirer)' : 'Hors montage (clic pour ajouter)'}
+                style={{
+                  padding: '2px 5px',
+                  fontSize: 8,
+                  fontWeight: 600,
+                  borderRadius: 3,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: isCut ? '#22c55e' : (darkMode ? '#555' : '#e5e7eb'),
+                  color: isCut ? 'white' : '#6b7280',
+                  flexShrink: 0,
+                }}
+              >
+                {isCut ? '🎬 CUT' : 'UNCUT'}
+              </button>
+            )}
+          </div>
           {!inTimeline && (
             <div style={{ fontSize: 10, color: darkMode ? '#9ca3af' : '#6b7280', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{card.synopsis || 'Double-clic pour ajouter un résumé'}</div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: inTimeline ? 4 : 8, paddingTop: inTimeline ? 4 : 6, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}` }}>
-            {card.status && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
-            {card.linkedSceneId && <span style={{ fontSize: 10, color: '#6b7280' }}>🔗</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {card.status && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
+              {isNote && <span style={{ fontSize: 9, padding: '2px 5px', borderRadius: 3, background: darkMode ? '#555' : '#fef3c7', color: darkMode ? '#fbbf24' : '#92400e' }}>📝 Note</span>}
+              {card.linkedSceneId && <span style={{ fontSize: 10, color: '#6b7280' }}>🔗</span>}
+            </div>
             {isSelected && !inTimeline && (
-              <div style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>
+              <div style={{ display: 'flex', gap: 2 }}>
                 {cardColors.slice(0, 4).map(color => (
-                  <button key={color} onClick={(e) => { e.stopPropagation(); updateCard(card.id, { color }); }} style={{ width: 12, height: 12, borderRadius: 3, background: color, border: card.color === color ? '2px solid white' : 'none', cursor: 'pointer' }} />
+                  <button key={color} onClick={(e) => { e.stopPropagation(); updateCard(card.id, { color }); }} onMouseDown={(e) => e.stopPropagation()} style={{ width: 12, height: 12, borderRadius: 3, background: color, border: card.color === color ? '2px solid white' : 'none', cursor: 'pointer' }} />
                 ))}
               </div>
             )}
@@ -3918,11 +3965,20 @@ const BeatBoard = React.memo(({
   
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: darkMode ? '#1a1a1a' : '#f0f0f0', overflow: 'hidden' }}>
-      {/* Toolbar - Simplified */}
+      {/* Toolbar */}
       <div style={{ padding: '8px 16px', background: darkMode ? '#2a2a2a' : 'white', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={addNewCard} style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 14 }}>+</span> Nouvelle carte</button>
-          <span style={{ fontSize: 11, color: '#6b7280' }}>{timelineCards.length} dans la timeline • {canvasCards.length} sur le canvas</span>
+          <button onClick={addNewCard} style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 14 }}>+</span> Scène</button>
+          <button onClick={() => {
+            const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 - pan.x / canvasZoom, y: 150 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true };
+            setBeatCards(prev => [...prev, newNote]);
+            setSelectedCard(newNote.id);
+            setEditModalCard(newNote);
+          }} style={{ padding: '6px 12px', background: darkMode ? '#555' : '#fef3c7', border: 'none', borderRadius: 6, color: darkMode ? '#fbbf24' : '#92400e', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>📝 Note</button>
+          <div style={{ width: 1, height: 20, background: darkMode ? '#484848' : '#d1d5db' }} />
+          <span style={{ fontSize: 11, color: '#6b7280' }}>
+            <span style={{ color: '#22c55e' }}>{timelineCards.length} CUT</span> • <span style={{ color: '#9ca3af' }}>{beatCards.filter(c => c.timelineIndex === null).length} UNCUT</span> • {beatCards.length} total
+          </span>
         </div>
         <button onClick={applyTimelineOrder} disabled={timelineCards.filter(c => c.linkedSceneId).length === 0} style={{ padding: '6px 12px', background: '#22c55e', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', opacity: timelineCards.filter(c => c.linkedSceneId).length === 0 ? 0.5 : 1 }}>Appliquer l'ordre au script</button>
       </div>
@@ -4188,6 +4244,72 @@ const BeatBoard = React.memo(({
                 />
                 <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>
                   Ce résumé reste dans le Beat Board uniquement
+                </div>
+              </div>
+              
+              {/* CUT/UNCUT toggle */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 6 }}>Montage</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => {
+                      const newIndex = editModalCard.timelineIndex === null 
+                        ? Math.max(-1, ...beatCards.filter(c => c.timelineIndex !== null).map(c => c.timelineIndex)) + 1
+                        : null;
+                      setEditModalCard(prev => ({ ...prev, timelineIndex: newIndex }));
+                      if (newIndex !== null) {
+                        setBeatCards(prev => {
+                          const maxIdx = Math.max(-1, ...prev.filter(c => c.timelineIndex !== null && c.id !== editModalCard.id).map(c => c.timelineIndex));
+                          return prev.map(c => c.id === editModalCard.id ? { ...c, timelineIndex: maxIdx + 1 } : c);
+                        });
+                      } else {
+                        setBeatCards(prev => prev.map(c => c.id === editModalCard.id ? { ...c, timelineIndex: null } : c));
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '10px 16px',
+                      borderRadius: 6,
+                      border: editModalCard.timelineIndex !== null ? '2px solid #22c55e' : `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
+                      background: editModalCard.timelineIndex !== null ? '#22c55e20' : 'transparent',
+                      color: darkMode ? 'white' : 'black',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
+                    }}
+                  >
+                    <span>🎬</span> CUT {editModalCard.timelineIndex !== null && '✓'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditModalCard(prev => ({ ...prev, timelineIndex: null }));
+                      setBeatCards(prev => prev.map(c => c.id === editModalCard.id ? { ...c, timelineIndex: null } : c));
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '10px 16px',
+                      borderRadius: 6,
+                      border: editModalCard.timelineIndex === null ? `2px solid ${darkMode ? '#555' : '#9ca3af'}` : `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
+                      background: editModalCard.timelineIndex === null ? (darkMode ? '#55555530' : '#9ca3af20') : 'transparent',
+                      color: darkMode ? 'white' : 'black',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
+                    }}
+                  >
+                    UNCUT {editModalCard.timelineIndex === null && '✓'}
+                  </button>
+                </div>
+                <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>
+                  {editModalCard.timelineIndex !== null ? 'Cette scène fait partie du montage final' : 'Cette scène est hors montage (mais reste dans le canvas)'}
                 </div>
               </div>
               
