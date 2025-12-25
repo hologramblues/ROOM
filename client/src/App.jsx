@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V193 - i18n complete: language submenu, tooltips, comments sidebar
+// V199 - Beat Board: visual story planning with timeline and canvas
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -242,6 +242,17 @@ const translations = {
     by: "par",
     replaceBy: "Remplacer par :",
     typeSuggestion: "Tapez votre suggestion...",
+    
+    // Beat Board
+    beatBoard: "Beat Board",
+    newCard: "Nouvelle carte",
+    applyOrder: "Appliquer l'ordre au script",
+    timeline: "Timeline",
+    canvas: "Canvas",
+    linkedScene: "Scène liée",
+    dragToTimeline: "Glissez des cartes ici pour construire votre timeline",
+    allInTimeline: "Toutes vos scènes sont dans la timeline",
+    addIdeas: "Cliquez sur \"Nouvelle carte\" pour ajouter des idées",
   },
   
   en: {
@@ -476,6 +487,17 @@ const translations = {
     by: "with",
     replaceBy: "Replace with:",
     typeSuggestion: "Type your suggestion...",
+    
+    // Beat Board
+    beatBoard: "Beat Board",
+    newCard: "New card",
+    applyOrder: "Apply order to script",
+    timeline: "Timeline",
+    canvas: "Canvas",
+    linkedScene: "Linked scene",
+    dragToTimeline: "Drag cards here to build your timeline",
+    allInTimeline: "All your scenes are in the timeline",
+    addIdeas: "Click \"New card\" to add ideas",
   }
 };
 
@@ -3594,6 +3616,278 @@ function buildStyleString(elementType, canEdit, isLocked) {
     .join('; ');
 }
 
+// ============ BEAT BOARD COMPONENT ============
+const BeatBoard = React.memo(({ 
+  elements, 
+  setElements, 
+  darkMode, 
+  sceneSynopsis, 
+  setSceneSynopsis,
+  sceneStatus,
+  setSceneStatus,
+  t = (k) => k 
+}) => {
+  const [beatCards, setBeatCards] = useState([]);
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [draggedCard, setDraggedCard] = useState(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isOverTimeline, setIsOverTimeline] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [editingCard, setEditingCard] = useState(null);
+  const canvasRef = useRef(null);
+  
+  const cardColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+  
+  // Initialize beat cards from scenes
+  useEffect(() => {
+    const scenes = elements.map((el, idx) => ({ ...el, index: idx })).filter(el => el.type === 'scene');
+    
+    setBeatCards(prev => {
+      const customCards = prev.filter(c => !c.linkedSceneId);
+      const sceneCards = scenes.map((scene, sceneIdx) => {
+        const existingCard = prev.find(c => c.linkedSceneId === scene.id);
+        if (existingCard) {
+          return { ...existingCard, title: scene.content || 'Nouvelle scène', synopsis: sceneSynopsis[scene.id] || existingCard.synopsis || '', status: sceneStatus[scene.id] || existingCard.status, linkedSceneIndex: scene.index };
+        }
+        return {
+          id: 'beat_' + scene.id,
+          linkedSceneId: scene.id,
+          linkedSceneIndex: scene.index,
+          title: scene.content || 'Nouvelle scène',
+          synopsis: sceneSynopsis[scene.id] || '',
+          color: cardColors[sceneIdx % cardColors.length],
+          position: { x: 50 + (sceneIdx % 5) * 220, y: 180 + Math.floor(sceneIdx / 5) * 160 },
+          timelineIndex: sceneIdx,
+          status: sceneStatus[scene.id] || null,
+          isNew: false,
+        };
+      });
+      return [...sceneCards, ...customCards];
+    });
+  }, [elements, sceneSynopsis, sceneStatus]);
+  
+  const timelineCards = useMemo(() => beatCards.filter(c => c.timelineIndex !== null).sort((a, b) => a.timelineIndex - b.timelineIndex), [beatCards]);
+  const canvasCards = useMemo(() => beatCards.filter(c => c.timelineIndex === null), [beatCards]);
+  
+  const handleDragStart = (e, card) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDraggedCard(card);
+    setDragOffset({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    setSelectedCard(card.id);
+  };
+  
+  const handleDragMove = useCallback((e) => {
+    if (!draggedCard || !canvasRef.current) return;
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const x = (e.clientX - canvasRect.left - dragOffset.x - pan.x) / zoom;
+    const y = (e.clientY - canvasRect.top - dragOffset.y - pan.y) / zoom;
+    setIsOverTimeline(e.clientY - canvasRect.top < 130);
+    setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, position: { x: Math.max(0, x), y: Math.max(0, y) } } : c));
+  }, [draggedCard, dragOffset, pan, zoom]);
+  
+  const handleDragEnd = useCallback((e) => {
+    if (!draggedCard || !canvasRef.current) return;
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const isOverTL = e.clientY - canvasRect.top < 130;
+    
+    if (isOverTL) {
+      const x = e.clientX - canvasRect.left;
+      const newIndex = Math.max(0, Math.floor((x - 60) / 200));
+      setBeatCards(prev => {
+        const currentIdx = prev.find(c => c.id === draggedCard.id)?.timelineIndex;
+        let cards = prev.map(c => c.id === draggedCard.id ? { ...c, timelineIndex: -999 } : c);
+        const inTimeline = cards.filter(c => c.timelineIndex !== null && c.timelineIndex !== -999).sort((a, b) => a.timelineIndex - b.timelineIndex);
+        inTimeline.splice(Math.min(newIndex, inTimeline.length), 0, cards.find(c => c.id === draggedCard.id));
+        return cards.map(c => {
+          const tlIdx = inTimeline.findIndex(tc => tc.id === c.id);
+          return tlIdx >= 0 ? { ...c, timelineIndex: tlIdx } : c;
+        });
+      });
+    } else {
+      setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, timelineIndex: null } : c));
+    }
+    setDraggedCard(null);
+    setIsOverTimeline(false);
+  }, [draggedCard]);
+  
+  useEffect(() => {
+    if (draggedCard) {
+      window.addEventListener('mousemove', handleDragMove);
+      window.addEventListener('mouseup', handleDragEnd);
+      return () => { window.removeEventListener('mousemove', handleDragMove); window.removeEventListener('mouseup', handleDragEnd); };
+    }
+  }, [draggedCard, handleDragMove, handleDragEnd]);
+  
+  const handlePanStart = (e) => { if (e.target === canvasRef.current || e.target.classList.contains('beat-canvas-bg')) { setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); } };
+  const handlePanMove = (e) => { if (isPanning) setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y }); };
+  const handlePanEnd = () => setIsPanning(false);
+  const handleWheel = (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom(z => Math.min(2, Math.max(0.5, z * (e.deltaY > 0 ? 0.9 : 1.1)))); } };
+  
+  const addNewCard = () => {
+    const newCard = { id: 'beat_new_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle idée', synopsis: '', color: cardColors[Math.floor(Math.random() * cardColors.length)], position: { x: 100 - pan.x / zoom, y: 200 - pan.y / zoom }, timelineIndex: null, status: null, isNew: true };
+    setBeatCards(prev => [...prev, newCard]);
+    setSelectedCard(newCard.id);
+    setEditingCard(newCard.id);
+  };
+  
+  const deleteCard = (cardId) => {
+    const card = beatCards.find(c => c.id === cardId);
+    if (card?.linkedSceneId) setBeatCards(prev => prev.map(c => c.id === cardId ? { ...c, timelineIndex: null } : c));
+    else setBeatCards(prev => prev.filter(c => c.id !== cardId));
+    setSelectedCard(null);
+  };
+  
+  const updateCard = (cardId, updates) => {
+    setBeatCards(prev => prev.map(c => c.id === cardId ? { ...c, ...updates } : c));
+    const card = beatCards.find(c => c.id === cardId);
+    if (card?.linkedSceneId && updates.synopsis !== undefined) setSceneSynopsis(prev => ({ ...prev, [card.linkedSceneId]: updates.synopsis }));
+  };
+  
+  const applyTimelineOrder = () => {
+    const linkedCards = timelineCards.filter(c => c.linkedSceneId);
+    if (linkedCards.length === 0) return;
+    
+    setElements(prev => {
+      const newElements = [];
+      const processedScenes = new Set();
+      
+      linkedCards.forEach(card => {
+        const sceneIdx = card.linkedSceneIndex;
+        if (processedScenes.has(sceneIdx)) return;
+        processedScenes.add(sceneIdx);
+        
+        // Find scene and all elements until next scene
+        let endIdx = prev.findIndex((el, i) => i > sceneIdx && el.type === 'scene');
+        if (endIdx === -1) endIdx = prev.length;
+        
+        for (let i = sceneIdx; i < endIdx; i++) {
+          newElements.push(prev[i]);
+        }
+      });
+      
+      // Add any remaining scenes not in timeline
+      prev.forEach((el, idx) => {
+        if (el.type === 'scene' && !processedScenes.has(idx)) {
+          let endIdx = prev.findIndex((e, i) => i > idx && e.type === 'scene');
+          if (endIdx === -1) endIdx = prev.length;
+          for (let i = idx; i < endIdx; i++) {
+            if (!newElements.includes(prev[i])) newElements.push(prev[i]);
+          }
+        }
+      });
+      
+      return newElements.length > 0 ? newElements : prev;
+    });
+  };
+  
+  const BeatCard = ({ card, inTimeline = false }) => {
+    const isSelected = selectedCard === card.id;
+    const isDragging = draggedCard?.id === card.id;
+    const isEditing = editingCard === card.id;
+    
+    return (
+      <div
+        onMouseDown={(e) => handleDragStart(e, card)}
+        onClick={(e) => { e.stopPropagation(); setSelectedCard(card.id); }}
+        onDoubleClick={() => setEditingCard(card.id)}
+        style={{
+          position: inTimeline ? 'relative' : 'absolute',
+          left: inTimeline ? 'auto' : card.position.x,
+          top: inTimeline ? 'auto' : card.position.y,
+          width: inTimeline ? 180 : 200,
+          minHeight: inTimeline ? 100 : 120,
+          background: darkMode ? '#3a3a3a' : 'white',
+          borderRadius: 8,
+          boxShadow: isSelected ? `0 0 0 2px ${card.color}, 0 8px 24px rgba(0,0,0,0.2)` : '0 2px 8px rgba(0,0,0,0.15)',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          opacity: isDragging ? 0.8 : 1,
+          transform: isDragging ? 'scale(1.02) rotate(2deg)' : 'scale(1)',
+          transition: isDragging ? 'none' : 'transform 0.15s, box-shadow 0.15s',
+          overflow: 'hidden',
+          zIndex: isDragging ? 1000 : (isSelected ? 10 : 1),
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ height: 6, background: card.color, borderRadius: '8px 8px 0 0' }} />
+        <div style={{ padding: '10px 12px' }}>
+          {isEditing ? (
+            <input autoFocus value={card.title} onChange={(e) => updateCard(card.id, { title: e.target.value })} onBlur={() => setEditingCard(null)} onKeyDown={(e) => e.key === 'Enter' && setEditingCard(null)} style={{ width: '100%', background: darkMode ? '#484848' : '#f3f4f6', border: 'none', borderRadius: 4, padding: '4px 6px', color: darkMode ? 'white' : 'black', fontSize: 12, fontWeight: 600 }} />
+          ) : (
+            <div style={{ fontSize: 11, fontWeight: 600, color: darkMode ? 'white' : '#1a1a1a', marginBottom: 6, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{card.title}</div>
+          )}
+          {isEditing ? (
+            <textarea value={card.synopsis} onChange={(e) => updateCard(card.id, { synopsis: e.target.value })} placeholder="Synopsis..." style={{ width: '100%', background: darkMode ? '#484848' : '#f3f4f6', border: 'none', borderRadius: 4, padding: '4px 6px', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, resize: 'none', minHeight: 50 }} />
+          ) : (
+            <div style={{ fontSize: 10, color: darkMode ? '#9ca3af' : '#6b7280', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{card.synopsis || (card.linkedSceneId ? 'Double-clic pour ajouter un synopsis' : 'Double-clic pour éditer')}</div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 6, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}` }}>
+            {card.status && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
+            {card.linkedSceneId && <span style={{ fontSize: 10, color: '#6b7280' }}>🔗</span>}
+            {isSelected && !inTimeline && (
+              <div style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>
+                {cardColors.slice(0, 4).map(color => (
+                  <button key={color} onClick={(e) => { e.stopPropagation(); updateCard(card.id, { color }); }} style={{ width: 12, height: 12, borderRadius: 3, background: color, border: card.color === color ? '2px solid white' : 'none', cursor: 'pointer' }} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        {isSelected && <button onClick={(e) => { e.stopPropagation(); deleteCard(card.id); }} style={{ position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>}
+      </div>
+    );
+  };
+  
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: darkMode ? '#1a1a1a' : '#f0f0f0', overflow: 'hidden' }}>
+      {/* Toolbar */}
+      <div style={{ padding: '8px 16px', background: darkMode ? '#2a2a2a' : 'white', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={addNewCard} style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 14 }}>+</span> Nouvelle carte</button>
+          <span style={{ fontSize: 11, color: '#6b7280' }}>{timelineCards.length} dans la timeline • {canvasCards.length} sur le canvas</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} style={{ width: 28, height: 28, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>-</button>
+          <span style={{ fontSize: 11, color: '#6b7280', minWidth: 40, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+          <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} style={{ width: 28, height: 28, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer' }}>+</button>
+          <div style={{ width: 1, height: 20, background: darkMode ? '#484848' : '#d1d5db', margin: '0 8px' }} />
+          <button onClick={applyTimelineOrder} disabled={timelineCards.filter(c => c.linkedSceneId).length === 0} style={{ padding: '6px 12px', background: '#22c55e', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', opacity: timelineCards.filter(c => c.linkedSceneId).length === 0 ? 0.5 : 1 }}>Appliquer l'ordre au script</button>
+        </div>
+      </div>
+      
+      {/* Timeline zone */}
+      <div style={{ padding: '12px 20px', background: isOverTimeline ? (darkMode ? '#2a4a2a' : '#dcfce7') : (darkMode ? '#252525' : '#fafafa'), borderBottom: `2px solid ${isOverTimeline ? '#22c55e' : (darkMode ? '#484848' : '#e5e7eb')}`, minHeight: 130, display: 'flex', alignItems: 'center', gap: 12, overflowX: 'auto', transition: 'background 0.2s' }}>
+        <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, writingMode: 'vertical-rl', textOrientation: 'mixed', transform: 'rotate(180deg)', flexShrink: 0 }}>TIMELINE</div>
+        {timelineCards.length === 0 ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 12, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, padding: 20, margin: '0 20px' }}>Glissez des cartes ici pour construire votre timeline</div>
+        ) : timelineCards.map((card, idx) => (
+          <React.Fragment key={card.id}>
+            {idx > 0 && <div style={{ width: 20, height: 2, background: darkMode ? '#484848' : '#d1d5db', flexShrink: 0 }} />}
+            <BeatCard card={card} inTimeline={true} />
+          </React.Fragment>
+        ))}
+      </div>
+      
+      {/* Canvas zone */}
+      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd} onWheel={handleWheel} onClick={() => setSelectedCard(null)} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * zoom}px ${20 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}>
+        <div style={{ position: 'absolute', transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }}>
+          {canvasCards.map(card => <BeatCard key={card.id} card={card} inTimeline={false} />)}
+        </div>
+        {canvasCards.length === 0 && timelineCards.length > 0 && (
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', color: '#6b7280' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🎬</div>
+            <div style={{ fontSize: 14, marginBottom: 8 }}>Toutes vos scènes sont dans la timeline</div>
+            <div style={{ fontSize: 12 }}>Cliquez sur "Nouvelle carte" pour ajouter des idées</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 // ============ USER AVATAR ============
 // ============ LOGO ============
 const Logo = ({ darkMode }) => {
@@ -3956,6 +4250,7 @@ export default function ScreenplayEditor() {
   const [editingSynopsis, setEditingSynopsis] = useState(null);
   const [typewriterSound, setTypewriterSound] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [activeView, setActiveView] = useState('script'); // 'script' | 'beatboard'
   
   // AI Rewrite states
   const [showAIRewrite, setShowAIRewrite] = useState(false);
@@ -5606,6 +5901,11 @@ export default function ScreenplayEditor() {
           duplicateScene(sceneIdx);
         }
       }
+      // Cmd+B = Toggle Beat Board view
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        setActiveView(v => v === 'script' ? 'beatboard' : 'script');
+      }
       // Escape = Close panels (one at a time)
       if (e.key === 'Escape') {
         if (showGoToScene) { setShowGoToScene(false); return; }
@@ -5619,7 +5919,7 @@ export default function ScreenplayEditor() {
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, token, docId, title, elements, activeIndex, undo, redo, duplicateScene]);
+  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, token, docId, title, elements, activeIndex, undo, redo, duplicateScene, activeView]);
 
   // Typewriter sound effect - placeholder for custom audio files
   // To add real typewriter sounds, place audio files in public folder and update URLs below
@@ -6674,6 +6974,60 @@ export default function ScreenplayEditor() {
               </div>
             )}
           </div>
+          
+          {/* VIEW TABS - Script / Beat Board */}
+          <div style={{ display: 'flex', marginLeft: 8, background: darkMode ? '#484848' : '#e5e7eb', borderRadius: 6, padding: 2 }}>
+            <button
+              onClick={() => setActiveView('script')}
+              style={{
+                padding: '5px 12px',
+                border: 'none',
+                borderRadius: 4,
+                background: activeView === 'script' ? (darkMode ? '#333333' : 'white') : 'transparent',
+                color: activeView === 'script' ? (darkMode ? 'white' : 'black') : '#6b7280',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                boxShadow: activeView === 'script' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              Script
+            </button>
+            <button
+              onClick={() => setActiveView('beatboard')}
+              style={{
+                padding: '5px 12px',
+                border: 'none',
+                borderRadius: 4,
+                background: activeView === 'beatboard' ? (darkMode ? '#333333' : 'white') : 'transparent',
+                color: activeView === 'beatboard' ? (darkMode ? 'white' : 'black') : '#6b7280',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                boxShadow: activeView === 'beatboard' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+              Beat Board
+            </button>
+          </div>
         </div>
         
         {/* CENTER ZONE: Title only */}
@@ -6911,6 +7265,7 @@ export default function ScreenplayEditor() {
       </div>
       
       {/* MAIN CONTENT AREA - Flex layout with sidebars */}
+      {activeView === 'script' ? (
       <div style={{ 
         flex: 1,
         display: 'flex', 
@@ -7567,6 +7922,18 @@ export default function ScreenplayEditor() {
         </div>
       )}
       </div>
+      ) : (
+        <BeatBoard
+          elements={elements}
+          setElements={setElements}
+          darkMode={darkMode}
+          sceneSynopsis={sceneSynopsis}
+          setSceneSynopsis={setSceneSynopsis}
+          sceneStatus={sceneStatus}
+          setSceneStatus={setSceneStatus}
+          t={t}
+        />
+      )}
       
       {/* Characters Panel */}
       {showCharactersPanel && (
