@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V204 - Beat Board: edit modal on double-click (synopsis stays in Beat Board only)
+// V205 - Beat Board: edit modal + pending drag for double-click support
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
