@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V199 - Beat Board: visual story planning with timeline and canvas
+// V201 - Beat Board: instant view switching (keep both views mounted)
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3798,8 +3798,8 @@ const BeatBoard = React.memo(({
           position: inTimeline ? 'relative' : 'absolute',
           left: inTimeline ? 'auto' : card.position.x,
           top: inTimeline ? 'auto' : card.position.y,
-          width: inTimeline ? 180 : 200,
-          minHeight: inTimeline ? 100 : 120,
+          width: inTimeline ? 160 : 200,
+          minHeight: inTimeline ? 70 : 120,
           background: darkMode ? '#3a3a3a' : 'white',
           borderRadius: 8,
           boxShadow: isSelected ? `0 0 0 2px ${card.color}, 0 8px 24px rgba(0,0,0,0.2)` : '0 2px 8px rgba(0,0,0,0.15)',
@@ -3812,8 +3812,8 @@ const BeatBoard = React.memo(({
           flexShrink: 0,
         }}
       >
-        <div style={{ height: 6, background: card.color, borderRadius: '8px 8px 0 0' }} />
-        <div style={{ padding: '10px 12px' }}>
+        <div style={{ height: inTimeline ? 4 : 6, background: card.color, borderRadius: '8px 8px 0 0' }} />
+        <div style={{ padding: inTimeline ? '6px 8px' : '10px 12px' }}>
           {isEditing ? (
             <input autoFocus value={card.title} onChange={(e) => updateCard(card.id, { title: e.target.value })} onBlur={() => setEditingCard(null)} onKeyDown={(e) => e.key === 'Enter' && setEditingCard(null)} style={{ width: '100%', background: darkMode ? '#484848' : '#f3f4f6', border: 'none', borderRadius: 4, padding: '4px 6px', color: darkMode ? 'white' : 'black', fontSize: 12, fontWeight: 600 }} />
           ) : (
@@ -3821,10 +3821,10 @@ const BeatBoard = React.memo(({
           )}
           {isEditing ? (
             <textarea value={card.synopsis} onChange={(e) => updateCard(card.id, { synopsis: e.target.value })} placeholder="Synopsis..." style={{ width: '100%', background: darkMode ? '#484848' : '#f3f4f6', border: 'none', borderRadius: 4, padding: '4px 6px', color: darkMode ? '#e5e7eb' : '#484848', fontSize: 11, resize: 'none', minHeight: 50 }} />
-          ) : (
+          ) : !inTimeline && (
             <div style={{ fontSize: 10, color: darkMode ? '#9ca3af' : '#6b7280', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{card.synopsis || (card.linkedSceneId ? 'Double-clic pour ajouter un synopsis' : 'Double-clic pour éditer')}</div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 6, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: inTimeline ? 4 : 8, paddingTop: inTimeline ? 4 : 6, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}` }}>
             {card.status && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
             {card.linkedSceneId && <span style={{ fontSize: 10, color: '#6b7280' }}>🔗</span>}
             {isSelected && !inTimeline && (
@@ -3859,16 +3859,20 @@ const BeatBoard = React.memo(({
       </div>
       
       {/* Timeline zone */}
-      <div style={{ padding: '12px 20px', background: isOverTimeline ? (darkMode ? '#2a4a2a' : '#dcfce7') : (darkMode ? '#252525' : '#fafafa'), borderBottom: `2px solid ${isOverTimeline ? '#22c55e' : (darkMode ? '#484848' : '#e5e7eb')}`, minHeight: 130, display: 'flex', alignItems: 'center', gap: 12, overflowX: 'auto', transition: 'background 0.2s' }}>
-        <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, writingMode: 'vertical-rl', textOrientation: 'mixed', transform: 'rotate(180deg)', flexShrink: 0 }}>TIMELINE</div>
+      <div style={{ padding: '8px 20px', background: isOverTimeline ? (darkMode ? '#2a4a2a' : '#dcfce7') : (darkMode ? '#252525' : '#fafafa'), borderBottom: `2px solid ${isOverTimeline ? '#22c55e' : (darkMode ? '#484848' : '#e5e7eb')}`, minHeight: 90, display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', transition: 'background 0.2s' }}>
+        <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, writingMode: 'vertical-rl', textOrientation: 'mixed', transform: 'rotate(180deg)', flexShrink: 0 }}>TIMELINE</div>
         {timelineCards.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 12, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, padding: 20, margin: '0 20px' }}>Glissez des cartes ici pour construire votre timeline</div>
-        ) : timelineCards.map((card, idx) => (
-          <React.Fragment key={card.id}>
-            {idx > 0 && <div style={{ width: 20, height: 2, background: darkMode ? '#484848' : '#d1d5db', flexShrink: 0 }} />}
-            <BeatCard card={card} inTimeline={true} />
-          </React.Fragment>
-        ))}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 12, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 8, padding: 16, margin: '0 20px' }}>Glissez des cartes ici pour construire votre timeline</div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, transform: `scale(${zoom})`, transformOrigin: 'left center' }}>
+            {timelineCards.map((card, idx) => (
+              <React.Fragment key={card.id}>
+                {idx > 0 && <div style={{ width: 16, height: 2, background: darkMode ? '#484848' : '#d1d5db', flexShrink: 0 }} />}
+                <BeatCard card={card} inTimeline={true} />
+              </React.Fragment>
+            ))}
+          </div>
+        )}
       </div>
       
       {/* Canvas zone */}
@@ -6978,7 +6982,8 @@ export default function ScreenplayEditor() {
           {/* VIEW TABS - Script / Beat Board */}
           <div style={{ display: 'flex', marginLeft: 8, background: darkMode ? '#484848' : '#e5e7eb', borderRadius: 6, padding: 2 }}>
             <button
-              onClick={() => setActiveView('script')}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setActiveView('script'); }}
               style={{
                 padding: '5px 12px',
                 border: 'none',
@@ -7003,7 +7008,8 @@ export default function ScreenplayEditor() {
               Script
             </button>
             <button
-              onClick={() => setActiveView('beatboard')}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setActiveView('beatboard'); }}
               style={{
                 padding: '5px 12px',
                 border: 'none',
@@ -7265,10 +7271,9 @@ export default function ScreenplayEditor() {
       </div>
       
       {/* MAIN CONTENT AREA - Flex layout with sidebars */}
-      {activeView === 'script' ? (
       <div style={{ 
         flex: 1,
-        display: 'flex', 
+        display: activeView === 'script' ? 'flex' : 'none', 
         overflow: 'auto',
         position: 'relative'
       }}>
@@ -7922,7 +7927,9 @@ export default function ScreenplayEditor() {
         </div>
       )}
       </div>
-      ) : (
+      
+      {/* Beat Board - Always mounted, hidden when not active */}
+      <div style={{ flex: 1, display: activeView === 'beatboard' ? 'flex' : 'none', flexDirection: 'column' }}>
         <BeatBoard
           elements={elements}
           setElements={setElements}
@@ -7933,7 +7940,7 @@ export default function ScreenplayEditor() {
           setSceneStatus={setSceneStatus}
           t={t}
         />
-      )}
+      </div>
       
       {/* Characters Panel */}
       {showCharactersPanel && (
