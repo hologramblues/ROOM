@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V205 - Beat Board: edit modal + pending drag for double-click support
+// V206 - Beat Board: manual double-click detection for cards
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3641,6 +3641,7 @@ const BeatBoard = React.memo(({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
+  const lastClickRef = useRef({ cardId: null, time: 0 }); // For manual double-click detection
   const canvasRef = useRef(null);
   const timelineRef = useRef(null);
   
@@ -3852,11 +3853,27 @@ const BeatBoard = React.memo(({
     const isSelected = selectedCard === card.id;
     const isDragging = draggedCard?.id === card.id;
     
+    const handleCardClick = (e) => {
+      e.stopPropagation();
+      const now = Date.now();
+      const lastClick = lastClickRef.current;
+      
+      // Check for double-click (same card, within 300ms)
+      if (lastClick.cardId === card.id && now - lastClick.time < 300) {
+        // Double-click detected
+        setEditModalCard(card);
+        lastClickRef.current = { cardId: null, time: 0 };
+      } else {
+        // Single click
+        setSelectedCard(card.id);
+        lastClickRef.current = { cardId: card.id, time: now };
+      }
+    };
+    
     return (
       <div
         onMouseDown={(e) => handleDragStart(e, card)}
-        onClick={(e) => { e.stopPropagation(); setSelectedCard(card.id); }}
-        onDoubleClick={(e) => { e.stopPropagation(); setEditModalCard(card); }}
+        onClick={handleCardClick}
         style={{
           position: inTimeline ? 'relative' : 'absolute',
           left: inTimeline ? 'auto' : card.position.x,
