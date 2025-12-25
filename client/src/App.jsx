@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V202 - Beat Board: separate zooms, timeline slider, canvas overlay controls
+// V203 - Beat Board: timeline modes (cards/blocks), ruler with pages & time
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3633,7 +3633,9 @@ const BeatBoard = React.memo(({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isOverTimeline, setIsOverTimeline] = useState(false);
   const [canvasZoom, setCanvasZoom] = useState(1);
-  const [timelineZoom, setTimelineZoom] = useState(1); // Separate zoom for timeline
+  const [timelineZoom, setTimelineZoom] = useState(1);
+  const [timelineMode, setTimelineMode] = useState('cards'); // 'cards' | 'blocks'
+  const [hoveredBlock, setHoveredBlock] = useState(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
@@ -3673,6 +3675,40 @@ const BeatBoard = React.memo(({
   
   const timelineCards = useMemo(() => beatCards.filter(c => c.timelineIndex !== null).sort((a, b) => a.timelineIndex - b.timelineIndex), [beatCards]);
   const canvasCards = useMemo(() => beatCards.filter(c => c.timelineIndex === null), [beatCards]);
+  
+  // Calculate scene durations (estimated pages and time)
+  const sceneMetrics = useMemo(() => {
+    const metrics = [];
+    let cumulativePages = 0;
+    
+    timelineCards.forEach(card => {
+      if (!card.linkedSceneId) {
+        // Custom card - estimate 0.5 page
+        metrics.push({ ...card, pages: 0.5, startPage: cumulativePages, startTime: cumulativePages * 60 });
+        cumulativePages += 0.5;
+        return;
+      }
+      
+      // Find scene elements count to estimate length
+      const sceneIdx = card.linkedSceneIndex;
+      let nextSceneIdx = elements.findIndex((el, i) => i > sceneIdx && el.type === 'scene');
+      if (nextSceneIdx === -1) nextSceneIdx = elements.length;
+      
+      const sceneElements = elements.slice(sceneIdx, nextSceneIdx);
+      // Rough estimate: ~8 elements per page average
+      const estimatedPages = Math.max(0.5, Math.round((sceneElements.length / 8) * 2) / 2);
+      
+      metrics.push({
+        ...card,
+        pages: estimatedPages,
+        startPage: cumulativePages,
+        startTime: cumulativePages * 60 // 1 page = 1 minute = 60 seconds
+      });
+      cumulativePages += estimatedPages;
+    });
+    
+    return { cards: metrics, totalPages: cumulativePages, totalTime: cumulativePages * 60 };
+  }, [timelineCards, elements]);
   
   const handleDragStart = (e, card) => {
     e.stopPropagation();
@@ -3855,16 +3891,40 @@ const BeatBoard = React.memo(({
       </div>
       
       {/* Timeline zone - Video editor style */}
-      <div ref={timelineRef} style={{ padding: '8px 12px', background: isOverTimeline ? (darkMode ? '#2a4a2a' : '#dcfce7') : (darkMode ? '#252525' : '#fafafa'), borderBottom: `2px solid ${isOverTimeline ? '#22c55e' : (darkMode ? '#484848' : '#e5e7eb')}`, minHeight: 80, display: 'flex', flexDirection: 'column', gap: 6, transition: 'background 0.2s' }}>
-        {/* Timeline header with zoom slider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
+      <div ref={timelineRef} style={{ background: isOverTimeline ? (darkMode ? '#2a4a2a' : '#dcfce7') : (darkMode ? '#252525' : '#fafafa'), borderBottom: `2px solid ${isOverTimeline ? '#22c55e' : (darkMode ? '#484848' : '#e5e7eb')}`, display: 'flex', flexDirection: 'column', transition: 'background 0.2s' }}>
+        {/* Timeline header with mode toggle and zoom */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
           <span style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>TIMELINE</span>
+          
+          {/* Mode toggle */}
+          <div style={{ display: 'flex', background: darkMode ? '#3a3a3a' : '#e5e7eb', borderRadius: 4, padding: 2, marginLeft: 8 }}>
+            <button
+              onClick={() => setTimelineMode('cards')}
+              style={{ padding: '3px 8px', fontSize: 10, border: 'none', borderRadius: 3, cursor: 'pointer', background: timelineMode === 'cards' ? (darkMode ? '#555' : 'white') : 'transparent', color: timelineMode === 'cards' ? (darkMode ? 'white' : 'black') : '#6b7280' }}
+            >
+              Cartes
+            </button>
+            <button
+              onClick={() => setTimelineMode('blocks')}
+              style={{ padding: '3px 8px', fontSize: 10, border: 'none', borderRadius: 3, cursor: 'pointer', background: timelineMode === 'blocks' ? (darkMode ? '#555' : 'white') : 'transparent', color: timelineMode === 'blocks' ? (darkMode ? 'white' : 'black') : '#6b7280' }}
+            >
+              Blocs
+            </button>
+          </div>
+          
+          {/* Stats */}
+          <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 8 }}>
+            {sceneMetrics.totalPages.toFixed(1)} pages • {Math.floor(sceneMetrics.totalTime / 60)}:{String(Math.floor(sceneMetrics.totalTime % 60)).padStart(2, '0')}
+          </span>
+          
           <div style={{ flex: 1 }} />
+          
+          {/* Zoom slider */}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
           <input
             type="range"
-            min="0.3"
-            max="1.5"
+            min={timelineMode === 'blocks' ? '0.5' : '0.3'}
+            max={timelineMode === 'blocks' ? '3' : '1.5'}
             step="0.05"
             value={timelineZoom}
             onChange={(e) => setTimelineZoom(parseFloat(e.target.value))}
@@ -3872,19 +3932,109 @@ const BeatBoard = React.memo(({
           />
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
         </div>
-        {/* Timeline cards */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
-          {timelineCards.length === 0 ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 11, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 6, padding: 12 }}>Glissez des cartes ici pour construire votre timeline</div>
-          ) : (
-            timelineCards.map((card, idx) => (
-              <React.Fragment key={card.id}>
-                {idx > 0 && <div style={{ width: Math.max(4, 12 * timelineZoom), height: 2, background: darkMode ? '#484848' : '#d1d5db', flexShrink: 0 }} />}
-                <div style={{ transform: `scale(${timelineZoom})`, transformOrigin: 'left center', flexShrink: 0 }}>
-                  <BeatCard card={card} inTimeline={true} />
+        
+        {/* Ruler - Pages & Time */}
+        {timelineMode === 'blocks' && sceneMetrics.totalPages > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, fontSize: 9, color: '#6b7280', overflow: 'hidden' }}>
+            {/* Time ruler */}
+            <div style={{ display: 'flex', height: 16, background: darkMode ? '#2a2a2a' : '#f3f4f6', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
+              {Array.from({ length: Math.ceil(sceneMetrics.totalTime / 60) + 1 }, (_, i) => (
+                <div key={i} style={{ width: 60 * timelineZoom, flexShrink: 0, borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#d1d5db'}`, paddingLeft: 4, display: 'flex', alignItems: 'center' }}>
+                  {String(Math.floor(i / 60)).padStart(2, '0')}:{String(i % 60).padStart(2, '0')}:00
                 </div>
-              </React.Fragment>
-            ))
+              ))}
+            </div>
+            {/* Page ruler */}
+            <div style={{ display: 'flex', height: 14, background: darkMode ? '#252525' : '#fafafa' }}>
+              {Array.from({ length: Math.ceil(sceneMetrics.totalPages) + 1 }, (_, i) => (
+                <div key={i} style={{ width: 60 * timelineZoom, flexShrink: 0, borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, paddingLeft: 4, display: 'flex', alignItems: 'center' }}>
+                  p.{i + 1}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Timeline content */}
+        <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', padding: timelineMode === 'cards' ? '8px 12px' : '0', minHeight: timelineMode === 'cards' ? 80 : 40 }}>
+          {timelineCards.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 11, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 6, padding: 12, margin: 8 }}>
+              Glissez des cartes ici pour construire votre timeline
+            </div>
+          ) : timelineMode === 'cards' ? (
+            // Cards mode
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {timelineCards.map((card, idx) => (
+                <React.Fragment key={card.id}>
+                  {idx > 0 && <div style={{ width: Math.max(4, 12 * timelineZoom), height: 2, background: darkMode ? '#484848' : '#d1d5db', flexShrink: 0 }} />}
+                  <div style={{ transform: `scale(${timelineZoom})`, transformOrigin: 'left center', flexShrink: 0 }}>
+                    <BeatCard card={card} inTimeline={true} />
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
+          ) : (
+            // Blocks mode - NLE style
+            <div style={{ display: 'flex', height: 36, position: 'relative' }}>
+              {sceneMetrics.cards.map((card, idx) => {
+                const blockWidth = Math.max(20, card.pages * 60 * timelineZoom);
+                return (
+                  <div
+                    key={card.id}
+                    onMouseEnter={() => setHoveredBlock(card.id)}
+                    onMouseLeave={() => setHoveredBlock(null)}
+                    onClick={() => setSelectedCard(card.id)}
+                    style={{
+                      width: blockWidth,
+                      height: '100%',
+                      background: card.color,
+                      borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
+                      cursor: 'pointer',
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      opacity: selectedCard === card.id ? 1 : 0.85,
+                      boxShadow: selectedCard === card.id ? 'inset 0 0 0 2px white' : 'none',
+                    }}
+                  >
+                    {/* Show title only if block is wide enough */}
+                    {blockWidth > 60 && (
+                      <span style={{ fontSize: 9, color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', maxWidth: '100%' }}>
+                        {card.title.replace(/^(INT\.|EXT\.|INT\/EXT\.)\s*/i, '').substring(0, 20)}
+                      </span>
+                    )}
+                    
+                    {/* Tooltip on hover */}
+                    {hoveredBlock === card.id && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '100%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: darkMode ? '#333' : 'white',
+                        border: `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
+                        borderRadius: 6,
+                        padding: '8px 12px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        zIndex: 100,
+                        minWidth: 150,
+                        maxWidth: 250,
+                        marginBottom: 4,
+                        pointerEvents: 'none',
+                      }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: darkMode ? 'white' : 'black', marginBottom: 4 }}>{card.title}</div>
+                        {card.synopsis && <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{card.synopsis}</div>}
+                        <div style={{ fontSize: 9, color: '#9ca3af' }}>
+                          {card.pages} page{card.pages > 1 ? 's' : ''} • ~{Math.floor(card.pages)}:{String(Math.round((card.pages % 1) * 60)).padStart(2, '0')}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
