@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V208 - Beat Board: CUT/UNCUT system, all cards live on canvas, notes support
+// V209 - Beat Board: fix drag behavior, post-it style for notes
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3764,9 +3764,17 @@ const BeatBoard = React.memo(({
     
     if (!draggedCard || !canvasRef.current) return;
     const canvasRect = canvasRef.current.getBoundingClientRect();
+    const timelineRect = timelineRef.current?.getBoundingClientRect();
+    
     const x = (e.clientX - canvasRect.left - dragOffset.x - pan.x) / canvasZoom;
     const y = (e.clientY - canvasRect.top - dragOffset.y - pan.y) / canvasZoom;
-    setIsOverTimeline(e.clientY - canvasRect.top < 130);
+    
+    // Only highlight timeline when cursor is actually over the timeline zone
+    const isOverTimelineZone = timelineRect && 
+      e.clientY >= timelineRect.top && 
+      e.clientY <= timelineRect.bottom;
+    setIsOverTimeline(isOverTimelineZone);
+    
     setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, position: { x: Math.max(0, x), y: Math.max(0, y) } } : c));
   }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag]);
   
@@ -3793,13 +3801,18 @@ const BeatBoard = React.memo(({
     
     if (!draggedCard || !canvasRef.current) return;
     const canvasRect = canvasRef.current.getBoundingClientRect();
-    const isOverTL = e.clientY - canvasRect.top < 130;
+    const timelineRect = timelineRef.current?.getBoundingClientRect();
     
-    if (isOverTL) {
-      const x = e.clientX - canvasRect.left;
+    // Check if dropped specifically on the timeline zone (not just near it)
+    const isDroppedOnTimeline = timelineRect && 
+      e.clientY >= timelineRect.top && 
+      e.clientY <= timelineRect.bottom;
+    
+    if (isDroppedOnTimeline) {
+      // Add to timeline (or reorder if already in timeline)
+      const x = e.clientX - timelineRect.left;
       const newIndex = Math.max(0, Math.floor((x - 60) / 200));
       setBeatCards(prev => {
-        const currentIdx = prev.find(c => c.id === draggedCard.id)?.timelineIndex;
         let cards = prev.map(c => c.id === draggedCard.id ? { ...c, timelineIndex: -999 } : c);
         const inTimeline = cards.filter(c => c.timelineIndex !== null && c.timelineIndex !== -999).sort((a, b) => a.timelineIndex - b.timelineIndex);
         inTimeline.splice(Math.min(newIndex, inTimeline.length), 0, cards.find(c => c.id === draggedCard.id));
@@ -3808,9 +3821,10 @@ const BeatBoard = React.memo(({
           return tlIdx >= 0 ? { ...c, timelineIndex: tlIdx } : c;
         });
       });
-    } else {
-      setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, timelineIndex: null } : c));
     }
+    // If dropped in canvas, just keep the new position - do NOT change timeline status
+    // Timeline status only changes via CUT/UNCUT buttons or modal
+    
     setDraggedCard(null);
     setIsOverTimeline(false);
   }, [draggedCard, pendingDrag]);
@@ -3891,6 +3905,19 @@ const BeatBoard = React.memo(({
     const isCut = card.timelineIndex !== null;
     const isNote = !card.linkedSceneId;
     
+    // Post-it style for notes (solid background color)
+    const noteColors = {
+      '#3b82f6': { bg: '#dbeafe', text: '#1e40af' },
+      '#22c55e': { bg: '#dcfce7', text: '#166534' },
+      '#ef4444': { bg: '#fee2e2', text: '#991b1b' },
+      '#f97316': { bg: '#ffedd5', text: '#9a3412' },
+      '#8b5cf6': { bg: '#ede9fe', text: '#5b21b6' },
+      '#ec4899': { bg: '#fce7f3', text: '#9d174d' },
+      '#06b6d4': { bg: '#cffafe', text: '#0e7490' },
+      '#fbbf24': { bg: '#fef3c7', text: '#92400e' },
+    };
+    const noteStyle = isNote ? (noteColors[card.color] || { bg: card.color + '30', text: darkMode ? 'white' : '#1a1a1a' }) : null;
+    
     return (
       <div
         onMouseDown={(e) => handleDragStart(e, card)}
@@ -3900,26 +3927,43 @@ const BeatBoard = React.memo(({
           top: inTimeline ? 'auto' : card.position.y,
           width: inTimeline ? 160 : 200,
           minHeight: inTimeline ? 70 : 120,
-          background: darkMode ? '#3a3a3a' : 'white',
-          borderRadius: 8,
-          boxShadow: isSelected ? `0 0 0 2px ${card.color}, 0 8px 24px rgba(0,0,0,0.2)` : '0 2px 8px rgba(0,0,0,0.15)',
+          background: isNote 
+            ? (darkMode ? card.color + '40' : noteStyle?.bg || '#fef3c7')
+            : (darkMode ? '#3a3a3a' : 'white'),
+          borderRadius: isNote ? 4 : 8,
+          boxShadow: isSelected 
+            ? `0 0 0 2px ${card.color}, 0 8px 24px rgba(0,0,0,0.2)` 
+            : (isNote ? '2px 2px 8px rgba(0,0,0,0.15)' : '0 2px 8px rgba(0,0,0,0.15)'),
           cursor: isDragging ? 'grabbing' : 'grab',
-          opacity: isDragging ? 0.8 : (!inTimeline && !isCut ? 0.7 : 1),
-          transform: isDragging ? 'scale(1.02) rotate(2deg)' : 'scale(1)',
+          opacity: isDragging ? 0.8 : (!inTimeline && !isCut && !isNote ? 0.7 : 1),
+          transform: isDragging ? 'scale(1.02) rotate(2deg)' : (isNote && !inTimeline ? 'rotate(-1deg)' : 'scale(1)'),
           transition: isDragging ? 'none' : 'transform 0.15s, box-shadow 0.15s, opacity 0.15s',
           overflow: 'hidden',
           zIndex: isDragging ? 1000 : (isSelected ? 10 : 1),
           flexShrink: 0,
           userSelect: 'none',
-          border: !inTimeline && !isCut ? `2px dashed ${darkMode ? '#555' : '#ccc'}` : 'none',
+          border: !inTimeline && !isCut && !isNote ? `2px dashed ${darkMode ? '#555' : '#ccc'}` : 'none',
         }}
       >
-        <div style={{ height: inTimeline ? 4 : 6, background: card.color, borderRadius: '8px 8px 0 0' }} />
+        {/* Color bar only for scenes, not notes */}
+        {!isNote && <div style={{ height: inTimeline ? 4 : 6, background: card.color, borderRadius: '8px 8px 0 0' }} />}
         <div style={{ padding: inTimeline ? '6px 8px' : '10px 12px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: darkMode ? 'white' : '#1a1a1a', marginBottom: 6, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', flex: 1 }}>{card.title}</div>
-            {/* CUT/UNCUT badge - only on canvas */}
-            {!inTimeline && (
+            <div style={{ 
+              fontSize: 11, 
+              fontWeight: 600, 
+              color: isNote ? (darkMode ? '#fbbf24' : noteStyle?.text || '#92400e') : (darkMode ? 'white' : '#1a1a1a'), 
+              marginBottom: 6, 
+              lineHeight: 1.3, 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis', 
+              display: '-webkit-box', 
+              WebkitLineClamp: 2, 
+              WebkitBoxOrient: 'vertical', 
+              flex: 1 
+            }}>{card.title}</div>
+            {/* CUT/UNCUT badge - only on canvas, not for notes */}
+            {!inTimeline && !isNote && (
               <button
                 onClick={(e) => { e.stopPropagation(); toggleCut(card.id); }}
                 onMouseDown={(e) => e.stopPropagation()}
@@ -3941,12 +3985,22 @@ const BeatBoard = React.memo(({
             )}
           </div>
           {!inTimeline && (
-            <div style={{ fontSize: 10, color: darkMode ? '#9ca3af' : '#6b7280', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{card.synopsis || 'Double-clic pour ajouter un résumé'}</div>
+            <div style={{ 
+              fontSize: 10, 
+              color: isNote ? (darkMode ? '#d4a' : noteStyle?.text || '#92400e') : (darkMode ? '#9ca3af' : '#6b7280'), 
+              lineHeight: 1.4, 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis', 
+              display: '-webkit-box', 
+              WebkitLineClamp: 3, 
+              WebkitBoxOrient: 'vertical',
+              opacity: 0.8
+            }}>{card.synopsis || (isNote ? 'Double-clic pour éditer' : 'Double-clic pour ajouter un résumé')}</div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: inTimeline ? 4 : 8, paddingTop: inTimeline ? 4 : 6, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: inTimeline ? 4 : 8, paddingTop: inTimeline ? 4 : 6, borderTop: `1px solid ${isNote ? (darkMode ? '#ffffff20' : '#00000015') : (darkMode ? '#484848' : '#e5e7eb')}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {card.status && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
-              {isNote && <span style={{ fontSize: 9, padding: '2px 5px', borderRadius: 3, background: darkMode ? '#555' : '#fef3c7', color: darkMode ? '#fbbf24' : '#92400e' }}>📝 Note</span>}
+              {isNote && <span style={{ fontSize: 9 }}>📝</span>}
               {card.linkedSceneId && <span style={{ fontSize: 10, color: '#6b7280' }}>🔗</span>}
             </div>
             {isSelected && !inTimeline && (
@@ -3958,7 +4012,7 @@ const BeatBoard = React.memo(({
             )}
           </div>
         </div>
-        {isSelected && <button onClick={(e) => { e.stopPropagation(); deleteCard(card.id); }} style={{ position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>}
+        {isSelected && <button onClick={(e) => { e.stopPropagation(); deleteCard(card.id); }} onMouseDown={(e) => e.stopPropagation()} style={{ position: 'absolute', top: isNote ? 4 : 8, right: 8, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>}
       </div>
     );
   };
@@ -3968,7 +4022,7 @@ const BeatBoard = React.memo(({
       {/* Toolbar */}
       <div style={{ padding: '8px 16px', background: darkMode ? '#2a2a2a' : 'white', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={addNewCard} style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 14 }}>+</span> Scène</button>
+          <button onClick={addNewCard} style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 14 }}>+</span> Carte</button>
           <button onClick={() => {
             const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 - pan.x / canvasZoom, y: 150 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true };
             setBeatCards(prev => [...prev, newNote]);
@@ -4185,12 +4239,17 @@ const BeatBoard = React.memo(({
               {/* Scene title (read-only for linked scenes) */}
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 6 }}>
-                  {editModalCard.linkedSceneId ? 'Scène (du script)' : 'Titre'}
+                  {editModalCard.linkedSceneId ? 'Scène (liée au script)' : 'Titre'}
                 </label>
                 {editModalCard.linkedSceneId ? (
-                  <div style={{ fontSize: 14, fontWeight: 600, color: darkMode ? 'white' : 'black', padding: '8px 12px', background: darkMode ? '#1a1a1a' : '#f3f4f6', borderRadius: 6 }}>
-                    {editModalCard.title}
-                  </div>
+                  <>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: darkMode ? 'white' : 'black', padding: '8px 12px', background: darkMode ? '#1a1a1a' : '#f3f4f6', borderRadius: 6 }}>
+                      {editModalCard.title}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>
+                      Le titre vient du script. Modifiez-le dans l'éditeur de script.
+                    </div>
+                  </>
                 ) : (
                   <input
                     value={editModalCard.title}
