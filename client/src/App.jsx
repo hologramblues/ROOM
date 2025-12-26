@@ -1,10 +1,15 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext, lazy, Suspense } from 'react';
 import { io } from 'socket.io-client';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V211 - Beat Board: drag out from timeline to uncut, controls at bottom, blocks drag support
+// V212 - Beat Board: Excalidraw whiteboard integration
+
+// Lazy load Excalidraw (it's a big package)
+const Excalidraw = lazy(() => 
+  import('@excalidraw/excalidraw').then(module => ({ default: module.Excalidraw }))
+);
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3641,9 +3646,14 @@ const BeatBoard = React.memo(({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
+  const [whiteboardEnabled, setWhiteboardEnabled] = useState(false); // Whiteboard overlay toggle
+  const [whiteboardElements, setWhiteboardElements] = useState([]); // Excalidraw elements
+  const [convertMenuPos, setConvertMenuPos] = useState(null); // Position for convert menu
+  const [selectedExcalidrawId, setSelectedExcalidrawId] = useState(null); // Selected excalidraw element for conversion
   const lastClickRef = useRef({ cardId: null, time: 0 }); // For manual double-click detection
   const dragOriginalPosRef = useRef(null); // Store original position during drag
   const dragFromTimelineRef = useRef(false); // Track if drag started from timeline
+  const excalidrawRef = useRef(null); // Excalidraw API ref
   const canvasRef = useRef(null);
   const timelineRef = useRef(null);
   
@@ -3866,6 +3876,83 @@ const BeatBoard = React.memo(({
     setEditModalCard(newCard);
   };
   
+  // Convert an Excalidraw element to a Beat Board card
+  const convertExcalidrawToCard = (elementId, cardType = 'scene') => {
+    const api = excalidrawRef.current;
+    if (!api) return;
+    
+    const elements = api.getSceneElements();
+    const element = elements.find(el => el.id === elementId);
+    if (!element) return;
+    
+    // Get text content if it's a text element or has bound text
+    let title = cardType === 'note' ? '📝 Note' : 'Nouvelle scène';
+    let synopsis = '';
+    
+    if (element.type === 'text') {
+      title = element.text.split('\n')[0].substring(0, 50) || title;
+      synopsis = element.text.split('\n').slice(1).join('\n') || '';
+    } else {
+      // Check for bound text elements
+      const boundText = elements.find(el => el.containerId === element.id && el.type === 'text');
+      if (boundText) {
+        title = boundText.text.split('\n')[0].substring(0, 50) || title;
+        synopsis = boundText.text.split('\n').slice(1).join('\n') || '';
+      }
+    }
+    
+    // Create card at the element's position (adjusted for canvas transform)
+    const newCard = {
+      id: (cardType === 'note' ? 'note_' : 'card_') + Date.now(),
+      linkedSceneId: null,
+      linkedSceneIndex: null,
+      title,
+      synopsis,
+      color: cardType === 'note' ? '#fbbf24' : cardColors[Math.floor(Math.random() * cardColors.length)],
+      position: { 
+        x: (element.x - pan.x) / canvasZoom + 50, 
+        y: (element.y - pan.y) / canvasZoom + 180 
+      },
+      timelineIndex: null,
+      status: null,
+      isNew: true,
+      type: cardType
+    };
+    
+    setBeatCards(prev => [...prev, newCard]);
+    setSelectedCard(newCard.id);
+    setEditModalCard(newCard);
+    
+    // Remove the converted element from Excalidraw
+    api.updateScene({
+      elements: elements.filter(el => el.id !== elementId && el.containerId !== elementId)
+    });
+    
+    setConvertMenuPos(null);
+    setSelectedExcalidrawId(null);
+  };
+  
+  // Handle Excalidraw element selection for conversion
+  const handleExcalidrawChange = (elements, appState) => {
+    setWhiteboardElements(elements);
+    
+    // Check if a single element is selected
+    const selectedIds = Object.keys(appState.selectedElementIds || {});
+    if (selectedIds.length === 1) {
+      const selectedElement = elements.find(el => el.id === selectedIds[0]);
+      if (selectedElement && (selectedElement.type === 'rectangle' || selectedElement.type === 'ellipse' || selectedElement.type === 'text')) {
+        // Show convert menu near the element
+        setSelectedExcalidrawId(selectedIds[0]);
+      } else {
+        setSelectedExcalidrawId(null);
+        setConvertMenuPos(null);
+      }
+    } else {
+      setSelectedExcalidrawId(null);
+      setConvertMenuPos(null);
+    }
+  };
+  
   const deleteCard = (cardId) => {
     const card = beatCards.find(c => c.id === cardId);
     if (card?.linkedSceneId) setBeatCards(prev => prev.map(c => c.id === cardId ? { ...c, timelineIndex: null } : c));
@@ -4070,6 +4157,30 @@ const BeatBoard = React.memo(({
             setEditModalCard(newNote);
           }} style={{ padding: '6px 12px', background: darkMode ? '#555' : '#fef3c7', border: 'none', borderRadius: 6, color: darkMode ? '#fbbf24' : '#92400e', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>📝 Note</button>
           <div style={{ width: 1, height: 20, background: darkMode ? '#484848' : '#d1d5db' }} />
+          
+          {/* Whiteboard toggle */}
+          <button 
+            onClick={() => setWhiteboardEnabled(!whiteboardEnabled)}
+            style={{ 
+              padding: '6px 12px', 
+              background: whiteboardEnabled ? '#8b5cf6' : (darkMode ? '#3a3a3a' : '#f3f4f6'), 
+              border: whiteboardEnabled ? '2px solid #8b5cf6' : `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
+              borderRadius: 6, 
+              color: whiteboardEnabled ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'), 
+              fontSize: 12, 
+              fontWeight: 500, 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 4,
+              transition: 'all 0.2s'
+            }}
+            title="Activer le whiteboard pour dessiner, ajouter du texte, des flèches..."
+          >
+            ✏️ Whiteboard {whiteboardEnabled && '✓'}
+          </button>
+          
+          <div style={{ width: 1, height: 20, background: darkMode ? '#484848' : '#d1d5db' }} />
           <span style={{ fontSize: 11, color: '#6b7280' }}>
             <span style={{ color: '#22c55e' }}>{timelineCards.length} CUT</span> • <span style={{ color: '#9ca3af' }}>{beatCards.filter(c => c.timelineIndex === null).length} UNCUT</span> • {beatCards.length} total
           </span>
@@ -4230,11 +4341,121 @@ const BeatBoard = React.memo(({
       </div>
       
       {/* Canvas zone */}
-      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd} onWheel={handleWheel} onClick={() => setSelectedCard(null)} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}>
-        <div style={{ position: 'absolute', transform: `translate(${pan.x}px, ${pan.y}px) scale(${canvasZoom})`, transformOrigin: '0 0' }}>
+      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onWheel={!whiteboardEnabled ? handleWheel : undefined} onClick={!whiteboardEnabled ? () => setSelectedCard(null) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}>
+        {/* Beat cards layer */}
+        <div style={{ position: 'absolute', transform: `translate(${pan.x}px, ${pan.y}px) scale(${canvasZoom})`, transformOrigin: '0 0', pointerEvents: whiteboardEnabled ? 'none' : 'auto' }}>
           {canvasCards.map(card => <BeatCard key={card.id} card={card} inTimeline={false} />)}
         </div>
-        {canvasCards.length === 0 && timelineCards.length > 0 && (
+        
+        {/* Excalidraw whiteboard overlay */}
+        {whiteboardEnabled && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 100 }}>
+            <Suspense fallback={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6b7280' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>✏️</div>
+                  <div>Chargement du whiteboard...</div>
+                </div>
+              </div>
+            }>
+              <Excalidraw
+                ref={(api) => { excalidrawRef.current = api; }}
+                initialData={{ 
+                  elements: whiteboardElements,
+                  appState: { 
+                    viewBackgroundColor: 'transparent',
+                    theme: darkMode ? 'dark' : 'light',
+                    gridSize: null,
+                  }
+                }}
+                onChange={handleExcalidrawChange}
+                UIOptions={{
+                  canvasActions: {
+                    loadScene: false,
+                    export: false,
+                    saveAsImage: false,
+                  },
+                  tools: {
+                    image: false,
+                  }
+                }}
+              />
+            </Suspense>
+            
+            {/* Convert to card menu - appears when a shape is selected */}
+            {selectedExcalidrawId && (
+              <div style={{
+                position: 'absolute',
+                top: 60,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: darkMode ? '#2a2a2a' : 'white',
+                border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
+                borderRadius: 8,
+                padding: 8,
+                display: 'flex',
+                gap: 8,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                zIndex: 1000,
+              }}>
+                <span style={{ fontSize: 11, color: '#6b7280', alignSelf: 'center', marginRight: 4 }}>Convertir en :</span>
+                <button
+                  onClick={() => convertExcalidrawToCard(selectedExcalidrawId, 'scene')}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#3b82f6',
+                    border: 'none',
+                    borderRadius: 6,
+                    color: 'white',
+                    fontSize: 11,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  🎬 Scène
+                </button>
+                <button
+                  onClick={() => convertExcalidrawToCard(selectedExcalidrawId, 'note')}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#fbbf24',
+                    border: 'none',
+                    borderRadius: 6,
+                    color: '#92400e',
+                    fontSize: 11,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  📝 Note
+                </button>
+              </div>
+            )}
+            
+            {/* Whiteboard instructions */}
+            <div style={{
+              position: 'absolute',
+              bottom: 16,
+              left: 16,
+              background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.9)',
+              padding: '8px 12px',
+              borderRadius: 6,
+              fontSize: 10,
+              color: '#6b7280',
+              maxWidth: 280,
+            }}>
+              💡 Dessinez librement • Sélectionnez une forme pour la convertir en carte • iPad + Apple Pencil supporté
+            </div>
+          </div>
+        )}
+        
+        {canvasCards.length === 0 && timelineCards.length > 0 && !whiteboardEnabled && (
           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', color: '#6b7280' }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🎬</div>
             <div style={{ fontSize: 14, marginBottom: 8 }}>Toutes vos scènes sont dans la timeline</div>
@@ -4242,7 +4463,7 @@ const BeatBoard = React.memo(({
           </div>
         )}
         {/* Canvas zoom controls - Bottom right overlay */}
-        <div style={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', alignItems: 'center', gap: 4, background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.9)', padding: '6px 8px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+        <div style={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', alignItems: 'center', gap: 4, background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.9)', padding: '6px 8px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', zIndex: whiteboardEnabled ? 101 : 10 }}>
           <button onClick={() => setCanvasZoom(z => Math.max(0.3, z - 0.1))} style={{ width: 24, height: 24, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
           <span style={{ fontSize: 11, color: '#6b7280', minWidth: 36, textAlign: 'center' }}>{Math.round(canvasZoom * 100)}%</span>
           <button onClick={() => setCanvasZoom(z => Math.min(2, z + 0.1))} style={{ width: 24, height: 24, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
