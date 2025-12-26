@@ -4,7 +4,10 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V212 - Beat Board: Excalidraw whiteboard integration
+// V213 - Beat Board: Excalidraw whiteboard fix (CSS import)
+
+// Import Excalidraw CSS
+import '@excalidraw/excalidraw/index.css';
 
 // Lazy load Excalidraw (it's a big package)
 const Excalidraw = lazy(() => 
@@ -4349,7 +4352,7 @@ const BeatBoard = React.memo(({
         
         {/* Excalidraw whiteboard overlay */}
         {whiteboardEnabled && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 100 }}>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 100, width: '100%', height: '100%' }}>
             <Suspense fallback={
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6b7280' }}>
                 <div style={{ textAlign: 'center' }}>
@@ -4359,21 +4362,25 @@ const BeatBoard = React.memo(({
               </div>
             }>
               <Excalidraw
-                ref={(api) => { excalidrawRef.current = api; }}
+                excalidrawAPI={(api) => { excalidrawRef.current = api; }}
                 initialData={{ 
                   elements: whiteboardElements,
                   appState: { 
-                    viewBackgroundColor: 'transparent',
+                    viewBackgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
                     theme: darkMode ? 'dark' : 'light',
                     gridSize: null,
+                    zenModeEnabled: false,
+                    viewModeEnabled: false,
                   }
                 }}
                 onChange={handleExcalidrawChange}
+                theme={darkMode ? 'dark' : 'light'}
                 UIOptions={{
                   canvasActions: {
                     loadScene: false,
-                    export: false,
+                    export: { saveFileToDisk: false },
                     saveAsImage: false,
+                    changeViewBackgroundColor: false,
                   },
                   tools: {
                     image: false,
