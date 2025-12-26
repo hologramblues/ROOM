@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V214 - Beat Board: Transparent whiteboard overlay (see cards under drawings)
+// V215 - Beat Board: Synchronized zoom/pan between whiteboard and cards
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3650,6 +3650,7 @@ const BeatBoard = React.memo(({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const [whiteboardEnabled, setWhiteboardEnabled] = useState(false); // Whiteboard overlay toggle
+  const [whiteboardKey, setWhiteboardKey] = useState(0); // Key to force remount Excalidraw with current zoom/pan
   const [whiteboardElements, setWhiteboardElements] = useState([]); // Excalidraw elements
   const [convertMenuPos, setConvertMenuPos] = useState(null); // Position for convert menu
   const [selectedExcalidrawId, setSelectedExcalidrawId] = useState(null); // Selected excalidraw element for conversion
@@ -3935,9 +3936,24 @@ const BeatBoard = React.memo(({
     setSelectedExcalidrawId(null);
   };
   
-  // Handle Excalidraw element selection for conversion
+  // Handle Excalidraw element selection for conversion AND sync zoom/pan
   const handleExcalidrawChange = (elements, appState) => {
     setWhiteboardElements(elements);
+    
+    // Sync zoom and pan from Excalidraw to cards canvas
+    if (appState.zoom?.value !== undefined) {
+      const newZoom = appState.zoom.value;
+      if (Math.abs(newZoom - canvasZoom) > 0.01) {
+        setCanvasZoom(newZoom);
+      }
+    }
+    if (appState.scrollX !== undefined && appState.scrollY !== undefined) {
+      const newPanX = appState.scrollX;
+      const newPanY = appState.scrollY;
+      if (Math.abs(newPanX - pan.x) > 1 || Math.abs(newPanY - pan.y) > 1) {
+        setPan({ x: newPanX, y: newPanY });
+      }
+    }
     
     // Check if a single element is selected
     const selectedIds = Object.keys(appState.selectedElementIds || {});
@@ -4163,7 +4179,13 @@ const BeatBoard = React.memo(({
           
           {/* Whiteboard toggle */}
           <button 
-            onClick={() => setWhiteboardEnabled(!whiteboardEnabled)}
+            onClick={() => {
+              if (!whiteboardEnabled) {
+                // When enabling, increment key to remount Excalidraw with current zoom/pan
+                setWhiteboardKey(k => k + 1);
+              }
+              setWhiteboardEnabled(!whiteboardEnabled);
+            }}
             style={{ 
               padding: '6px 12px', 
               background: whiteboardEnabled ? '#8b5cf6' : (darkMode ? '#3a3a3a' : '#f3f4f6'), 
@@ -4374,6 +4396,7 @@ const BeatBoard = React.memo(({
               </div>
             }>
               <Excalidraw
+                key={whiteboardKey}
                 excalidrawAPI={(api) => { excalidrawRef.current = api; }}
                 initialData={{ 
                   elements: whiteboardElements,
@@ -4383,6 +4406,9 @@ const BeatBoard = React.memo(({
                     gridSize: null,
                     zenModeEnabled: false,
                     viewModeEnabled: false,
+                    scrollX: pan.x,
+                    scrollY: pan.y,
+                    zoom: { value: canvasZoom },
                   }
                 }}
                 onChange={handleExcalidrawChange}
@@ -4481,13 +4507,15 @@ const BeatBoard = React.memo(({
             <div style={{ fontSize: 12 }}>Cliquez sur "Nouvelle carte" pour ajouter des idées</div>
           </div>
         )}
-        {/* Canvas zoom controls - Bottom right overlay */}
-        <div style={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', alignItems: 'center', gap: 4, background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.9)', padding: '6px 8px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', zIndex: whiteboardEnabled ? 101 : 10 }}>
-          <button onClick={() => setCanvasZoom(z => Math.max(0.3, z - 0.1))} style={{ width: 24, height: 24, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-          <span style={{ fontSize: 11, color: '#6b7280', minWidth: 36, textAlign: 'center' }}>{Math.round(canvasZoom * 100)}%</span>
-          <button onClick={() => setCanvasZoom(z => Math.min(2, z + 0.1))} style={{ width: 24, height: 24, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
-          <button onClick={() => { setCanvasZoom(1); setPan({ x: 0, y: 0 }); }} style={{ marginLeft: 4, padding: '4px 8px', borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 10 }}>Reset</button>
-        </div>
+        {/* Canvas zoom controls - Bottom right overlay - Hidden when whiteboard is active (use Excalidraw's controls) */}
+        {!whiteboardEnabled && (
+          <div style={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', alignItems: 'center', gap: 4, background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.9)', padding: '6px 8px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', zIndex: 10 }}>
+            <button onClick={() => setCanvasZoom(z => Math.max(0.3, z - 0.1))} style={{ width: 24, height: 24, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+            <span style={{ fontSize: 11, color: '#6b7280', minWidth: 36, textAlign: 'center' }}>{Math.round(canvasZoom * 100)}%</span>
+            <button onClick={() => setCanvasZoom(z => Math.min(2, z + 0.1))} style={{ width: 24, height: 24, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+            <button onClick={() => { setCanvasZoom(1); setPan({ x: 0, y: 0 }); }} style={{ marginLeft: 4, padding: '4px 8px', borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 10 }}>Reset</button>
+          </div>
+        )}
       </div>
       
       {/* Edit Card Modal */}
