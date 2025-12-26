@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V215 - Beat Board: Synchronized zoom/pan between whiteboard and cards
+// V216 - Beat Board: Fixed zoom sync with Excalidraw coordinate system
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3794,8 +3794,12 @@ const BeatBoard = React.memo(({
     
     // Only update position if dragging from canvas (not from timeline)
     if (!dragFromTimelineRef.current) {
-      const x = (e.clientX - canvasRect.left - dragOffset.x - pan.x) / canvasZoom;
-      const y = (e.clientY - canvasRect.top - dragOffset.y - pan.y) / canvasZoom;
+      // New coordinate system: screenPos = (cardPos + scroll) * zoom
+      // Inverse: cardPos = (screenPos / zoom) - scroll
+      const screenX = e.clientX - canvasRect.left - dragOffset.x;
+      const screenY = e.clientY - canvasRect.top - dragOffset.y;
+      const x = (screenX / canvasZoom) - pan.x;
+      const y = (screenY / canvasZoom) - pan.y;
       setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, position: { x: Math.max(0, x), y: Math.max(0, y) } } : c));
     }
   }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag]);
@@ -3874,7 +3878,10 @@ const BeatBoard = React.memo(({
   const handleWheel = (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCanvasZoom(z => Math.min(2, Math.max(0.3, z * (e.deltaY > 0 ? 0.9 : 1.1)))); } };
   
   const addNewCard = () => {
-    const newCard = { id: 'card_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle scène', synopsis: '', color: cardColors[Math.floor(Math.random() * cardColors.length)], position: { x: 100 - pan.x / canvasZoom, y: 200 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true, type: 'scene' };
+    // Position in visible area: screenPos = (cardPos + scroll) * zoom
+    // So cardPos = screenPos / zoom - scroll
+    // Place at screen position (100, 200)
+    const newCard = { id: 'card_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle scène', synopsis: '', color: cardColors[Math.floor(Math.random() * cardColors.length)], position: { x: 100 / canvasZoom - pan.x, y: 200 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'scene' };
     setBeatCards(prev => [...prev, newCard]);
     setSelectedCard(newCard.id);
     setEditModalCard(newCard);
@@ -3905,7 +3912,7 @@ const BeatBoard = React.memo(({
       }
     }
     
-    // Create card at the element's position (adjusted for canvas transform)
+    // Create card at the element's position (Excalidraw coordinates = card coordinates now)
     const newCard = {
       id: (cardType === 'note' ? 'note_' : 'card_') + Date.now(),
       linkedSceneId: null,
@@ -3914,8 +3921,8 @@ const BeatBoard = React.memo(({
       synopsis,
       color: cardType === 'note' ? '#fbbf24' : cardColors[Math.floor(Math.random() * cardColors.length)],
       position: { 
-        x: (element.x - pan.x) / canvasZoom + 50, 
-        y: (element.y - pan.y) / canvasZoom + 180 
+        x: element.x, 
+        y: element.y 
       },
       timelineIndex: null,
       status: null,
@@ -4022,11 +4029,25 @@ const BeatBoard = React.memo(({
     });
   };
   
-  const BeatCard = ({ card, inTimeline = false }) => {
+  const BeatCard = ({ card, inTimeline = false, excalidrawMode = false, zoom = 1, scroll = { x: 0, y: 0 } }) => {
     const isSelected = selectedCard === card.id;
     const isDragging = draggedCard?.id === card.id;
     const isCut = card.timelineIndex !== null;
     const isNote = card.type === 'note';
+    
+    // Calculate position to match Excalidraw coordinate system
+    // Excalidraw renders elements at: screenPos = (elementPos + scroll) * zoom
+    const cardWidth = inTimeline ? 160 : 200;
+    const cardMinHeight = inTimeline ? 70 : 120;
+    
+    // Transform card position to screen position (matching Excalidraw)
+    const screenX = inTimeline ? 'auto' : (card.position.x + scroll.x) * zoom;
+    const screenY = inTimeline ? 'auto' : (card.position.y + scroll.y) * zoom;
+    const scaledWidth = inTimeline ? cardWidth : cardWidth * zoom;
+    const scaledMinHeight = inTimeline ? cardMinHeight : cardMinHeight * zoom;
+    const scaledFontTitle = inTimeline ? 11 : 11 * zoom;
+    const scaledFontSynopsis = inTimeline ? 10 : 10 * zoom;
+    const scaledPadding = inTimeline ? '6px 8px' : `${10 * zoom}px ${12 * zoom}px`;
     
     // Post-it style for notes (solid background color)
     const noteColors = {
@@ -4046,17 +4067,17 @@ const BeatBoard = React.memo(({
         onMouseDown={(e) => handleDragStart(e, card, inTimeline)}
         style={{
           position: inTimeline ? 'relative' : 'absolute',
-          left: inTimeline ? 'auto' : card.position.x,
-          top: inTimeline ? 'auto' : card.position.y,
-          width: inTimeline ? 160 : 200,
-          minHeight: inTimeline ? 70 : 120,
+          left: screenX,
+          top: screenY,
+          width: scaledWidth,
+          minHeight: scaledMinHeight,
           background: isNote 
             ? (darkMode ? noteStyle?.darkBg : noteStyle?.bg) || '#fef3c7'
             : (darkMode ? '#3a3a3a' : 'white'),
-          borderRadius: isNote ? 4 : 8,
+          borderRadius: isNote ? 4 * zoom : 8 * zoom,
           boxShadow: isSelected 
-            ? `0 0 0 2px ${card.color}, 0 8px 24px rgba(0,0,0,0.2)` 
-            : (isNote ? '2px 2px 8px rgba(0,0,0,0.15)' : '0 2px 8px rgba(0,0,0,0.15)'),
+            ? `0 0 0 ${2 * zoom}px ${card.color}, 0 ${8 * zoom}px ${24 * zoom}px rgba(0,0,0,0.2)` 
+            : (isNote ? `${2 * zoom}px ${2 * zoom}px ${8 * zoom}px rgba(0,0,0,0.15)` : `0 ${2 * zoom}px ${8 * zoom}px rgba(0,0,0,0.15)`),
           cursor: isDragging ? 'grabbing' : 'grab',
           opacity: isDragging ? 0.8 : (!inTimeline && !isCut && !isNote ? 0.7 : 1),
           transform: isDragging ? 'scale(1.02) rotate(2deg)' : (isNote && !inTimeline ? 'rotate(-1deg)' : 'scale(1)'),
@@ -4065,18 +4086,18 @@ const BeatBoard = React.memo(({
           zIndex: isDragging ? 1000 : (isSelected ? 10 : 1),
           flexShrink: 0,
           userSelect: 'none',
-          border: !inTimeline && !isCut && !isNote ? `2px dashed ${darkMode ? '#555' : '#ccc'}` : 'none',
+          border: !inTimeline && !isCut && !isNote ? `${2 * zoom}px dashed ${darkMode ? '#555' : '#ccc'}` : 'none',
         }}
       >
         {/* Color bar only for scenes, not notes */}
-        {!isNote && <div style={{ height: inTimeline ? 4 : 6, background: card.color, borderRadius: '8px 8px 0 0' }} />}
-        <div style={{ padding: inTimeline ? '6px 8px' : '10px 12px', display: 'flex', flexDirection: 'column', height: inTimeline ? 'auto' : 'calc(100% - 6px)' }}>
+        {!isNote && <div style={{ height: inTimeline ? 4 : 6 * zoom, background: card.color, borderRadius: `${(isNote ? 4 : 8) * zoom}px ${(isNote ? 4 : 8) * zoom}px 0 0` }} />}
+        <div style={{ padding: scaledPadding, display: 'flex', flexDirection: 'column', height: inTimeline ? 'auto' : `calc(100% - ${6 * zoom}px)` }}>
           {/* Title */}
           <div style={{ 
-            fontSize: 11, 
+            fontSize: scaledFontTitle, 
             fontWeight: 600, 
             color: isNote ? (darkMode ? noteStyle?.darkText : noteStyle?.text) || '#92400e' : (darkMode ? 'white' : '#1a1a1a'), 
-            marginBottom: 4, 
+            marginBottom: 4 * zoom, 
             lineHeight: 1.3, 
             overflow: 'hidden', 
             textOverflow: 'ellipsis', 
@@ -4088,7 +4109,7 @@ const BeatBoard = React.memo(({
           {/* Synopsis - only on canvas */}
           {!inTimeline && (
             <div style={{ 
-              fontSize: 10, 
+              fontSize: scaledFontSynopsis, 
               color: isNote ? (darkMode ? noteStyle?.darkText : noteStyle?.text) || '#92400e' : (darkMode ? '#9ca3af' : '#6b7280'), 
               lineHeight: 1.4, 
               overflow: 'hidden', 
@@ -4097,7 +4118,7 @@ const BeatBoard = React.memo(({
               WebkitLineClamp: 4, 
               WebkitBoxOrient: 'vertical',
               flex: 1,
-              marginBottom: 8,
+              marginBottom: 8 * zoom,
             }}>{card.synopsis || (isNote ? 'Double-clic pour éditer' : 'Double-clic pour ajouter un résumé')}</div>
           )}
           
@@ -4107,15 +4128,15 @@ const BeatBoard = React.memo(({
               display: 'flex', 
               alignItems: 'center', 
               justifyContent: 'space-between',
-              paddingTop: 6, 
+              paddingTop: 6 * zoom, 
               borderTop: `1px solid ${isNote ? (darkMode ? '#ffffff20' : '#00000015') : (darkMode ? '#484848' : '#e5e7eb')}`,
               marginTop: 'auto'
             }}>
               {/* Left: Status badges */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                {card.status && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
-                {isNote && <span style={{ fontSize: 9 }}>📝</span>}
-                {card.linkedSceneId && <span style={{ fontSize: 10, color: '#6b7280' }}>🔗</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 * zoom }}>
+                {card.status && <span style={{ fontSize: 9 * zoom, padding: `${2 * zoom}px ${6 * zoom}px`, borderRadius: 4 * zoom, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
+                {isNote && <span style={{ fontSize: 9 * zoom }}>📝</span>}
+                {card.linkedSceneId && <span style={{ fontSize: 10 * zoom, color: '#6b7280' }}>🔗</span>}
               </div>
               
               {/* Center: CUT/UNCUT badge - not for notes */}
@@ -4125,10 +4146,10 @@ const BeatBoard = React.memo(({
                   onMouseDown={(e) => e.stopPropagation()}
                   title={isCut ? 'Dans le montage (clic pour retirer)' : 'Hors montage (clic pour ajouter)'}
                   style={{
-                    padding: '2px 6px',
-                    fontSize: 8,
+                    padding: `${2 * zoom}px ${6 * zoom}px`,
+                    fontSize: 8 * zoom,
                     fontWeight: 600,
-                    borderRadius: 3,
+                    borderRadius: 3 * zoom,
                     border: 'none',
                     cursor: 'pointer',
                     background: isCut ? '#22c55e' : (darkMode ? '#555' : '#e5e7eb'),
@@ -4141,9 +4162,9 @@ const BeatBoard = React.memo(({
               
               {/* Right: Color picker (only when selected) */}
               {isSelected && (
-                <div style={{ display: 'flex', gap: 2 }}>
+                <div style={{ display: 'flex', gap: 2 * zoom }}>
                   {cardColors.slice(0, 4).map(color => (
-                    <button key={color} onClick={(e) => { e.stopPropagation(); updateCard(card.id, { color }); }} onMouseDown={(e) => e.stopPropagation()} style={{ width: 12, height: 12, borderRadius: 3, background: color, border: card.color === color ? '2px solid white' : 'none', cursor: 'pointer' }} />
+                    <button key={color} onClick={(e) => { e.stopPropagation(); updateCard(card.id, { color }); }} onMouseDown={(e) => e.stopPropagation()} style={{ width: 12 * zoom, height: 12 * zoom, borderRadius: 3 * zoom, background: color, border: card.color === color ? `${2 * zoom}px solid white` : 'none', cursor: 'pointer' }} />
                   ))}
                 </div>
               )}
@@ -4158,7 +4179,7 @@ const BeatBoard = React.memo(({
             </div>
           )}
         </div>
-        {isSelected && !inTimeline && <button onClick={(e) => { e.stopPropagation(); deleteCard(card.id); }} onMouseDown={(e) => e.stopPropagation()} style={{ position: 'absolute', top: isNote ? 4 : 8, right: 8, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>}
+        {isSelected && !inTimeline && <button onClick={(e) => { e.stopPropagation(); deleteCard(card.id); }} onMouseDown={(e) => e.stopPropagation()} style={{ position: 'absolute', top: isNote ? 4 * zoom : 8 * zoom, right: 8 * zoom, width: 18 * zoom, height: 18 * zoom, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 11 * zoom, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>}
       </div>
     );
   };
@@ -4170,7 +4191,8 @@ const BeatBoard = React.memo(({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={addNewCard} style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 14 }}>+</span> Carte</button>
           <button onClick={() => {
-            const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 - pan.x / canvasZoom, y: 150 - pan.y / canvasZoom }, timelineIndex: null, status: null, isNew: true, type: 'note' };
+            // Position in visible area: cardPos = screenPos / zoom - scroll
+            const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 / canvasZoom - pan.x, y: 150 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'note' };
             setBeatCards(prev => [...prev, newNote]);
             setSelectedCard(newNote.id);
             setEditModalCard(newNote);
@@ -4366,10 +4388,19 @@ const BeatBoard = React.memo(({
       </div>
       
       {/* Canvas zone */}
-      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onWheel={!whiteboardEnabled ? handleWheel : undefined} onClick={!whiteboardEnabled ? () => setSelectedCard(null) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}>
-        {/* Beat cards layer - always visible */}
-        <div style={{ position: 'absolute', transform: `translate(${pan.x}px, ${pan.y}px) scale(${canvasZoom})`, transformOrigin: '0 0', pointerEvents: whiteboardEnabled ? 'none' : 'auto', zIndex: 1 }}>
-          {canvasCards.map(card => <BeatCard key={card.id} card={card} inTimeline={false} />)}
+      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onWheel={!whiteboardEnabled ? handleWheel : undefined} onClick={!whiteboardEnabled ? () => setSelectedCard(null) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x * canvasZoom}px ${pan.y * canvasZoom}px` }}>
+        {/* Beat cards layer - positioned to match Excalidraw coordinate system */}
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: whiteboardEnabled ? 'none' : 'auto', zIndex: 1, overflow: 'hidden' }}>
+          {canvasCards.map(card => (
+            <BeatCard 
+              key={card.id} 
+              card={card} 
+              inTimeline={false} 
+              excalidrawMode={whiteboardEnabled}
+              zoom={canvasZoom}
+              scroll={{ x: pan.x, y: pan.y }}
+            />
+          ))}
         </div>
         
         {/* Excalidraw whiteboard overlay - transparent background to see cards */}
