@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V216 - Beat Board: Fixed zoom sync with Excalidraw coordinate system
+// V217 - Beat Board: UI reorganization, white default cards, structure timeline
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3650,6 +3650,7 @@ const BeatBoard = React.memo(({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const [whiteboardEnabled, setWhiteboardEnabled] = useState(false); // Whiteboard overlay toggle
+  const [structureBeats, setStructureBeats] = useState([]); // Structure row beats (Act 1, Act 2, etc.)
   const [whiteboardKey, setWhiteboardKey] = useState(0); // Key to force remount Excalidraw with current zoom/pan
   const [whiteboardElements, setWhiteboardElements] = useState([]); // Excalidraw elements
   const [convertMenuPos, setConvertMenuPos] = useState(null); // Position for convert menu
@@ -3661,7 +3662,8 @@ const BeatBoard = React.memo(({
   const canvasRef = useRef(null);
   const timelineRef = useRef(null);
   
-  const cardColors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+  const defaultCardColor = '#ffffff'; // White default for all cards
+  const cardColors = ['#ffffff', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
   
   // Initialize beat cards from scenes
   useEffect(() => {
@@ -3680,7 +3682,7 @@ const BeatBoard = React.memo(({
           linkedSceneIndex: scene.index,
           title: scene.content || 'Nouvelle scène',
           synopsis: sceneSynopsis[scene.id] || '',
-          color: cardColors[sceneIdx % cardColors.length],
+          color: defaultCardColor,
           position: { x: 50 + (sceneIdx % 5) * 220, y: 180 + Math.floor(sceneIdx / 5) * 160 },
           timelineIndex: sceneIdx,
           status: sceneStatus[scene.id] || null,
@@ -3881,7 +3883,7 @@ const BeatBoard = React.memo(({
     // Position in visible area: screenPos = (cardPos + scroll) * zoom
     // So cardPos = screenPos / zoom - scroll
     // Place at screen position (100, 200)
-    const newCard = { id: 'card_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle scène', synopsis: '', color: cardColors[Math.floor(Math.random() * cardColors.length)], position: { x: 100 / canvasZoom - pan.x, y: 200 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'scene' };
+    const newCard = { id: 'card_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle scène', synopsis: '', color: defaultCardColor, position: { x: 100 / canvasZoom - pan.x, y: 200 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'scene' };
     setBeatCards(prev => [...prev, newCard]);
     setSelectedCard(newCard.id);
     setEditModalCard(newCard);
@@ -3919,7 +3921,7 @@ const BeatBoard = React.memo(({
       linkedSceneIndex: null,
       title,
       synopsis,
-      color: cardType === 'note' ? '#fbbf24' : cardColors[Math.floor(Math.random() * cardColors.length)],
+      color: cardType === 'note' ? '#fbbf24' : defaultCardColor,
       position: { 
         x: element.x, 
         y: element.y 
@@ -4034,6 +4036,7 @@ const BeatBoard = React.memo(({
     const isDragging = draggedCard?.id === card.id;
     const isCut = card.timelineIndex !== null;
     const isNote = card.type === 'note';
+    const isWhiteCard = card.color === '#ffffff';
     
     // Calculate position to match Excalidraw coordinate system
     // Excalidraw renders elements at: screenPos = (elementPos + scroll) * zoom
@@ -4062,6 +4065,10 @@ const BeatBoard = React.memo(({
     };
     const noteStyle = isNote ? (noteColors[card.color] || { bg: '#fef3c7', darkBg: '#78350f', text: '#92400e', darkText: '#fcd34d' }) : null;
     
+    // Color bar or left border for white cards
+    const colorBarHeight = inTimeline ? 4 : 6 * zoom;
+    const leftBorderWidth = inTimeline ? 4 : 4 * zoom;
+    
     return (
       <div
         onMouseDown={(e) => handleDragStart(e, card, inTimeline)}
@@ -4075,8 +4082,9 @@ const BeatBoard = React.memo(({
             ? (darkMode ? noteStyle?.darkBg : noteStyle?.bg) || '#fef3c7'
             : (darkMode ? '#3a3a3a' : 'white'),
           borderRadius: isNote ? 4 * zoom : 8 * zoom,
+          borderLeft: !isNote && isWhiteCard ? `${leftBorderWidth}px solid ${darkMode ? '#6b7280' : '#d1d5db'}` : 'none',
           boxShadow: isSelected 
-            ? `0 0 0 ${2 * zoom}px ${card.color}, 0 ${8 * zoom}px ${24 * zoom}px rgba(0,0,0,0.2)` 
+            ? `0 0 0 ${2 * zoom}px ${isWhiteCard ? '#3b82f6' : card.color}, 0 ${8 * zoom}px ${24 * zoom}px rgba(0,0,0,0.2)` 
             : (isNote ? `${2 * zoom}px ${2 * zoom}px ${8 * zoom}px rgba(0,0,0,0.15)` : `0 ${2 * zoom}px ${8 * zoom}px rgba(0,0,0,0.15)`),
           cursor: isDragging ? 'grabbing' : 'grab',
           opacity: isDragging ? 0.8 : (!inTimeline && !isCut && !isNote ? 0.7 : 1),
@@ -4089,9 +4097,9 @@ const BeatBoard = React.memo(({
           border: !inTimeline && !isCut && !isNote ? `${2 * zoom}px dashed ${darkMode ? '#555' : '#ccc'}` : 'none',
         }}
       >
-        {/* Color bar only for scenes, not notes */}
-        {!isNote && <div style={{ height: inTimeline ? 4 : 6 * zoom, background: card.color, borderRadius: `${(isNote ? 4 : 8) * zoom}px ${(isNote ? 4 : 8) * zoom}px 0 0` }} />}
-        <div style={{ padding: scaledPadding, display: 'flex', flexDirection: 'column', height: inTimeline ? 'auto' : `calc(100% - ${6 * zoom}px)` }}>
+        {/* Color bar only for scenes with a color (not white, not notes) */}
+        {!isNote && !isWhiteCard && <div style={{ height: inTimeline ? 4 : 6 * zoom, background: card.color, borderRadius: `${8 * zoom}px ${8 * zoom}px 0 0` }} />}
+        <div style={{ padding: scaledPadding, display: 'flex', flexDirection: 'column', height: inTimeline ? 'auto' : (isWhiteCard ? '100%' : `calc(100% - ${6 * zoom}px)`) }}>
           {/* Title */}
           <div style={{ 
             fontSize: scaledFontTitle, 
@@ -4186,56 +4194,7 @@ const BeatBoard = React.memo(({
   
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: darkMode ? '#1a1a1a' : '#f0f0f0', overflow: 'hidden' }}>
-      {/* Toolbar */}
-      <div style={{ padding: '8px 16px', background: darkMode ? '#2a2a2a' : 'white', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={addNewCard} style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 14 }}>+</span> Carte</button>
-          <button onClick={() => {
-            // Position in visible area: cardPos = screenPos / zoom - scroll
-            const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 / canvasZoom - pan.x, y: 150 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'note' };
-            setBeatCards(prev => [...prev, newNote]);
-            setSelectedCard(newNote.id);
-            setEditModalCard(newNote);
-          }} style={{ padding: '6px 12px', background: darkMode ? '#555' : '#fef3c7', border: 'none', borderRadius: 6, color: darkMode ? '#fbbf24' : '#92400e', fontSize: 12, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>📝 Note</button>
-          <div style={{ width: 1, height: 20, background: darkMode ? '#484848' : '#d1d5db' }} />
-          
-          {/* Whiteboard toggle */}
-          <button 
-            onClick={() => {
-              if (!whiteboardEnabled) {
-                // When enabling, increment key to remount Excalidraw with current zoom/pan
-                setWhiteboardKey(k => k + 1);
-              }
-              setWhiteboardEnabled(!whiteboardEnabled);
-            }}
-            style={{ 
-              padding: '6px 12px', 
-              background: whiteboardEnabled ? '#8b5cf6' : (darkMode ? '#3a3a3a' : '#f3f4f6'), 
-              border: whiteboardEnabled ? '2px solid #8b5cf6' : `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
-              borderRadius: 6, 
-              color: whiteboardEnabled ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'), 
-              fontSize: 12, 
-              fontWeight: 500, 
-              cursor: 'pointer', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 4,
-              transition: 'all 0.2s'
-            }}
-            title="Activer le whiteboard pour dessiner, ajouter du texte, des flèches..."
-          >
-            ✏️ Whiteboard {whiteboardEnabled && '✓'}
-          </button>
-          
-          <div style={{ width: 1, height: 20, background: darkMode ? '#484848' : '#d1d5db' }} />
-          <span style={{ fontSize: 11, color: '#6b7280' }}>
-            <span style={{ color: '#22c55e' }}>{timelineCards.length} CUT</span> • <span style={{ color: '#9ca3af' }}>{beatCards.filter(c => c.timelineIndex === null).length} UNCUT</span> • {beatCards.length} total
-          </span>
-        </div>
-        <button onClick={applyTimelineOrder} disabled={timelineCards.filter(c => c.linkedSceneId).length === 0} style={{ padding: '6px 12px', background: '#22c55e', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', opacity: timelineCards.filter(c => c.linkedSceneId).length === 0 ? 0.5 : 1 }}>Appliquer l'ordre au script</button>
-      </div>
-      
-      {/* Timeline zone - Video editor style */}
+      {/* Timeline zone with Structure row - Video editor style */}
       <div ref={timelineRef} style={{ background: isOverTimeline ? (darkMode ? '#2a4a2a' : '#dcfce7') : (darkMode ? '#252525' : '#fafafa'), borderBottom: `2px solid ${isOverTimeline ? '#22c55e' : (darkMode ? '#484848' : '#e5e7eb')}`, display: 'flex', flexDirection: 'column', transition: 'background 0.2s' }}>
         {/* Timeline header with mode toggle and zoom */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
@@ -4262,20 +4221,79 @@ const BeatBoard = React.memo(({
             {sceneMetrics.totalPages.toFixed(1)} pages • {Math.floor(sceneMetrics.totalTime / 60)}:{String(Math.floor(sceneMetrics.totalTime % 60)).padStart(2, '0')}
           </span>
           
+          <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 16 }}>
+            <span style={{ color: '#22c55e' }}>{timelineCards.length} CUT</span> • <span style={{ color: '#9ca3af' }}>{beatCards.filter(c => c.timelineIndex === null).length} UNCUT</span>
+          </span>
+          
           <div style={{ flex: 1 }} />
           
+          {/* Apply order button */}
+          <button onClick={applyTimelineOrder} disabled={timelineCards.filter(c => c.linkedSceneId).length === 0} style={{ padding: '4px 10px', background: '#22c55e', border: 'none', borderRadius: 4, color: 'white', fontSize: 10, fontWeight: 500, cursor: 'pointer', opacity: timelineCards.filter(c => c.linkedSceneId).length === 0 ? 0.5 : 1 }}>Appliquer au script</button>
+          
           {/* Zoom slider */}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
-          <input
-            type="range"
-            min={timelineMode === 'blocks' ? '0.5' : '0.3'}
-            max={timelineMode === 'blocks' ? '3' : '1.5'}
-            step="0.05"
-            value={timelineZoom}
-            onChange={(e) => setTimelineZoom(parseFloat(e.target.value))}
-            style={{ width: 80, height: 4, cursor: 'pointer', accentColor: '#3b82f6' }}
-          />
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 12 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
+            <input
+              type="range"
+              min={timelineMode === 'blocks' ? '0.5' : '0.3'}
+              max={timelineMode === 'blocks' ? '3' : '1.5'}
+              step="0.05"
+              value={timelineZoom}
+              onChange={(e) => setTimelineZoom(parseFloat(e.target.value))}
+              style={{ width: 60, height: 4, cursor: 'pointer', accentColor: '#3b82f6' }}
+            />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
+          </div>
+        </div>
+        
+        {/* Structure row - Act breaks, key beats */}
+        <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 28, background: darkMode ? '#1f1f1f' : '#f8f9fa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, overflow: 'hidden' }}>
+          <div style={{ width: 50, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#6b7280', borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
+            STRUCTURE
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', overflowX: 'auto' }}>
+            {structureBeats.length === 0 ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 10, fontStyle: 'italic' }}>
+                Structure vide • Double-clic pour ajouter un acte
+              </div>
+            ) : (
+              structureBeats.map((beat, idx) => (
+                <div
+                  key={beat.id}
+                  onDoubleClick={() => {
+                    const newLabel = prompt('Nom du bloc:', beat.label);
+                    if (newLabel) setStructureBeats(prev => prev.map(b => b.id === beat.id ? { ...b, label: newLabel } : b));
+                  }}
+                  style={{
+                    flex: beat.flex || 1,
+                    background: beat.color || (darkMode ? '#2a2a2a' : '#e5e7eb'),
+                    borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: darkMode ? '#ccc' : '#374151',
+                    cursor: 'pointer',
+                    padding: '0 8px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {beat.label}
+                </div>
+              ))
+            )}
+          </div>
+          <button
+            onClick={() => {
+              const label = prompt('Nom du nouveau bloc (ex: Acte 1, Élément déclencheur...)');
+              if (label) setStructureBeats(prev => [...prev, { id: 'struct_' + Date.now(), label, flex: 1, color: null }]);
+            }}
+            style={{ width: 28, flexShrink: 0, background: darkMode ? '#333' : '#e5e7eb', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#6b7280' }}
+            title="Ajouter un bloc de structure"
+          >
+            +
+          </button>
         </div>
         
         {/* Ruler - Pages & Time */}
@@ -4325,6 +4343,9 @@ const BeatBoard = React.memo(({
                 const blockWidth = Math.max(20, card.pages * 60 * timelineZoom);
                 // Find the full card data for drag
                 const fullCard = beatCards.find(c => c.id === card.id);
+                const isWhite = card.color === '#ffffff';
+                const blockBg = isWhite ? (darkMode ? '#555' : '#e5e7eb') : card.color;
+                const textColor = isWhite ? (darkMode ? 'white' : '#374151') : 'white';
                 return (
                   <div
                     key={card.id}
@@ -4335,7 +4356,7 @@ const BeatBoard = React.memo(({
                     style={{
                       width: blockWidth,
                       height: '100%',
-                      background: card.color,
+                      background: blockBg,
                       borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
                       cursor: 'grab',
                       position: 'relative',
@@ -4344,12 +4365,12 @@ const BeatBoard = React.memo(({
                       justifyContent: 'center',
                       overflow: 'hidden',
                       opacity: selectedCard === card.id ? 1 : 0.85,
-                      boxShadow: selectedCard === card.id ? 'inset 0 0 0 2px white' : 'none',
+                      boxShadow: selectedCard === card.id ? `inset 0 0 0 2px ${isWhite ? '#3b82f6' : 'white'}` : 'none',
                     }}
                   >
                     {/* Show title only if block is wide enough */}
                     {blockWidth > 60 && (
-                      <span style={{ fontSize: 9, color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', maxWidth: '100%' }}>
+                      <span style={{ fontSize: 9, color: textColor, textShadow: isWhite ? 'none' : '0 1px 2px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', maxWidth: '100%' }}>
                         {card.title.replace(/^(INT\.|EXT\.|INT\/EXT\.)\s*/i, '').substring(0, 20)}
                       </span>
                     )}
@@ -4535,9 +4556,48 @@ const BeatBoard = React.memo(({
           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', color: '#6b7280' }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🎬</div>
             <div style={{ fontSize: 14, marginBottom: 8 }}>Toutes vos scènes sont dans la timeline</div>
-            <div style={{ fontSize: 12 }}>Cliquez sur "Nouvelle carte" pour ajouter des idées</div>
+            <div style={{ fontSize: 12 }}>Cliquez sur "+ Carte" pour ajouter des idées</div>
           </div>
         )}
+        
+        {/* Canvas controls overlay - Top left */}
+        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 6, zIndex: 100 }}>
+          <button onClick={addNewCard} style={{ padding: '6px 10px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+            <span style={{ fontSize: 12 }}>+</span> Carte
+          </button>
+          <button onClick={() => {
+            const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 / canvasZoom - pan.x, y: 150 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'note' };
+            setBeatCards(prev => [...prev, newNote]);
+            setSelectedCard(newNote.id);
+            setEditModalCard(newNote);
+          }} style={{ padding: '6px 10px', background: darkMode ? 'rgba(85,85,85,0.9)' : 'rgba(254,243,199,0.95)', border: 'none', borderRadius: 6, color: darkMode ? '#fbbf24' : '#92400e', fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+            📝 Note
+          </button>
+          <button 
+            onClick={() => {
+              if (!whiteboardEnabled) setWhiteboardKey(k => k + 1);
+              setWhiteboardEnabled(!whiteboardEnabled);
+            }}
+            style={{ 
+              padding: '6px 10px', 
+              background: whiteboardEnabled ? '#8b5cf6' : (darkMode ? 'rgba(58,58,58,0.9)' : 'rgba(255,255,255,0.95)'), 
+              border: whiteboardEnabled ? 'none' : `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
+              borderRadius: 6, 
+              color: whiteboardEnabled ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'), 
+              fontSize: 11, 
+              fontWeight: 500, 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 4,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            }}
+            title="Activer le whiteboard pour dessiner"
+          >
+            ✏️ {whiteboardEnabled ? 'Dessin ON' : 'Dessiner'}
+          </button>
+        </div>
+        
         {/* Canvas zoom controls - Bottom right overlay - Hidden when whiteboard is active (use Excalidraw's controls) */}
         {!whiteboardEnabled && (
           <div style={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', alignItems: 'center', gap: 4, background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.9)', padding: '6px 8px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', zIndex: 10 }}>
