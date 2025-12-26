@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V210 - Beat Board: fix card/note types, restore position after timeline drop, better note colors
+// V211 - Beat Board: drag out from timeline to uncut, controls at bottom, blocks drag support
 
 const SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
@@ -3643,6 +3643,7 @@ const BeatBoard = React.memo(({
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const lastClickRef = useRef({ cardId: null, time: 0 }); // For manual double-click detection
   const dragOriginalPosRef = useRef(null); // Store original position during drag
+  const dragFromTimelineRef = useRef(false); // Track if drag started from timeline
   const canvasRef = useRef(null);
   const timelineRef = useRef(null);
   
@@ -3731,7 +3732,7 @@ const BeatBoard = React.memo(({
     return { cards: metrics, totalPages: cumulativePages, totalTime: cumulativePages * 60 };
   }, [timelineCards, elements]);
   
-  const handleDragStart = (e, card) => {
+  const handleDragStart = (e, card, fromTimeline = false) => {
     e.stopPropagation();
     e.preventDefault(); // Prevent text selection
     const rect = e.currentTarget.getBoundingClientRect();
@@ -3743,7 +3744,8 @@ const BeatBoard = React.memo(({
       offsetX: e.clientX - rect.left,
       offsetY: e.clientY - rect.top,
       time: Date.now(),
-      originalPosition: { ...card.position } // Store original position to restore after timeline drop
+      originalPosition: { ...card.position }, // Store original position to restore after timeline drop
+      fromTimeline // Track if dragging from timeline
     });
     setSelectedCard(card.id);
   };
@@ -3754,8 +3756,9 @@ const BeatBoard = React.memo(({
       const dx = Math.abs(e.clientX - pendingDrag.startX);
       const dy = Math.abs(e.clientY - pendingDrag.startY);
       if (dx > 5 || dy > 5) {
-        // Start actual drag - store original position
+        // Start actual drag - store original position and fromTimeline
         dragOriginalPosRef.current = pendingDrag.originalPosition;
+        dragFromTimelineRef.current = pendingDrag.fromTimeline;
         setDraggedCard(pendingDrag.card);
         setDragOffset({ x: pendingDrag.offsetX, y: pendingDrag.offsetY });
         setPendingDrag(null);
@@ -3769,16 +3772,18 @@ const BeatBoard = React.memo(({
     const canvasRect = canvasRef.current.getBoundingClientRect();
     const timelineRect = timelineRef.current?.getBoundingClientRect();
     
-    const x = (e.clientX - canvasRect.left - dragOffset.x - pan.x) / canvasZoom;
-    const y = (e.clientY - canvasRect.top - dragOffset.y - pan.y) / canvasZoom;
-    
     // Only highlight timeline when cursor is actually over the timeline zone
     const isOverTimelineZone = timelineRect && 
       e.clientY >= timelineRect.top && 
       e.clientY <= timelineRect.bottom;
     setIsOverTimeline(isOverTimelineZone);
     
-    setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, position: { x: Math.max(0, x), y: Math.max(0, y) } } : c));
+    // Only update position if dragging from canvas (not from timeline)
+    if (!dragFromTimelineRef.current) {
+      const x = (e.clientX - canvasRect.left - dragOffset.x - pan.x) / canvasZoom;
+      const y = (e.clientY - canvasRect.top - dragOffset.y - pan.y) / canvasZoom;
+      setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, position: { x: Math.max(0, x), y: Math.max(0, y) } } : c));
+    }
   }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag]);
   
   const handleDragEnd = useCallback((e) => {
@@ -3805,18 +3810,21 @@ const BeatBoard = React.memo(({
     if (!draggedCard || !canvasRef.current) return;
     const timelineRect = timelineRef.current?.getBoundingClientRect();
     
-    // Check if dropped specifically on the timeline zone (not just near it)
+    // Check if dropped specifically on the timeline zone
     const isDroppedOnTimeline = timelineRect && 
       e.clientY >= timelineRect.top && 
       e.clientY <= timelineRect.bottom;
     
+    const fromTimeline = dragFromTimelineRef.current;
+    const originalPos = dragOriginalPosRef.current;
+    
     if (isDroppedOnTimeline) {
-      // Add to timeline (or reorder if already in timeline) and RESTORE original position
+      // Add to timeline (or reorder if already in timeline)
       const x = e.clientX - timelineRect.left;
       const newIndex = Math.max(0, Math.floor((x - 60) / 200));
-      const originalPos = dragOriginalPosRef.current;
       
       setBeatCards(prev => {
+        // Always restore original position when dropping on timeline
         let cards = prev.map(c => c.id === draggedCard.id ? { ...c, timelineIndex: -999, position: originalPos || c.position } : c);
         const inTimeline = cards.filter(c => c.timelineIndex !== null && c.timelineIndex !== -999).sort((a, b) => a.timelineIndex - b.timelineIndex);
         inTimeline.splice(Math.min(newIndex, inTimeline.length), 0, cards.find(c => c.id === draggedCard.id));
@@ -3825,12 +3833,17 @@ const BeatBoard = React.memo(({
           return tlIdx >= 0 ? { ...c, timelineIndex: tlIdx } : c;
         });
       });
+    } else if (fromTimeline) {
+      // Dragged FROM timeline and dropped OUTSIDE -> UNCUT (remove from timeline)
+      // Keep original position (don't change canvas position)
+      setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, timelineIndex: null, position: originalPos || c.position } : c));
     }
-    // If dropped in canvas, keep the new position (user is rearranging the canvas)
+    // If dragged from canvas and dropped on canvas, position was already updated during drag
     
     setDraggedCard(null);
     setIsOverTimeline(false);
-    dragOriginalPosRef.current = null; // Clean up
+    dragOriginalPosRef.current = null;
+    dragFromTimelineRef.current = false;
   }, [draggedCard, pendingDrag]);
   
   useEffect(() => {
@@ -3924,7 +3937,7 @@ const BeatBoard = React.memo(({
     
     return (
       <div
-        onMouseDown={(e) => handleDragStart(e, card)}
+        onMouseDown={(e) => handleDragStart(e, card, inTimeline)}
         style={{
           position: inTimeline ? 'relative' : 'absolute',
           left: inTimeline ? 'auto' : card.position.x,
@@ -3951,43 +3964,22 @@ const BeatBoard = React.memo(({
       >
         {/* Color bar only for scenes, not notes */}
         {!isNote && <div style={{ height: inTimeline ? 4 : 6, background: card.color, borderRadius: '8px 8px 0 0' }} />}
-        <div style={{ padding: inTimeline ? '6px 8px' : '10px 12px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4 }}>
-            <div style={{ 
-              fontSize: 11, 
-              fontWeight: 600, 
-              color: isNote ? (darkMode ? noteStyle?.darkText : noteStyle?.text) || '#92400e' : (darkMode ? 'white' : '#1a1a1a'), 
-              marginBottom: 6, 
-              lineHeight: 1.3, 
-              overflow: 'hidden', 
-              textOverflow: 'ellipsis', 
-              display: '-webkit-box', 
-              WebkitLineClamp: 2, 
-              WebkitBoxOrient: 'vertical', 
-              flex: 1 
-            }}>{card.title}</div>
-            {/* CUT/UNCUT badge - only on canvas, not for notes */}
-            {!inTimeline && !isNote && (
-              <button
-                onClick={(e) => { e.stopPropagation(); toggleCut(card.id); }}
-                onMouseDown={(e) => e.stopPropagation()}
-                title={isCut ? 'Dans le montage (clic pour retirer)' : 'Hors montage (clic pour ajouter)'}
-                style={{
-                  padding: '2px 5px',
-                  fontSize: 8,
-                  fontWeight: 600,
-                  borderRadius: 3,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: isCut ? '#22c55e' : (darkMode ? '#555' : '#e5e7eb'),
-                  color: isCut ? 'white' : '#6b7280',
-                  flexShrink: 0,
-                }}
-              >
-                {isCut ? '🎬 CUT' : 'UNCUT'}
-              </button>
-            )}
-          </div>
+        <div style={{ padding: inTimeline ? '6px 8px' : '10px 12px', display: 'flex', flexDirection: 'column', height: inTimeline ? 'auto' : 'calc(100% - 6px)' }}>
+          {/* Title */}
+          <div style={{ 
+            fontSize: 11, 
+            fontWeight: 600, 
+            color: isNote ? (darkMode ? noteStyle?.darkText : noteStyle?.text) || '#92400e' : (darkMode ? 'white' : '#1a1a1a'), 
+            marginBottom: 4, 
+            lineHeight: 1.3, 
+            overflow: 'hidden', 
+            textOverflow: 'ellipsis', 
+            display: '-webkit-box', 
+            WebkitLineClamp: inTimeline ? 2 : 2, 
+            WebkitBoxOrient: 'vertical',
+          }}>{card.title}</div>
+          
+          {/* Synopsis - only on canvas */}
           {!inTimeline && (
             <div style={{ 
               fontSize: 10, 
@@ -3996,26 +3988,71 @@ const BeatBoard = React.memo(({
               overflow: 'hidden', 
               textOverflow: 'ellipsis', 
               display: '-webkit-box', 
-              WebkitLineClamp: 3, 
+              WebkitLineClamp: 4, 
               WebkitBoxOrient: 'vertical',
+              flex: 1,
+              marginBottom: 8,
             }}>{card.synopsis || (isNote ? 'Double-clic pour éditer' : 'Double-clic pour ajouter un résumé')}</div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: inTimeline ? 4 : 8, paddingTop: inTimeline ? 4 : 6, borderTop: `1px solid ${isNote ? (darkMode ? '#ffffff20' : '#00000015') : (darkMode ? '#484848' : '#e5e7eb')}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          
+          {/* Footer with controls - only on canvas */}
+          {!inTimeline && (
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              paddingTop: 6, 
+              borderTop: `1px solid ${isNote ? (darkMode ? '#ffffff20' : '#00000015') : (darkMode ? '#484848' : '#e5e7eb')}`,
+              marginTop: 'auto'
+            }}>
+              {/* Left: Status badges */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {card.status && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
+                {isNote && <span style={{ fontSize: 9 }}>📝</span>}
+                {card.linkedSceneId && <span style={{ fontSize: 10, color: '#6b7280' }}>🔗</span>}
+              </div>
+              
+              {/* Center: CUT/UNCUT badge - not for notes */}
+              {!isNote && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleCut(card.id); }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  title={isCut ? 'Dans le montage (clic pour retirer)' : 'Hors montage (clic pour ajouter)'}
+                  style={{
+                    padding: '2px 6px',
+                    fontSize: 8,
+                    fontWeight: 600,
+                    borderRadius: 3,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: isCut ? '#22c55e' : (darkMode ? '#555' : '#e5e7eb'),
+                    color: isCut ? 'white' : '#6b7280',
+                  }}
+                >
+                  {isCut ? '🎬 CUT' : 'UNCUT'}
+                </button>
+              )}
+              
+              {/* Right: Color picker (only when selected) */}
+              {isSelected && (
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {cardColors.slice(0, 4).map(color => (
+                    <button key={color} onClick={(e) => { e.stopPropagation(); updateCard(card.id, { color }); }} onMouseDown={(e) => e.stopPropagation()} style={{ width: 12, height: 12, borderRadius: 3, background: color, border: card.color === color ? '2px solid white' : 'none', cursor: 'pointer' }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Timeline footer - simplified */}
+          {inTimeline && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, paddingTop: 4, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}` }}>
               {card.status && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: card.status === 'done' ? '#22c55e' : card.status === 'progress' ? '#3b82f6' : '#ef4444', color: 'white' }}>{card.status === 'done' ? '✓' : card.status === 'progress' ? '◐' : '!'}</span>}
-              {isNote && <span style={{ fontSize: 9 }}>📝</span>}
               {card.linkedSceneId && <span style={{ fontSize: 10, color: '#6b7280' }}>🔗</span>}
             </div>
-            {isSelected && !inTimeline && (
-              <div style={{ display: 'flex', gap: 2 }}>
-                {cardColors.slice(0, 4).map(color => (
-                  <button key={color} onClick={(e) => { e.stopPropagation(); updateCard(card.id, { color }); }} onMouseDown={(e) => e.stopPropagation()} style={{ width: 12, height: 12, borderRadius: 3, background: color, border: card.color === color ? '2px solid white' : 'none', cursor: 'pointer' }} />
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </div>
-        {isSelected && <button onClick={(e) => { e.stopPropagation(); deleteCard(card.id); }} onMouseDown={(e) => e.stopPropagation()} style={{ position: 'absolute', top: isNote ? 4 : 8, right: 8, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>}
+        {isSelected && !inTimeline && <button onClick={(e) => { e.stopPropagation(); deleteCard(card.id); }} onMouseDown={(e) => e.stopPropagation()} style={{ position: 'absolute', top: isNote ? 4 : 8, right: 8, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>}
       </div>
     );
   };
@@ -4128,19 +4165,21 @@ const BeatBoard = React.memo(({
             <div style={{ display: 'flex', height: 36, position: 'relative' }}>
               {sceneMetrics.cards.map((card, idx) => {
                 const blockWidth = Math.max(20, card.pages * 60 * timelineZoom);
+                // Find the full card data for drag
+                const fullCard = beatCards.find(c => c.id === card.id);
                 return (
                   <div
                     key={card.id}
                     onMouseEnter={() => setHoveredBlock(card.id)}
                     onMouseLeave={() => setHoveredBlock(null)}
-                    onClick={() => setSelectedCard(card.id)}
-                    onDoubleClick={() => setEditModalCard(card)}
+                    onMouseDown={(e) => fullCard && handleDragStart(e, fullCard, true)}
+                    onDoubleClick={() => setEditModalCard(fullCard || card)}
                     style={{
                       width: blockWidth,
                       height: '100%',
                       background: card.color,
                       borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
-                      cursor: 'pointer',
+                      cursor: 'grab',
                       position: 'relative',
                       display: 'flex',
                       alignItems: 'center',
