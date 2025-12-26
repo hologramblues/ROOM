@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V213 - Beat Board: Excalidraw whiteboard fix (CSS import)
+// V214 - Beat Board: Transparent whiteboard overlay (see cards under drawings)
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -4345,14 +4345,26 @@ const BeatBoard = React.memo(({
       
       {/* Canvas zone */}
       <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onWheel={!whiteboardEnabled ? handleWheel : undefined} onClick={!whiteboardEnabled ? () => setSelectedCard(null) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}>
-        {/* Beat cards layer */}
-        <div style={{ position: 'absolute', transform: `translate(${pan.x}px, ${pan.y}px) scale(${canvasZoom})`, transformOrigin: '0 0', pointerEvents: whiteboardEnabled ? 'none' : 'auto' }}>
+        {/* Beat cards layer - always visible */}
+        <div style={{ position: 'absolute', transform: `translate(${pan.x}px, ${pan.y}px) scale(${canvasZoom})`, transformOrigin: '0 0', pointerEvents: whiteboardEnabled ? 'none' : 'auto', zIndex: 1 }}>
           {canvasCards.map(card => <BeatCard key={card.id} card={card} inTimeline={false} />)}
         </div>
         
-        {/* Excalidraw whiteboard overlay */}
+        {/* Excalidraw whiteboard overlay - transparent background to see cards */}
         {whiteboardEnabled && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 100, width: '100%', height: '100%' }}>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 50, width: '100%', height: '100%' }}>
+            <style>{`
+              .excalidraw, .excalidraw.theme--dark, .excalidraw.theme--light {
+                --color-surface-primary-container: transparent !important;
+                background: transparent !important;
+              }
+              .excalidraw .App-menu, .excalidraw .layer-ui__wrapper {
+                background: transparent !important;
+              }
+              .excalidraw canvas {
+                background: transparent !important;
+              }
+            `}</style>
             <Suspense fallback={
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6b7280' }}>
                 <div style={{ textAlign: 'center' }}>
@@ -4366,7 +4378,7 @@ const BeatBoard = React.memo(({
                 initialData={{ 
                   elements: whiteboardElements,
                   appState: { 
-                    viewBackgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5',
+                    viewBackgroundColor: 'transparent',
                     theme: darkMode ? 'dark' : 'light',
                     gridSize: null,
                     zenModeEnabled: false,
