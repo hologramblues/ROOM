@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V219 - Beat Board: Blocks only timeline, whiteboard+cards interaction, synced scroll, multi-select
+// V220 - Fix: card hover preview below blocks, remove left position limit
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3838,7 +3838,7 @@ const BeatBoard = React.memo(({
       setBeatCards(prev => prev.map(c => {
         if (selectedPositions && selectedPositions.has(c.id)) {
           const origPos = selectedPositions.get(c.id);
-          return { ...c, position: { x: Math.max(0, origPos.x + deltaX), y: Math.max(0, origPos.y + deltaY) } };
+          return { ...c, position: { x: origPos.x + deltaX, y: origPos.y + deltaY } };
         }
         return c;
       }));
@@ -4439,7 +4439,7 @@ const BeatBoard = React.memo(({
                       
                       {/* Card preview on hover */}
                       {hoveredBlock === card.id && fullCard && (
-                        <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 8, zIndex: 100, pointerEvents: 'none' }}>
+                        <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, zIndex: 100, pointerEvents: 'none' }}>
                           <div style={{
                             width: 180,
                             minHeight: 100,
