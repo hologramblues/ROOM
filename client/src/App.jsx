@@ -4336,7 +4336,7 @@ const BeatBoard = React.memo(({
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
-                      if (confirm(`Supprimer "${beat.label}" ?`)) {
+                      if (window.confirm(`Supprimer "${beat.label}" ?`)) {
                         setStructureBeats(prev => prev.filter(b => b.id !== beat.id));
                       }
                     }}
