@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V217 - Beat Board: UI reorganization, white default cards, structure timeline
+// V218 - Beat Board: Timeline UI cleanup, cards stay connected on zoom, structure trim handles
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3651,6 +3651,7 @@ const BeatBoard = React.memo(({
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const [whiteboardEnabled, setWhiteboardEnabled] = useState(false); // Whiteboard overlay toggle
   const [structureBeats, setStructureBeats] = useState([]); // Structure row beats (Act 1, Act 2, etc.)
+  const [trimmingBeat, setTrimmingBeat] = useState(null); // { id, edge: 'left'|'right', startX, startFlex }
   const [whiteboardKey, setWhiteboardKey] = useState(0); // Key to force remount Excalidraw with current zoom/pan
   const [whiteboardElements, setWhiteboardElements] = useState([]); // Excalidraw elements
   const [convertMenuPos, setConvertMenuPos] = useState(null); // Position for convert menu
@@ -4196,74 +4197,95 @@ const BeatBoard = React.memo(({
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: darkMode ? '#1a1a1a' : '#f0f0f0', overflow: 'hidden' }}>
       {/* Timeline zone with Structure row - Video editor style */}
       <div ref={timelineRef} style={{ background: isOverTimeline ? (darkMode ? '#2a4a2a' : '#dcfce7') : (darkMode ? '#252525' : '#fafafa'), borderBottom: `2px solid ${isOverTimeline ? '#22c55e' : (darkMode ? '#484848' : '#e5e7eb')}`, display: 'flex', flexDirection: 'column', transition: 'background 0.2s' }}>
-        {/* Timeline header with mode toggle and zoom */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
+        {/* Timeline header - minimal */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
           <span style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>TIMELINE</span>
           
-          {/* Mode toggle */}
-          <div style={{ display: 'flex', background: darkMode ? '#3a3a3a' : '#e5e7eb', borderRadius: 4, padding: 2, marginLeft: 8 }}>
+          {/* Mode toggle - compact */}
+          <div style={{ display: 'flex', background: darkMode ? '#3a3a3a' : '#e5e7eb', borderRadius: 4, padding: 1, marginLeft: 4 }}>
             <button
               onClick={() => setTimelineMode('cards')}
-              style={{ padding: '3px 8px', fontSize: 10, border: 'none', borderRadius: 3, cursor: 'pointer', background: timelineMode === 'cards' ? (darkMode ? '#555' : 'white') : 'transparent', color: timelineMode === 'cards' ? (darkMode ? 'white' : 'black') : '#6b7280' }}
+              style={{ padding: '2px 6px', fontSize: 9, border: 'none', borderRadius: 3, cursor: 'pointer', background: timelineMode === 'cards' ? (darkMode ? '#555' : 'white') : 'transparent', color: timelineMode === 'cards' ? (darkMode ? 'white' : 'black') : '#6b7280' }}
             >
               Cartes
             </button>
             <button
               onClick={() => setTimelineMode('blocks')}
-              style={{ padding: '3px 8px', fontSize: 10, border: 'none', borderRadius: 3, cursor: 'pointer', background: timelineMode === 'blocks' ? (darkMode ? '#555' : 'white') : 'transparent', color: timelineMode === 'blocks' ? (darkMode ? 'white' : 'black') : '#6b7280' }}
+              style={{ padding: '2px 6px', fontSize: 9, border: 'none', borderRadius: 3, cursor: 'pointer', background: timelineMode === 'blocks' ? (darkMode ? '#555' : 'white') : 'transparent', color: timelineMode === 'blocks' ? (darkMode ? 'white' : 'black') : '#6b7280' }}
             >
               Blocs
             </button>
           </div>
           
-          {/* Stats */}
-          <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 8 }}>
-            {sceneMetrics.totalPages.toFixed(1)} pages • {Math.floor(sceneMetrics.totalTime / 60)}:{String(Math.floor(sceneMetrics.totalTime % 60)).padStart(2, '0')}
-          </span>
-          
-          <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 16 }}>
-            <span style={{ color: '#22c55e' }}>{timelineCards.length} CUT</span> • <span style={{ color: '#9ca3af' }}>{beatCards.filter(c => c.timelineIndex === null).length} UNCUT</span>
-          </span>
-          
           <div style={{ flex: 1 }} />
           
-          {/* Apply order button */}
-          <button onClick={applyTimelineOrder} disabled={timelineCards.filter(c => c.linkedSceneId).length === 0} style={{ padding: '4px 10px', background: '#22c55e', border: 'none', borderRadius: 4, color: 'white', fontSize: 10, fontWeight: 500, cursor: 'pointer', opacity: timelineCards.filter(c => c.linkedSceneId).length === 0 ? 0.5 : 1 }}>Appliquer au script</button>
-          
-          {/* Zoom slider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 12 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
+          {/* Zoom slider - calculated based on card count */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6"/></svg>
             <input
               type="range"
-              min={timelineMode === 'blocks' ? '0.5' : '0.3'}
-              max={timelineMode === 'blocks' ? '3' : '1.5'}
-              step="0.05"
+              min="0.15"
+              max={Math.max(1.5, Math.min(3, 30 / Math.max(1, timelineCards.length)))}
+              step="0.01"
               value={timelineZoom}
               onChange={(e) => setTimelineZoom(parseFloat(e.target.value))}
-              style={{ width: 60, height: 4, cursor: 'pointer', accentColor: '#3b82f6' }}
+              style={{ width: 80, height: 3, cursor: 'pointer', accentColor: '#3b82f6' }}
             />
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/></svg>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M8 11h6M11 8v6"/></svg>
           </div>
         </div>
         
-        {/* Structure row - Act breaks, key beats */}
-        <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 28, background: darkMode ? '#1f1f1f' : '#f8f9fa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, overflow: 'hidden' }}>
+        {/* Structure row - Act breaks, key beats with trim handles */}
+        <div 
+          style={{ display: 'flex', alignItems: 'stretch', minHeight: 28, background: darkMode ? '#1f1f1f' : '#f8f9fa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, overflow: 'hidden' }}
+          onMouseMove={(e) => {
+            if (trimmingBeat) {
+              const deltaX = e.clientX - trimmingBeat.startX;
+              const flexChange = deltaX / 100; // 100px = 1 flex unit
+              setStructureBeats(prev => {
+                const idx = prev.findIndex(b => b.id === trimmingBeat.id);
+                if (idx === -1) return prev;
+                const newBeats = [...prev];
+                if (trimmingBeat.edge === 'right' && idx < prev.length - 1) {
+                  // Trim right edge: increase current, decrease next
+                  const newFlex = Math.max(0.2, trimmingBeat.startFlex + flexChange);
+                  const nextStartFlex = trimmingBeat.nextStartFlex || 1;
+                  const nextNewFlex = Math.max(0.2, nextStartFlex - flexChange);
+                  newBeats[idx] = { ...newBeats[idx], flex: newFlex };
+                  newBeats[idx + 1] = { ...newBeats[idx + 1], flex: nextNewFlex };
+                } else if (trimmingBeat.edge === 'left' && idx > 0) {
+                  // Trim left edge: decrease prev, increase current
+                  const prevStartFlex = trimmingBeat.prevStartFlex || 1;
+                  const prevNewFlex = Math.max(0.2, prevStartFlex + flexChange);
+                  const newFlex = Math.max(0.2, trimmingBeat.startFlex - flexChange);
+                  newBeats[idx - 1] = { ...newBeats[idx - 1], flex: prevNewFlex };
+                  newBeats[idx] = { ...newBeats[idx], flex: newFlex };
+                }
+                return newBeats;
+              });
+            }
+          }}
+          onMouseUp={() => setTrimmingBeat(null)}
+          onMouseLeave={() => setTrimmingBeat(null)}
+        >
           <div style={{ width: 50, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#6b7280', borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
             STRUCTURE
           </div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', overflowX: 'auto' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', overflowX: 'auto', position: 'relative' }}>
             {structureBeats.length === 0 ? (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 10, fontStyle: 'italic' }}>
-                Structure vide • Double-clic pour ajouter un acte
+              <div 
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 10, fontStyle: 'italic', cursor: 'pointer' }}
+                onClick={() => {
+                  const label = prompt('Nom du premier bloc (ex: Acte 1)');
+                  if (label) setStructureBeats([{ id: 'struct_' + Date.now(), label, flex: 1, color: null }]);
+                }}
+              >
+                Cliquez pour ajouter une structure
               </div>
             ) : (
               structureBeats.map((beat, idx) => (
                 <div
                   key={beat.id}
-                  onDoubleClick={() => {
-                    const newLabel = prompt('Nom du bloc:', beat.label);
-                    if (newLabel) setStructureBeats(prev => prev.map(b => b.id === beat.id ? { ...b, label: newLabel } : b));
-                  }}
                   style={{
                     flex: beat.flex || 1,
                     background: beat.color || (darkMode ? '#2a2a2a' : '#e5e7eb'),
@@ -4274,12 +4296,82 @@ const BeatBoard = React.memo(({
                     fontSize: 10,
                     fontWeight: 600,
                     color: darkMode ? '#ccc' : '#374151',
-                    cursor: 'pointer',
-                    padding: '0 8px',
-                    whiteSpace: 'nowrap',
+                    position: 'relative',
+                    minWidth: 40,
                   }}
                 >
-                  {beat.label}
+                  {/* Left trim handle */}
+                  {idx > 0 && (
+                    <div
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setTrimmingBeat({
+                          id: beat.id,
+                          edge: 'left',
+                          startX: e.clientX,
+                          startFlex: beat.flex || 1,
+                          prevStartFlex: structureBeats[idx - 1]?.flex || 1,
+                        });
+                      }}
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: 6,
+                        cursor: 'ew-resize',
+                        background: trimmingBeat?.id === beat.id && trimmingBeat?.edge === 'left' ? 'rgba(59,130,246,0.5)' : 'transparent',
+                        zIndex: 10,
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.3)'}
+                      onMouseLeave={(e) => { if (!trimmingBeat) e.currentTarget.style.background = 'transparent'; }}
+                    />
+                  )}
+                  
+                  {/* Label - clickable to edit */}
+                  <span
+                    onClick={() => {
+                      const newLabel = prompt('Nom du bloc:', beat.label);
+                      if (newLabel) setStructureBeats(prev => prev.map(b => b.id === beat.id ? { ...b, label: newLabel } : b));
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      if (confirm(`Supprimer "${beat.label}" ?`)) {
+                        setStructureBeats(prev => prev.filter(b => b.id !== beat.id));
+                      }
+                    }}
+                    style={{ cursor: 'pointer', padding: '0 8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  >
+                    {beat.label}
+                  </span>
+                  
+                  {/* Right trim handle */}
+                  {idx < structureBeats.length - 1 && (
+                    <div
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setTrimmingBeat({
+                          id: beat.id,
+                          edge: 'right',
+                          startX: e.clientX,
+                          startFlex: beat.flex || 1,
+                          nextStartFlex: structureBeats[idx + 1]?.flex || 1,
+                        });
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: 6,
+                        cursor: 'ew-resize',
+                        background: trimmingBeat?.id === beat.id && trimmingBeat?.edge === 'right' ? 'rgba(59,130,246,0.5)' : 'transparent',
+                        zIndex: 10,
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.3)'}
+                      onMouseLeave={(e) => { if (!trimmingBeat) e.currentTarget.style.background = 'transparent'; }}
+                    />
+                  )}
                 </div>
               ))
             )}
@@ -4319,21 +4411,18 @@ const BeatBoard = React.memo(({
         )}
         
         {/* Timeline content */}
-        <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', padding: timelineMode === 'cards' ? '8px 12px' : '0', minHeight: timelineMode === 'cards' ? 80 : 40 }}>
+        <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', padding: timelineMode === 'cards' ? '6px 8px' : '0', minHeight: timelineMode === 'cards' ? 70 : 40 }}>
           {timelineCards.length === 0 ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 11, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 6, padding: 12, margin: 8 }}>
               Glissez des cartes ici pour construire votre timeline
             </div>
           ) : timelineMode === 'cards' ? (
-            // Cards mode
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            // Cards mode - cards stay connected like blocks
+            <div style={{ display: 'flex', alignItems: 'center' }}>
               {timelineCards.map((card, idx) => (
-                <React.Fragment key={card.id}>
-                  {idx > 0 && <div style={{ width: Math.max(4, 12 * timelineZoom), height: 2, background: darkMode ? '#484848' : '#d1d5db', flexShrink: 0 }} />}
-                  <div style={{ transform: `scale(${timelineZoom})`, transformOrigin: 'left center', flexShrink: 0 }}>
-                    <BeatCard card={card} inTimeline={true} />
-                  </div>
-                </React.Fragment>
+                <div key={card.id} style={{ transform: `scale(${timelineZoom})`, transformOrigin: 'left center', flexShrink: 0, marginRight: -1 }}>
+                  <BeatCard card={card} inTimeline={true} />
+                </div>
               ))}
             </div>
           ) : (
@@ -4596,6 +4685,24 @@ const BeatBoard = React.memo(({
           >
             ✏️ {whiteboardEnabled ? 'Dessin ON' : 'Dessiner'}
           </button>
+        </div>
+        
+        {/* Stats and apply button - Top right */}
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100 }}>
+          <div style={{ background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.95)', padding: '6px 10px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 500 }}>{timelineCards.length} CUT</span>
+            <span style={{ fontSize: 10, color: '#9ca3af' }}>{beatCards.filter(c => c.timelineIndex === null).length} UNCUT</span>
+            <span style={{ fontSize: 10, color: '#6b7280' }}>•</span>
+            <span style={{ fontSize: 10, color: '#6b7280' }}>{sceneMetrics.totalPages.toFixed(1)}p</span>
+          </div>
+          {timelineCards.filter(c => c.linkedSceneId).length > 0 && (
+            <button 
+              onClick={applyTimelineOrder}
+              style={{ padding: '6px 12px', background: '#22c55e', border: 'none', borderRadius: 6, color: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
+            >
+              Appliquer au script
+            </button>
+          )}
         </div>
         
         {/* Canvas zoom controls - Bottom right overlay - Hidden when whiteboard is active (use Excalidraw's controls) */}
