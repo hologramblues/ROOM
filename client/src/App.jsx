@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V218 - Beat Board: Timeline UI cleanup, cards stay connected on zoom, structure trim handles
+// V219 - Beat Board: Blocks only timeline, whiteboard+cards interaction, synced scroll, multi-select
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3636,13 +3636,13 @@ const BeatBoard = React.memo(({
   t = (k) => k 
 }) => {
   const [beatCards, setBeatCards] = useState([]);
-  const [selectedCard, setSelectedCard] = useState(null);
+  const [selectedCards, setSelectedCards] = useState(new Set()); // Multi-select support
   const [draggedCard, setDraggedCard] = useState(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isOverTimeline, setIsOverTimeline] = useState(false);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [timelineZoom, setTimelineZoom] = useState(1);
-  const [timelineMode, setTimelineMode] = useState('cards'); // 'cards' | 'blocks'
+  const [timelineMode, setTimelineMode] = useState('blocks'); // Always blocks now
   const [hoveredBlock, setHoveredBlock] = useState(null);
   const [editModalCard, setEditModalCard] = useState(null); // Card being edited in modal
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -3659,9 +3659,11 @@ const BeatBoard = React.memo(({
   const lastClickRef = useRef({ cardId: null, time: 0 }); // For manual double-click detection
   const dragOriginalPosRef = useRef(null); // Store original position during drag
   const dragFromTimelineRef = useRef(false); // Track if drag started from timeline
+  const dragSelectedPositionsRef = useRef(null); // Store all selected cards positions for multi-drag
   const excalidrawRef = useRef(null); // Excalidraw API ref
   const canvasRef = useRef(null);
   const timelineRef = useRef(null);
+  const timelineScrollRef = useRef(null); // For synchronized horizontal scroll
   
   const defaultCardColor = '#ffffff'; // White default for all cards
   const cardColors = ['#ffffff', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
@@ -3753,6 +3755,26 @@ const BeatBoard = React.memo(({
     e.stopPropagation();
     e.preventDefault(); // Prevent text selection
     const rect = e.currentTarget.getBoundingClientRect();
+    
+    // Multi-select with Shift key
+    if (e.shiftKey) {
+      setSelectedCards(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(card.id)) {
+          newSet.delete(card.id);
+        } else {
+          newSet.add(card.id);
+        }
+        return newSet;
+      });
+      return; // Don't start drag on shift-click
+    }
+    
+    // If clicking on unselected card, select only this one
+    if (!selectedCards.has(card.id)) {
+      setSelectedCards(new Set([card.id]));
+    }
+    
     // Store pending drag info - actual drag starts on mouse move
     setPendingDrag({
       card,
@@ -3762,9 +3784,10 @@ const BeatBoard = React.memo(({
       offsetY: e.clientY - rect.top,
       time: Date.now(),
       originalPosition: { ...card.position }, // Store original position to restore after timeline drop
-      fromTimeline // Track if dragging from timeline
+      fromTimeline, // Track if dragging from timeline
+      // Store all selected cards' original positions for multi-drag
+      selectedPositions: new Map(beatCards.filter(c => selectedCards.has(c.id) || c.id === card.id).map(c => [c.id, { ...c.position }]))
     });
-    setSelectedCard(card.id);
   };
   
   const handleDragMove = useCallback((e) => {
@@ -3776,6 +3799,7 @@ const BeatBoard = React.memo(({
         // Start actual drag - store original position and fromTimeline
         dragOriginalPosRef.current = pendingDrag.originalPosition;
         dragFromTimelineRef.current = pendingDrag.fromTimeline;
+        dragSelectedPositionsRef.current = pendingDrag.selectedPositions;
         setDraggedCard(pendingDrag.card);
         setDragOffset({ x: pendingDrag.offsetX, y: pendingDrag.offsetY });
         setPendingDrag(null);
@@ -3801,9 +3825,23 @@ const BeatBoard = React.memo(({
       // Inverse: cardPos = (screenPos / zoom) - scroll
       const screenX = e.clientX - canvasRect.left - dragOffset.x;
       const screenY = e.clientY - canvasRect.top - dragOffset.y;
-      const x = (screenX / canvasZoom) - pan.x;
-      const y = (screenY / canvasZoom) - pan.y;
-      setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, position: { x: Math.max(0, x), y: Math.max(0, y) } } : c));
+      const newX = (screenX / canvasZoom) - pan.x;
+      const newY = (screenY / canvasZoom) - pan.y;
+      
+      // Calculate delta from original position
+      const originalPos = dragOriginalPosRef.current;
+      const deltaX = newX - originalPos.x;
+      const deltaY = newY - originalPos.y;
+      
+      // Move all selected cards together
+      const selectedPositions = dragSelectedPositionsRef.current;
+      setBeatCards(prev => prev.map(c => {
+        if (selectedPositions && selectedPositions.has(c.id)) {
+          const origPos = selectedPositions.get(c.id);
+          return { ...c, position: { x: Math.max(0, origPos.x + deltaX), y: Math.max(0, origPos.y + deltaY) } };
+        }
+        return c;
+      }));
     }
   }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag]);
   
@@ -3865,6 +3903,7 @@ const BeatBoard = React.memo(({
     setIsOverTimeline(false);
     dragOriginalPosRef.current = null;
     dragFromTimelineRef.current = false;
+    dragSelectedPositionsRef.current = null;
   }, [draggedCard, pendingDrag]);
   
   useEffect(() => {
@@ -3886,7 +3925,7 @@ const BeatBoard = React.memo(({
     // Place at screen position (100, 200)
     const newCard = { id: 'card_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: 'Nouvelle scène', synopsis: '', color: defaultCardColor, position: { x: 100 / canvasZoom - pan.x, y: 200 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'scene' };
     setBeatCards(prev => [...prev, newCard]);
-    setSelectedCard(newCard.id);
+    setSelectedCards(new Set([newCard.id]));
     setEditModalCard(newCard);
   };
   
@@ -3934,7 +3973,7 @@ const BeatBoard = React.memo(({
     };
     
     setBeatCards(prev => [...prev, newCard]);
-    setSelectedCard(newCard.id);
+    setSelectedCards(new Set([newCard.id]));
     setEditModalCard(newCard);
     
     // Remove the converted element from Excalidraw
@@ -3986,7 +4025,7 @@ const BeatBoard = React.memo(({
     const card = beatCards.find(c => c.id === cardId);
     if (card?.linkedSceneId) setBeatCards(prev => prev.map(c => c.id === cardId ? { ...c, timelineIndex: null } : c));
     else setBeatCards(prev => prev.filter(c => c.id !== cardId));
-    setSelectedCard(null);
+    setSelectedCards(new Set());
   };
   
   const updateCard = (cardId, updates) => {
@@ -4033,7 +4072,7 @@ const BeatBoard = React.memo(({
   };
   
   const BeatCard = ({ card, inTimeline = false, excalidrawMode = false, zoom = 1, scroll = { x: 0, y: 0 } }) => {
-    const isSelected = selectedCard === card.id;
+    const isSelected = selectedCards.has(card.id);
     const isDragging = draggedCard?.id === card.id;
     const isCut = card.timelineIndex !== null;
     const isNote = card.type === 'note';
@@ -4079,6 +4118,7 @@ const BeatBoard = React.memo(({
           top: screenY,
           width: scaledWidth,
           minHeight: scaledMinHeight,
+          pointerEvents: 'auto', // Always clickable, even when parent has pointerEvents: none
           background: isNote 
             ? (darkMode ? noteStyle?.darkBg : noteStyle?.bg) || '#fef3c7'
             : (darkMode ? '#3a3a3a' : 'white'),
@@ -4201,22 +4241,6 @@ const BeatBoard = React.memo(({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
           <span style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>TIMELINE</span>
           
-          {/* Mode toggle - compact */}
-          <div style={{ display: 'flex', background: darkMode ? '#3a3a3a' : '#e5e7eb', borderRadius: 4, padding: 1, marginLeft: 4 }}>
-            <button
-              onClick={() => setTimelineMode('cards')}
-              style={{ padding: '2px 6px', fontSize: 9, border: 'none', borderRadius: 3, cursor: 'pointer', background: timelineMode === 'cards' ? (darkMode ? '#555' : 'white') : 'transparent', color: timelineMode === 'cards' ? (darkMode ? 'white' : 'black') : '#6b7280' }}
-            >
-              Cartes
-            </button>
-            <button
-              onClick={() => setTimelineMode('blocks')}
-              style={{ padding: '2px 6px', fontSize: 9, border: 'none', borderRadius: 3, cursor: 'pointer', background: timelineMode === 'blocks' ? (darkMode ? '#555' : 'white') : 'transparent', color: timelineMode === 'blocks' ? (darkMode ? 'white' : 'black') : '#6b7280' }}
-            >
-              Blocs
-            </button>
-          </div>
-          
           <div style={{ flex: 1 }} />
           
           {/* Zoom slider - calculated based on card count */}
@@ -4235,28 +4259,24 @@ const BeatBoard = React.memo(({
           </div>
         </div>
         
-        {/* Structure row - Act breaks, key beats with trim handles */}
+        {/* Timeline content with fixed labels and scrollable content */}
         <div 
-          style={{ display: 'flex', alignItems: 'stretch', minHeight: 28, background: darkMode ? '#1f1f1f' : '#f8f9fa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, overflow: 'hidden' }}
+          style={{ display: 'flex', flex: 1 }}
           onMouseMove={(e) => {
             if (trimmingBeat) {
               const deltaX = e.clientX - trimmingBeat.startX;
-              const flexChange = deltaX / 100; // 100px = 1 flex unit
+              const flexChange = deltaX / 100;
               setStructureBeats(prev => {
                 const idx = prev.findIndex(b => b.id === trimmingBeat.id);
                 if (idx === -1) return prev;
                 const newBeats = [...prev];
                 if (trimmingBeat.edge === 'right' && idx < prev.length - 1) {
-                  // Trim right edge: increase current, decrease next
                   const newFlex = Math.max(0.2, trimmingBeat.startFlex + flexChange);
-                  const nextStartFlex = trimmingBeat.nextStartFlex || 1;
-                  const nextNewFlex = Math.max(0.2, nextStartFlex - flexChange);
+                  const nextNewFlex = Math.max(0.2, (trimmingBeat.nextStartFlex || 1) - flexChange);
                   newBeats[idx] = { ...newBeats[idx], flex: newFlex };
                   newBeats[idx + 1] = { ...newBeats[idx + 1], flex: nextNewFlex };
                 } else if (trimmingBeat.edge === 'left' && idx > 0) {
-                  // Trim left edge: decrease prev, increase current
-                  const prevStartFlex = trimmingBeat.prevStartFlex || 1;
-                  const prevNewFlex = Math.max(0.2, prevStartFlex + flexChange);
+                  const prevNewFlex = Math.max(0.2, (trimmingBeat.prevStartFlex || 1) + flexChange);
                   const newFlex = Math.max(0.2, trimmingBeat.startFlex - flexChange);
                   newBeats[idx - 1] = { ...newBeats[idx - 1], flex: prevNewFlex };
                   newBeats[idx] = { ...newBeats[idx], flex: newFlex };
@@ -4268,114 +4288,186 @@ const BeatBoard = React.memo(({
           onMouseUp={() => setTrimmingBeat(null)}
           onMouseLeave={() => setTrimmingBeat(null)}
         >
-          <div style={{ width: 50, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#6b7280', borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
-            STRUCTURE
+          {/* Fixed labels column */}
+          <div style={{ width: 50, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
+            <div style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#6b7280', background: darkMode ? '#1f1f1f' : '#f8f9fa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>STRUCT</div>
+            {sceneMetrics.totalPages > 0 && (
+              <>
+                <div style={{ height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#6b7280', background: darkMode ? '#2a2a2a' : '#f3f4f6', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>TIME</div>
+                <div style={{ height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#6b7280', background: darkMode ? '#252525' : '#fafafa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>PAGE</div>
+              </>
+            )}
+            <div style={{ flex: 1, minHeight: 40 }} />
           </div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', overflowX: 'auto', position: 'relative' }}>
-            {structureBeats.length === 0 ? (
-              <div 
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 10, fontStyle: 'italic', cursor: 'pointer' }}
-                onClick={() => {
-                  const label = prompt('Nom du premier bloc (ex: Acte 1)');
-                  if (label) setStructureBeats([{ id: 'struct_' + Date.now(), label, flex: 1, color: null }]);
-                }}
-              >
-                Cliquez pour ajouter une structure
-              </div>
-            ) : (
-              structureBeats.map((beat, idx) => (
-                <div
-                  key={beat.id}
-                  style={{
-                    flex: beat.flex || 1,
-                    background: beat.color || (darkMode ? '#2a2a2a' : '#e5e7eb'),
-                    borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: darkMode ? '#ccc' : '#374151',
-                    position: 'relative',
-                    minWidth: 40,
+          
+          {/* Scrollable content area - all rows scroll together */}
+          <div ref={timelineScrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {/* Structure row */}
+            <div style={{ display: 'flex', height: 28, background: darkMode ? '#1f1f1f' : '#f8f9fa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, minWidth: 'fit-content' }}>
+              {structureBeats.length === 0 ? (
+                <div 
+                  style={{ width: Math.max(300, sceneMetrics.totalPages * 60 * timelineZoom), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 10, fontStyle: 'italic', cursor: 'pointer' }}
+                  onClick={() => {
+                    const label = prompt('Nom du premier bloc (ex: Acte 1)');
+                    if (label) setStructureBeats([{ id: 'struct_' + Date.now(), label, flex: 1, color: null }]);
                   }}
                 >
-                  {/* Left trim handle */}
-                  {idx > 0 && (
-                    <div
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        setTrimmingBeat({
-                          id: beat.id,
-                          edge: 'left',
-                          startX: e.clientX,
-                          startFlex: beat.flex || 1,
-                          prevStartFlex: structureBeats[idx - 1]?.flex || 1,
-                        });
-                      }}
-                      style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 6,
-                        cursor: 'ew-resize',
-                        background: trimmingBeat?.id === beat.id && trimmingBeat?.edge === 'left' ? 'rgba(59,130,246,0.5)' : 'transparent',
-                        zIndex: 10,
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.3)'}
-                      onMouseLeave={(e) => { if (!trimmingBeat) e.currentTarget.style.background = 'transparent'; }}
-                    />
-                  )}
-                  
-                  {/* Label - clickable to edit */}
-                  <span
-                    onClick={() => {
-                      const newLabel = prompt('Nom du bloc:', beat.label);
-                      if (newLabel) setStructureBeats(prev => prev.map(b => b.id === beat.id ? { ...b, label: newLabel } : b));
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      if (window.confirm(`Supprimer "${beat.label}" ?`)) {
-                        setStructureBeats(prev => prev.filter(b => b.id !== beat.id));
-                      }
-                    }}
-                    style={{ cursor: 'pointer', padding: '0 8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                  >
-                    {beat.label}
-                  </span>
-                  
-                  {/* Right trim handle */}
-                  {idx < structureBeats.length - 1 && (
-                    <div
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        setTrimmingBeat({
-                          id: beat.id,
-                          edge: 'right',
-                          startX: e.clientX,
-                          startFlex: beat.flex || 1,
-                          nextStartFlex: structureBeats[idx + 1]?.flex || 1,
-                        });
-                      }}
-                      style={{
-                        position: 'absolute',
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 6,
-                        cursor: 'ew-resize',
-                        background: trimmingBeat?.id === beat.id && trimmingBeat?.edge === 'right' ? 'rgba(59,130,246,0.5)' : 'transparent',
-                        zIndex: 10,
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.3)'}
-                      onMouseLeave={(e) => { if (!trimmingBeat) e.currentTarget.style.background = 'transparent'; }}
-                    />
-                  )}
+                  Cliquez pour ajouter une structure
                 </div>
-              ))
+              ) : (
+                <div style={{ display: 'flex', flex: 1, minWidth: Math.max(300, sceneMetrics.totalPages * 60 * timelineZoom) }}>
+                  {structureBeats.map((beat, idx) => (
+                    <div
+                      key={beat.id}
+                      style={{
+                        flex: beat.flex || 1,
+                        background: beat.color || (darkMode ? '#2a2a2a' : '#e5e7eb'),
+                        borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: darkMode ? '#d1d5db' : '#374151',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        minWidth: 40,
+                      }}
+                      onClick={() => {
+                        const newLabel = prompt('Nouveau nom:', beat.label);
+                        if (newLabel !== null) setStructureBeats(prev => prev.map(b => b.id === beat.id ? { ...b, label: newLabel } : b));
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (window.confirm(`Supprimer "${beat.label}" ?`)) {
+                          setStructureBeats(prev => prev.filter(b => b.id !== beat.id));
+                        }
+                      }}
+                    >
+                      {beat.label}
+                      {/* Left trim handle */}
+                      {idx > 0 && (
+                        <div
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setTrimmingBeat({ id: beat.id, edge: 'left', startX: e.clientX, startFlex: beat.flex || 1, prevStartFlex: structureBeats[idx - 1]?.flex || 1 });
+                          }}
+                          style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize', background: trimmingBeat?.id === beat.id && trimmingBeat?.edge === 'left' ? 'rgba(59,130,246,0.5)' : 'transparent', zIndex: 10 }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.3)'}
+                          onMouseLeave={(e) => { if (!trimmingBeat) e.currentTarget.style.background = 'transparent'; }}
+                        />
+                      )}
+                      {/* Right trim handle */}
+                      {idx < structureBeats.length - 1 && (
+                        <div
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setTrimmingBeat({ id: beat.id, edge: 'right', startX: e.clientX, startFlex: beat.flex || 1, nextStartFlex: structureBeats[idx + 1]?.flex || 1 });
+                          }}
+                          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize', background: trimmingBeat?.id === beat.id && trimmingBeat?.edge === 'right' ? 'rgba(59,130,246,0.5)' : 'transparent', zIndex: 10 }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.3)'}
+                          onMouseLeave={(e) => { if (!trimmingBeat) e.currentTarget.style.background = 'transparent'; }}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Time and Page rulers */}
+            {sceneMetrics.totalPages > 0 && (
+              <>
+                <div style={{ display: 'flex', height: 16, background: darkMode ? '#2a2a2a' : '#f3f4f6', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, fontSize: 9, color: '#6b7280' }}>
+                  {Array.from({ length: Math.ceil(sceneMetrics.totalTime / 60) + 1 }, (_, i) => (
+                    <div key={i} style={{ width: 60 * timelineZoom, flexShrink: 0, borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#d1d5db'}`, paddingLeft: 4, display: 'flex', alignItems: 'center' }}>
+                      {String(Math.floor(i / 60)).padStart(2, '0')}:{String(i % 60).padStart(2, '0')}:00
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', height: 14, background: darkMode ? '#252525' : '#fafafa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, fontSize: 9, color: '#6b7280' }}>
+                  {Array.from({ length: Math.ceil(sceneMetrics.totalPages) + 1 }, (_, i) => (
+                    <div key={i} style={{ width: 60 * timelineZoom, flexShrink: 0, borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, paddingLeft: 4, display: 'flex', alignItems: 'center' }}>
+                      p.{i + 1}
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
+            
+            {/* Blocks row */}
+            <div style={{ display: 'flex', height: 40, position: 'relative', minWidth: 'fit-content' }}>
+              {timelineCards.length === 0 ? (
+                <div style={{ flex: 1, minWidth: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 11, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 6, margin: 4 }}>
+                  Glissez des cartes ici pour construire votre timeline
+                </div>
+              ) : (
+                sceneMetrics.cards.map((card, idx) => {
+                  const blockWidth = Math.max(20, card.pages * 60 * timelineZoom);
+                  const fullCard = beatCards.find(c => c.id === card.id);
+                  const isWhite = card.color === '#ffffff';
+                  const blockBg = isWhite ? (darkMode ? '#555' : '#e5e7eb') : card.color;
+                  const textColor = isWhite ? (darkMode ? 'white' : '#374151') : 'white';
+                  return (
+                    <div
+                      key={card.id}
+                      onMouseEnter={() => setHoveredBlock(card.id)}
+                      onMouseLeave={() => setHoveredBlock(null)}
+                      onMouseDown={(e) => fullCard && handleDragStart(e, fullCard, true)}
+                      onDoubleClick={() => setEditModalCard(fullCard || card)}
+                      style={{
+                        width: blockWidth,
+                        height: '100%',
+                        background: blockBg,
+                        borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
+                        cursor: 'grab',
+                        position: 'relative',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'visible',
+                        opacity: selectedCards.has(card.id) ? 1 : 0.85,
+                        boxShadow: selectedCards.has(card.id) ? `inset 0 0 0 2px ${isWhite ? '#3b82f6' : 'white'}` : 'none',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {blockWidth > 60 && (
+                        <span style={{ fontSize: 9, color: textColor, textShadow: isWhite ? 'none' : '0 1px 2px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', maxWidth: '100%' }}>
+                          {card.title.replace(/^(INT\.|EXT\.|INT\/EXT\.)\s*/i, '').substring(0, 20)}
+                        </span>
+                      )}
+                      
+                      {/* Card preview on hover */}
+                      {hoveredBlock === card.id && fullCard && (
+                        <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 8, zIndex: 100, pointerEvents: 'none' }}>
+                          <div style={{
+                            width: 180,
+                            minHeight: 100,
+                            background: isWhite ? (darkMode ? '#3a3a3a' : 'white') : fullCard.color,
+                            border: isWhite ? `1px solid ${darkMode ? '#555' : '#d1d5db'}` : 'none',
+                            borderRadius: 8,
+                            padding: 10,
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                            borderLeft: isWhite ? `4px solid ${darkMode ? '#6b7280' : '#9ca3af'}` : 'none',
+                          }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: isWhite ? (darkMode ? 'white' : '#1f2937') : 'white', marginBottom: 6, lineHeight: 1.3 }}>{fullCard.title}</div>
+                            {fullCard.synopsis && <div style={{ fontSize: 10, color: isWhite ? (darkMode ? '#9ca3af' : '#6b7280') : 'rgba(255,255,255,0.85)', marginBottom: 6, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{fullCard.synopsis}</div>}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: isWhite ? '#9ca3af' : 'rgba(255,255,255,0.7)', borderTop: `1px solid ${isWhite ? (darkMode ? '#555' : '#e5e7eb') : 'rgba(255,255,255,0.2)'}`, paddingTop: 6, marginTop: 4 }}>
+                              <span>{card.pages.toFixed(1)} pages</span>
+                              <span>•</span>
+                              <span>{Math.floor(card.pages)}:{String(Math.round((card.pages % 1) * 60)).padStart(2, '0')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
+          
+          {/* Add structure button */}
           <button
             onClick={() => {
               const label = prompt('Nom du nouveau bloc (ex: Acte 1, Élément déclencheur...)');
@@ -4387,120 +4479,12 @@ const BeatBoard = React.memo(({
             +
           </button>
         </div>
-        
-        {/* Ruler - Pages & Time */}
-        {timelineMode === 'blocks' && sceneMetrics.totalPages > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, fontSize: 9, color: '#6b7280', overflow: 'hidden' }}>
-            {/* Time ruler */}
-            <div style={{ display: 'flex', height: 16, background: darkMode ? '#2a2a2a' : '#f3f4f6', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
-              {Array.from({ length: Math.ceil(sceneMetrics.totalTime / 60) + 1 }, (_, i) => (
-                <div key={i} style={{ width: 60 * timelineZoom, flexShrink: 0, borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#d1d5db'}`, paddingLeft: 4, display: 'flex', alignItems: 'center' }}>
-                  {String(Math.floor(i / 60)).padStart(2, '0')}:{String(i % 60).padStart(2, '0')}:00
-                </div>
-              ))}
-            </div>
-            {/* Page ruler */}
-            <div style={{ display: 'flex', height: 14, background: darkMode ? '#252525' : '#fafafa' }}>
-              {Array.from({ length: Math.ceil(sceneMetrics.totalPages) + 1 }, (_, i) => (
-                <div key={i} style={{ width: 60 * timelineZoom, flexShrink: 0, borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, paddingLeft: 4, display: 'flex', alignItems: 'center' }}>
-                  p.{i + 1}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {/* Timeline content */}
-        <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', padding: timelineMode === 'cards' ? '6px 8px' : '0', minHeight: timelineMode === 'cards' ? 70 : 40 }}>
-          {timelineCards.length === 0 ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 11, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 6, padding: 12, margin: 8 }}>
-              Glissez des cartes ici pour construire votre timeline
-            </div>
-          ) : timelineMode === 'cards' ? (
-            // Cards mode - cards stay connected like blocks
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              {timelineCards.map((card, idx) => (
-                <div key={card.id} style={{ transform: `scale(${timelineZoom})`, transformOrigin: 'left center', flexShrink: 0, marginRight: -1 }}>
-                  <BeatCard card={card} inTimeline={true} />
-                </div>
-              ))}
-            </div>
-          ) : (
-            // Blocks mode - NLE style
-            <div style={{ display: 'flex', height: 36, position: 'relative' }}>
-              {sceneMetrics.cards.map((card, idx) => {
-                const blockWidth = Math.max(20, card.pages * 60 * timelineZoom);
-                // Find the full card data for drag
-                const fullCard = beatCards.find(c => c.id === card.id);
-                const isWhite = card.color === '#ffffff';
-                const blockBg = isWhite ? (darkMode ? '#555' : '#e5e7eb') : card.color;
-                const textColor = isWhite ? (darkMode ? 'white' : '#374151') : 'white';
-                return (
-                  <div
-                    key={card.id}
-                    onMouseEnter={() => setHoveredBlock(card.id)}
-                    onMouseLeave={() => setHoveredBlock(null)}
-                    onMouseDown={(e) => fullCard && handleDragStart(e, fullCard, true)}
-                    onDoubleClick={() => setEditModalCard(fullCard || card)}
-                    style={{
-                      width: blockWidth,
-                      height: '100%',
-                      background: blockBg,
-                      borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
-                      cursor: 'grab',
-                      position: 'relative',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'hidden',
-                      opacity: selectedCard === card.id ? 1 : 0.85,
-                      boxShadow: selectedCard === card.id ? `inset 0 0 0 2px ${isWhite ? '#3b82f6' : 'white'}` : 'none',
-                    }}
-                  >
-                    {/* Show title only if block is wide enough */}
-                    {blockWidth > 60 && (
-                      <span style={{ fontSize: 9, color: textColor, textShadow: isWhite ? 'none' : '0 1px 2px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', maxWidth: '100%' }}>
-                        {card.title.replace(/^(INT\.|EXT\.|INT\/EXT\.)\s*/i, '').substring(0, 20)}
-                      </span>
-                    )}
-                    
-                    {/* Tooltip on hover */}
-                    {hoveredBlock === card.id && (
-                      <div style={{
-                        position: 'absolute',
-                        bottom: '100%',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        background: darkMode ? '#333' : 'white',
-                        border: `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
-                        borderRadius: 6,
-                        padding: '8px 12px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                        zIndex: 100,
-                        minWidth: 150,
-                        maxWidth: 250,
-                        marginBottom: 4,
-                        pointerEvents: 'none',
-                      }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: darkMode ? 'white' : 'black', marginBottom: 4 }}>{card.title}</div>
-                        {card.synopsis && <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{card.synopsis}</div>}
-                        <div style={{ fontSize: 9, color: '#9ca3af' }}>
-                          {card.pages} page{card.pages > 1 ? 's' : ''} • ~{Math.floor(card.pages)}:{String(Math.round((card.pages % 1) * 60)).padStart(2, '0')}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
       
       {/* Canvas zone */}
-      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onWheel={!whiteboardEnabled ? handleWheel : undefined} onClick={!whiteboardEnabled ? () => setSelectedCard(null) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x * canvasZoom}px ${pan.y * canvasZoom}px` }}>
-        {/* Beat cards layer - positioned to match Excalidraw coordinate system */}
-        <div style={{ position: 'absolute', inset: 0, pointerEvents: whiteboardEnabled ? 'none' : 'auto', zIndex: 1, overflow: 'hidden' }}>
+      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onWheel={!whiteboardEnabled ? handleWheel : undefined} onClick={!whiteboardEnabled ? () => setSelectedCards(new Set()) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x * canvasZoom}px ${pan.y * canvasZoom}px` }}>
+        {/* Beat cards layer - ABOVE Excalidraw so cards remain interactive */}
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: whiteboardEnabled ? 60 : 1, overflow: 'hidden' }}>
           {canvasCards.map(card => (
             <BeatCard 
               key={card.id} 
@@ -4657,7 +4641,7 @@ const BeatBoard = React.memo(({
           <button onClick={() => {
             const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 / canvasZoom - pan.x, y: 150 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'note' };
             setBeatCards(prev => [...prev, newNote]);
-            setSelectedCard(newNote.id);
+            setSelectedCards(new Set([newNote.id]));
             setEditModalCard(newNote);
           }} style={{ padding: '6px 10px', background: darkMode ? 'rgba(85,85,85,0.9)' : 'rgba(254,243,199,0.95)', border: 'none', borderRadius: 6, color: darkMode ? '#fbbf24' : '#92400e', fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
             📝 Note
