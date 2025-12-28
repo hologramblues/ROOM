@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V229 - Sync structure beats with outline chapters (bidirectional)
+// V230 - Save and load all Beat Board data (beatCards, structureBeats, whiteboardElements, etc.)
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3637,6 +3637,8 @@ const BeatBoard = React.memo(({
   setBeatCards,
   structureBeats,
   setStructureBeats,
+  whiteboardElements,
+  setWhiteboardElements,
   t = (k) => k 
 }) => {
   const [selectedCards, setSelectedCards] = useState(new Set()); // Multi-select support
@@ -3654,7 +3656,6 @@ const BeatBoard = React.memo(({
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const [whiteboardEnabled, setWhiteboardEnabled] = useState(false); // Whiteboard overlay toggle
   const [whiteboardKey, setWhiteboardKey] = useState(0); // Key to force remount Excalidraw with current zoom/pan
-  const [whiteboardElements, setWhiteboardElements] = useState([]); // Excalidraw elements
   const [convertMenuPos, setConvertMenuPos] = useState(null); // Position for convert menu
   const [selectedExcalidrawId, setSelectedExcalidrawId] = useState(null); // Selected excalidraw element for conversion
   const lastClickRef = useRef({ cardId: null, time: 0 }); // For manual double-click detection
@@ -5277,6 +5278,7 @@ export default function ScreenplayEditor() {
   const [title, setTitle] = useState('SANS TITRE');
   const [elements, setElements] = useState([{ id: generateId(), type: 'scene', content: '' }]);
   const [beatCards, setBeatCards] = useState([]); // Beat Board cards - shared with Outline
+  const [whiteboardElements, setWhiteboardElements] = useState([]); // Excalidraw whiteboard elements
   const [activeIndex, setActiveIndex] = useState(0);
   const [cursorOffset, setCursorOffset] = useState(null); // For click-to-cursor positioning
   const [characters, setCharacters] = useState([]);
@@ -5752,18 +5754,28 @@ export default function ScreenplayEditor() {
         timestamp: new Date().toISOString(),
         sceneSynopsis,
         sceneStatus,
-        notes
+        notes,
+        // Beat Board data
+        beatCards,
+        structureBeats,
+        whiteboardElements,
       };
       localStorage.setItem(`rooms-backup-${docId}`, JSON.stringify(backup));
     }, 30000);
     return () => clearInterval(backupInterval);
-  }, [docId, title, elements, sceneSynopsis, sceneStatus, notes]);
+  }, [docId, title, elements, sceneSynopsis, sceneStatus, notes, beatCards, structureBeats, whiteboardElements]);
 
   // Track last saved state for auto-save comparison
   const lastSavedElementsRef = useRef(null);
   const lastSavedTitleRef = useRef(null);
+  const lastSavedBeatDataRef = useRef(null); // Track beat board data changes
   const elementsRef = useRef(elements);
   const titleRef = useRef(title);
+  const beatCardsRef = useRef(beatCards);
+  const structureBeatsRef = useRef(structureBeats);
+  const sceneSynopsisRef = useRef(sceneSynopsis);
+  const sceneStatusRef = useRef(sceneStatus);
+  const whiteboardElementsRef = useRef(whiteboardElements);
   
   // Keep refs in sync
   useEffect(() => {
@@ -5774,6 +5786,26 @@ export default function ScreenplayEditor() {
     titleRef.current = title;
   }, [title]);
   
+  useEffect(() => {
+    beatCardsRef.current = beatCards;
+  }, [beatCards]);
+  
+  useEffect(() => {
+    structureBeatsRef.current = structureBeats;
+  }, [structureBeats]);
+  
+  useEffect(() => {
+    sceneSynopsisRef.current = sceneSynopsis;
+  }, [sceneSynopsis]);
+  
+  useEffect(() => {
+    sceneStatusRef.current = sceneStatus;
+  }, [sceneStatus]);
+  
+  useEffect(() => {
+    whiteboardElementsRef.current = whiteboardElements;
+  }, [whiteboardElements]);
+  
   // Auto-save to cloud every 10 seconds (only if changes detected)
   useEffect(() => {
     if (!docId || !token) return;
@@ -5781,25 +5813,50 @@ export default function ScreenplayEditor() {
     const autoSaveInterval = setInterval(async () => {
       const currentElements = elementsRef.current;
       const currentTitle = titleRef.current;
+      const currentBeatCards = beatCardsRef.current;
+      const currentStructureBeats = structureBeatsRef.current;
+      const currentSceneSynopsis = sceneSynopsisRef.current;
+      const currentSceneStatus = sceneStatusRef.current;
+      const currentWhiteboardElements = whiteboardElementsRef.current;
       
       if (!currentElements || currentElements.length === 0) return;
+      
+      // Build beat data object for comparison
+      const currentBeatData = {
+        beatCards: currentBeatCards,
+        structureBeats: currentStructureBeats,
+        sceneSynopsis: currentSceneSynopsis,
+        sceneStatus: currentSceneStatus,
+        whiteboardElements: currentWhiteboardElements
+      };
       
       // Check if there are changes since last save
       const elementsChanged = JSON.stringify(currentElements) !== JSON.stringify(lastSavedElementsRef.current);
       const titleChanged = currentTitle !== lastSavedTitleRef.current;
+      const beatDataChanged = JSON.stringify(currentBeatData) !== JSON.stringify(lastSavedBeatDataRef.current);
       
-      if (elementsChanged || titleChanged) {
+      if (elementsChanged || titleChanged || beatDataChanged) {
         try {
           const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/autosave', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-            body: JSON.stringify({ title: currentTitle, elements: currentElements })
+            body: JSON.stringify({ 
+              title: currentTitle, 
+              elements: currentElements,
+              // Beat Board data
+              beatCards: currentBeatCards,
+              structureBeats: currentStructureBeats,
+              sceneSynopsis: currentSceneSynopsis,
+              sceneStatus: currentSceneStatus,
+              whiteboardElements: currentWhiteboardElements
+            })
           });
           if (res.ok) {
             lastSavedElementsRef.current = JSON.parse(JSON.stringify(currentElements));
             lastSavedTitleRef.current = currentTitle;
+            lastSavedBeatDataRef.current = JSON.parse(JSON.stringify(currentBeatData));
             setLastSaved(new Date());
-            console.log('[AUTOSAVE] Saved at', new Date().toLocaleTimeString());
+            console.log('[AUTOSAVE] Saved at', new Date().toLocaleTimeString(), '(incl. Beat Board data)');
           } else {
             console.error('[AUTOSAVE] Server error:', res.status);
           }
@@ -5838,7 +5895,18 @@ export default function ScreenplayEditor() {
         const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/snapshot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-          body: JSON.stringify({ title, elements, auto: true, snapshotName })
+          body: JSON.stringify({ 
+            title, 
+            elements, 
+            auto: true, 
+            snapshotName,
+            // Beat Board data
+            beatCards,
+            structureBeats,
+            sceneSynopsis,
+            sceneStatus,
+            whiteboardElements
+          })
         });
         if (res.ok) {
           console.log('[AUTO-SNAPSHOT] Created:', snapshotName);
@@ -5849,7 +5917,7 @@ export default function ScreenplayEditor() {
     }, 15 * 60 * 1000); // 15 minutes
     
     return () => clearInterval(autoSnapshotInterval);
-  }, [docId, token, elements, title]);
+  }, [docId, token, elements, title, beatCards, structureBeats, sceneSynopsis, sceneStatus, whiteboardElements]);
 
   // Track writing goals daily reset
   useEffect(() => {
@@ -5923,6 +5991,57 @@ export default function ScreenplayEditor() {
             setCharacters(data.characters || []);
             setComments(data.comments || []);
             setSuggestions(data.suggestions || []);
+            
+            // Load Beat Board data from server if available
+            if (data.beatCards) {
+              console.log('[LOAD] Beat Board data found:', data.beatCards.length, 'cards');
+              setBeatCards(data.beatCards);
+            }
+            if (data.structureBeats) {
+              console.log('[LOAD] Structure beats found:', data.structureBeats.length, 'beats');
+              setStructureBeats(data.structureBeats);
+            }
+            if (data.sceneSynopsis) {
+              setSceneSynopsis(data.sceneSynopsis);
+            }
+            if (data.sceneStatus) {
+              setSceneStatus(data.sceneStatus);
+            }
+            if (data.whiteboardElements) {
+              console.log('[LOAD] Whiteboard elements found:', data.whiteboardElements.length, 'elements');
+              setWhiteboardElements(data.whiteboardElements);
+            }
+            
+            // If no Beat Board data from server, try local backup
+            if (!data.beatCards && !data.structureBeats) {
+              try {
+                const backupStr = localStorage.getItem(`rooms-backup-${docId}`);
+                if (backupStr) {
+                  const backup = JSON.parse(backupStr);
+                  if (backup.beatCards && backup.beatCards.length > 0) {
+                    console.log('[LOAD] Restoring Beat Board from local backup:', backup.beatCards.length, 'cards');
+                    setBeatCards(backup.beatCards);
+                  }
+                  if (backup.structureBeats && backup.structureBeats.length > 0) {
+                    console.log('[LOAD] Restoring structure beats from local backup:', backup.structureBeats.length, 'beats');
+                    setStructureBeats(backup.structureBeats);
+                  }
+                  if (backup.sceneSynopsis) {
+                    setSceneSynopsis(backup.sceneSynopsis);
+                  }
+                  if (backup.sceneStatus) {
+                    setSceneStatus(backup.sceneStatus);
+                  }
+                  if (backup.whiteboardElements && backup.whiteboardElements.length > 0) {
+                    console.log('[LOAD] Restoring whiteboard from local backup:', backup.whiteboardElements.length, 'elements');
+                    setWhiteboardElements(backup.whiteboardElements);
+                  }
+                }
+              } catch (backupErr) {
+                console.error('[LOAD] Error loading local backup:', backupErr);
+              }
+            }
+            
             loadedDocRef.current = docId;
             if (data.isOwner) setMyRole('editor');
             else if (data.publicAccess?.enabled) setMyRole(data.publicAccess.role || 'viewer');
@@ -6462,10 +6581,21 @@ export default function ScreenplayEditor() {
       const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ title, elements, auto: false, snapshotName })
+        body: JSON.stringify({ 
+          title, 
+          elements, 
+          auto: false, 
+          snapshotName,
+          // Beat Board data
+          beatCards,
+          structureBeats,
+          sceneSynopsis,
+          sceneStatus,
+          whiteboardElements
+        })
       });
       if (res.ok) {
-        console.log('[SNAPSHOT] Created:', snapshotName);
+        console.log('[SNAPSHOT] Created:', snapshotName, '(incl. Beat Board data)');
         setLastSaved(new Date());
         // Brief visual feedback
         const btn = document.querySelector('[title="Snapshot (⌘S)"]');
@@ -9079,6 +9209,8 @@ export default function ScreenplayEditor() {
           setBeatCards={setBeatCards}
           structureBeats={structureBeats}
           setStructureBeats={setStructureBeats}
+          whiteboardElements={whiteboardElements}
+          setWhiteboardElements={setWhiteboardElements}
           t={t}
         />
       </div>
