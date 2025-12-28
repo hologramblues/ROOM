@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V224 - Fix Excalidraw menu centering with correct CSS selectors
+// V225 - Fix Excalidraw centering with visibility hidden instead of display none
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -4492,38 +4492,17 @@ const BeatBoard = React.memo(({
               .excalidraw canvas {
                 background: transparent !important;
               }
-              /* Hide Excalidraw promo buttons and side elements */
-              .excalidraw .App-menu_top__left,
-              .excalidraw .App-menu_top__right,
-              .excalidraw .main-menu-trigger,
-              .excalidraw .help-icon,
-              .excalidraw [class*="HelpButton"],
-              .excalidraw [class*="UserList"],
+              /* Hide side elements with visibility to keep layout balanced for centering */
               .excalidraw .layer-ui__wrapper__top-right,
-              .excalidraw .layer-ui__wrapper__top-left,
+              .excalidraw .layer-ui__wrapper__top-left {
+                visibility: hidden !important;
+                pointer-events: none !important;
+              }
+              /* Completely hide footer elements */
               .excalidraw .layer-ui__wrapper__footer-right,
               .excalidraw .layer-ui__wrapper__footer-left,
-              .excalidraw .undo-redo-buttons,
-              .excalidraw .eraser-buttons {
+              .excalidraw .layer-ui__wrapper__footer-center {
                 display: none !important;
-              }
-              /* Center Excalidraw toolbar - force full width centering */
-              .excalidraw .layer-ui__wrapper {
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: center !important;
-              }
-              .excalidraw .layer-ui__wrapper__top-center {
-                position: relative !important;
-                left: auto !important;
-                transform: none !important;
-              }
-              .excalidraw .App-toolbar-container {
-                justify-content: center !important;
-              }
-              .excalidraw .App-toolbar {
-                left: 50% !important;
-                transform: translateX(-50%) !important;
               }
             `}</style>
             <Suspense fallback={
