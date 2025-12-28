@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V226 - Keep buttons at fixed top position to hide Excalidraw menu button
+// V227 - Sync card colors to Outline with colored border
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -8578,7 +8578,12 @@ export default function ScreenplayEditor() {
               {filteredOutline.length === 0 ? (
                 <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 13 }}>Aucune scène</p>
               ) : (
-                filteredOutline.map((scene, sceneIdx) => (
+                filteredOutline.map((scene, sceneIdx) => {
+                  // Find linked card to get its color
+                  const linkedCard = beatCards.find(c => c.linkedSceneId === scene.id);
+                  const cardColor = linkedCard?.color && linkedCard.color !== '#ffffff' ? linkedCard.color : null;
+                  
+                  return (
                   <React.Fragment key={scene.id}>
                   {outlineChapters[scene.id] && (
                     <div 
@@ -8633,11 +8638,13 @@ export default function ScreenplayEditor() {
                     }}
                     style={{ 
                       padding: '10px 12px', 
+                      paddingLeft: cardColor ? 8 : 12,
                       cursor: 'pointer', 
                       background: activeIndex === scene.index 
                         ? (darkMode ? '#484848' : '#f3f4f6')
                         : 'transparent',
                       borderBottom: `1px solid ${darkMode ? '#484848' : '#f3f4f6'}`,
+                      borderLeft: cardColor ? `4px solid ${cardColor}` : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 8
@@ -8765,7 +8772,7 @@ export default function ScreenplayEditor() {
                     </div>
                   </div>
                   </React.Fragment>
-                ))
+                )})
               )}
             </div>
             <div style={{ padding: 12, borderTop: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, fontSize: 11, color: '#6b7280', textAlign: 'center' }}>
