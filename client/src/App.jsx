@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V231 - Keyboard shortcuts (B/Escape), Reset view button, Beat Board export, Outline drag & drop
+// V231 - Keyboard shortcuts (B/Escape), Beat Board export, Outline/Timeline drag & drop with undo support
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3647,6 +3647,7 @@ const BeatBoard = React.memo(({
   setStructureBeats,
   whiteboardElements,
   setWhiteboardElements,
+  onPushToUndo,
   t = (k) => k 
 }) => {
   const [selectedCards, setSelectedCards] = useState(new Set()); // Multi-select support
@@ -3714,6 +3715,7 @@ const BeatBoard = React.memo(({
   
   // Toggle cut/uncut status
   const toggleCut = (cardId) => {
+    onPushToUndo?.(); // Save state before modification
     setBeatCards(prev => {
       const card = prev.find(c => c.id === cardId);
       if (!card) return prev;
@@ -3890,6 +3892,9 @@ const BeatBoard = React.memo(({
     const originalPos = dragOriginalPosRef.current;
     
     if (isDroppedOnTimeline) {
+      // Save state before modification for undo
+      onPushToUndo?.();
+      
       // Add to timeline (or reorder if already in timeline)
       const x = e.clientX - timelineRect.left;
       const newIndex = Math.max(0, Math.floor((x - 60) / 200));
@@ -3905,6 +3910,9 @@ const BeatBoard = React.memo(({
         });
       });
     } else if (fromTimeline) {
+      // Save state before modification for undo
+      onPushToUndo?.();
+      
       // Dragged FROM timeline and dropped OUTSIDE -> UNCUT (remove from timeline)
       // Keep original position (don't change canvas position)
       setBeatCards(prev => prev.map(c => c.id === draggedCard.id ? { ...c, timelineIndex: null, position: originalPos || c.position } : c));
@@ -3916,7 +3924,7 @@ const BeatBoard = React.memo(({
     dragOriginalPosRef.current = null;
     dragFromTimelineRef.current = false;
     dragSelectedPositionsRef.current = null;
-  }, [draggedCard, pendingDrag]);
+  }, [draggedCard, pendingDrag, onPushToUndo]);
   
   useEffect(() => {
     if (draggedCard || pendingDrag) {
@@ -4472,6 +4480,9 @@ const BeatBoard = React.memo(({
                   // Reorder cards in timeline
                   const draggedIdx = sceneMetrics.cards.findIndex(c => c.id === timelineDragId);
                   if (draggedIdx !== -1 && draggedIdx !== timelineDropIndex && draggedIdx !== timelineDropIndex - 1) {
+                    // Save state before modification for undo
+                    onPushToUndo?.();
+                    
                     const orderedIds = sceneMetrics.cards.map(c => c.id);
                     const [draggedId] = orderedIds.splice(draggedIdx, 1);
                     const insertIdx = timelineDropIndex > draggedIdx ? timelineDropIndex - 1 : timelineDropIndex;
@@ -7230,37 +7241,91 @@ export default function ScreenplayEditor() {
 
   const emitTitle = useCallback(t => { setTitle(t); if (socketRef.current && connected && canEdit) socketRef.current.emit('title-change', { title: t }); }, [connected, canEdit]);
   
-  // Save to undo stack before changes - MUST be before useEffect that uses undo/redo
-  const pushToUndo = useCallback((elementsSnapshot) => {
-    setUndoStack(prev => [...prev.slice(-50), elementsSnapshot]); // Keep last 50
+  // Save to undo stack before changes - saves complete state snapshot
+  const pushToUndo = useCallback((snapshot = null) => {
+    // Create a complete state snapshot
+    const currentSnapshot = snapshot || {
+      elements,
+      beatCards,
+      structureBeats,
+      sceneSynopsis,
+      sceneStatus
+    };
+    setUndoStack(prev => [...prev.slice(-30), currentSnapshot]); // Keep last 30 (reduced for memory with larger snapshots)
     setRedoStack([]); // Clear redo on new action
-  }, []);
+  }, [elements, beatCards, structureBeats, sceneSynopsis, sceneStatus]);
 
   const undo = useCallback(() => {
     if (undoStack.length === 0) return;
     const previous = undoStack[undoStack.length - 1];
-    setRedoStack(prev => [...prev, elements]);
+    
+    // Save current state to redo stack
+    const currentSnapshot = {
+      elements,
+      beatCards,
+      structureBeats,
+      sceneSynopsis,
+      sceneStatus
+    };
+    setRedoStack(prev => [...prev, currentSnapshot]);
     setUndoStack(prev => prev.slice(0, -1));
-    setElements(previous);
-    if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: previous });
+    
+    // Restore previous state - handle both old format (just elements array) and new format (full snapshot)
+    if (Array.isArray(previous)) {
+      // Old format - just elements
+      setElements(previous);
+      if (socketRef.current && connected && canEdit) {
+        socketRef.current.emit('full-sync', { elements: previous });
+      }
+    } else {
+      // New format - full snapshot
+      if (previous.elements) setElements(previous.elements);
+      if (previous.beatCards) setBeatCards(previous.beatCards);
+      if (previous.structureBeats) setStructureBeats(previous.structureBeats);
+      if (previous.sceneSynopsis) setSceneSynopsis(previous.sceneSynopsis);
+      if (previous.sceneStatus) setSceneStatus(previous.sceneStatus);
+      if (socketRef.current && connected && canEdit) {
+        socketRef.current.emit('full-sync', { elements: previous.elements || elements });
+      }
     }
-  }, [undoStack, elements, connected, canEdit]);
+  }, [undoStack, elements, beatCards, structureBeats, sceneSynopsis, sceneStatus, connected, canEdit]);
 
   const redo = useCallback(() => {
     if (redoStack.length === 0) return;
     const next = redoStack[redoStack.length - 1];
-    setUndoStack(prev => [...prev, elements]);
+    
+    // Save current state to undo stack
+    const currentSnapshot = {
+      elements,
+      beatCards,
+      structureBeats,
+      sceneSynopsis,
+      sceneStatus
+    };
+    setUndoStack(prev => [...prev, currentSnapshot]);
     setRedoStack(prev => prev.slice(0, -1));
-    setElements(next);
-    if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: next });
+    
+    // Restore next state - handle both old format and new format
+    if (Array.isArray(next)) {
+      setElements(next);
+      if (socketRef.current && connected && canEdit) {
+        socketRef.current.emit('full-sync', { elements: next });
+      }
+    } else {
+      if (next.elements) setElements(next.elements);
+      if (next.beatCards) setBeatCards(next.beatCards);
+      if (next.structureBeats) setStructureBeats(next.structureBeats);
+      if (next.sceneSynopsis) setSceneSynopsis(next.sceneSynopsis);
+      if (next.sceneStatus) setSceneStatus(next.sceneStatus);
+      if (socketRef.current && connected && canEdit) {
+        socketRef.current.emit('full-sync', { elements: next.elements || elements });
+      }
     }
-  }, [redoStack, elements, connected, canEdit]);
+  }, [redoStack, elements, beatCards, structureBeats, sceneSynopsis, sceneStatus, connected, canEdit]);
 
   // Duplicate scene function (moved here for proper hoisting)
   const duplicateScene = useCallback((sceneIndex) => {
-    pushToUndo(elements);
+    pushToUndo();
     const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
     const currentScenePos = sceneIndices.indexOf(sceneIndex);
     const nextSceneIndex = currentScenePos < sceneIndices.length - 1 ? sceneIndices[currentScenePos + 1] : elements.length;
@@ -7444,14 +7509,14 @@ export default function ScreenplayEditor() {
   }, [typewriterSound, playTypewriterSound]);
 
   const updateElement = useCallback((i, el, skipUndo = false) => { 
-    if (!skipUndo) pushToUndo(elements);
+    if (!skipUndo) pushToUndo();
     setElements(p => { const u = [...p]; u[i] = el; return u; }); 
     if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el }); 
     setLastSaved(new Date());
     setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
   }, [connected, canEdit, elements, pushToUndo, currentUser]);
   const insertElement = useCallback((after, type) => { 
-    pushToUndo(elements);
+    pushToUndo();
     const el = { id: generateId(), type, content: '' }; 
     setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; }); 
     setActiveIndex(after + 1); 
@@ -7460,7 +7525,7 @@ export default function ScreenplayEditor() {
   }, [connected, canEdit, elements, pushToUndo]);
   const deleteElement = useCallback(i => { 
     if (elements.length === 1) return; 
-    pushToUndo(elements);
+    pushToUndo();
     setElements(p => p.filter((_, idx) => idx !== i)); 
     setActiveIndex(Math.max(0, i - 1)); 
     if (socketRef.current && connected && canEdit) socketRef.current.emit('element-delete', { index: i }); 
@@ -7505,7 +7570,7 @@ export default function ScreenplayEditor() {
   const moveScene = useCallback((fromSceneIndex, toSceneIndex) => {
     if (fromSceneIndex === toSceneIndex) return;
     
-    pushToUndo(elements);
+    pushToUndo();
     
     // Find all scene start indices
     const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
@@ -9025,6 +9090,9 @@ export default function ScreenplayEditor() {
                       
                       if (!draggedSceneObj || !targetSceneObj) return;
                       
+                      // Save state before modification for undo
+                      pushToUndo();
+                      
                       // Find scene boundaries in elements array
                       const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
                       
@@ -9060,7 +9128,6 @@ export default function ScreenplayEditor() {
                       // Insert dragged elements at new position
                       newElements.splice(insertPos, 0, ...draggedElements);
                       
-                      pushToUndo(elements);
                       setElements(newElements);
                       
                       if (socketRef.current && connected && canEdit) {
@@ -9533,6 +9600,7 @@ export default function ScreenplayEditor() {
           setStructureBeats={setStructureBeats}
           whiteboardElements={whiteboardElements}
           setWhiteboardElements={setWhiteboardElements}
+          onPushToUndo={pushToUndo}
           t={t}
         />
       </div>
