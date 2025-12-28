@@ -3633,9 +3633,10 @@ const BeatBoard = React.memo(({
   setSceneSynopsis,
   sceneStatus,
   setSceneStatus,
+  beatCards,
+  setBeatCards,
   t = (k) => k 
 }) => {
-  const [beatCards, setBeatCards] = useState([]);
   const [selectedCards, setSelectedCards] = useState(new Set()); // Multi-select support
   const [draggedCard, setDraggedCard] = useState(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -5243,6 +5244,7 @@ export default function ScreenplayEditor() {
   const [docId, setDocId] = useState(getDocId);
   const [title, setTitle] = useState('SANS TITRE');
   const [elements, setElements] = useState([{ id: generateId(), type: 'scene', content: '' }]);
+  const [beatCards, setBeatCards] = useState([]); // Beat Board cards - shared with Outline
   const [activeIndex, setActiveIndex] = useState(0);
   const [cursorOffset, setCursorOffset] = useState(null); // For click-to-cursor positioning
   const [characters, setCharacters] = useState([]);
@@ -9030,6 +9032,8 @@ export default function ScreenplayEditor() {
           setSceneSynopsis={setSceneSynopsis}
           sceneStatus={sceneStatus}
           setSceneStatus={setSceneStatus}
+          beatCards={beatCards}
+          setBeatCards={setBeatCards}
           t={t}
         />
       </div>
