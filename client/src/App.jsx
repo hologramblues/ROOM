@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V230 - Save and load all Beat Board data (beatCards, structureBeats, whiteboardElements, etc.) + Fix suggestion display after reload
+// V231 - Keyboard shortcuts (B/Escape), Reset view button, Beat Board export, Outline drag & drop
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -2952,6 +2952,11 @@ const ShortcutsPanel = ({ onClose, darkMode }) => {
       { keys: '⌘5', desc: 'Parenthèse' },
       { keys: '⌘6', desc: 'Transition' },
     ]},
+    { category: 'Beat Board', items: [
+      { keys: 'B', desc: 'Ouvrir Beat Board' },
+      { keys: '⌘B', desc: 'Basculer Script/Beat Board' },
+      { keys: 'Escape', desc: 'Fermer Beat Board' },
+    ]},
     { category: 'Général', items: [
       { keys: 'Escape', desc: 'Fermer panel actif' },
       { keys: '⌘?', desc: 'Raccourcis clavier' },
@@ -4727,6 +4732,87 @@ const BeatBoard = React.memo(({
             <span style={{ fontSize: 11, color: '#6b7280', minWidth: 36, textAlign: 'center' }}>{Math.round(canvasZoom * 100)}%</span>
             <button onClick={() => setCanvasZoom(z => Math.min(2, z + 0.1))} style={{ width: 24, height: 24, borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
             <button onClick={() => { setCanvasZoom(1); setPan({ x: 0, y: 0 }); }} style={{ marginLeft: 4, padding: '4px 8px', borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 10 }}>Reset</button>
+            <button 
+              onClick={() => {
+                // Generate SVG export of the beat board
+                const cards = beatCards.filter(c => c.position);
+                if (cards.length === 0) {
+                  alert('Aucune carte à exporter');
+                  return;
+                }
+                
+                // Calculate bounds
+                const padding = 50;
+                const cardWidth = 160;
+                const cardHeight = 100;
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                cards.forEach(c => {
+                  minX = Math.min(minX, c.position.x);
+                  minY = Math.min(minY, c.position.y);
+                  maxX = Math.max(maxX, c.position.x + cardWidth);
+                  maxY = Math.max(maxY, c.position.y + cardHeight);
+                });
+                
+                const width = maxX - minX + padding * 2;
+                const height = maxY - minY + padding * 2;
+                const offsetX = -minX + padding;
+                const offsetY = -minY + padding;
+                
+                // Build SVG
+                let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" style="font-family: system-ui, sans-serif;">`;
+                svg += `<rect width="100%" height="100%" fill="${darkMode ? '#2d2d2d' : '#f3f4f6'}"/>`;
+                
+                // Draw cards
+                cards.forEach((card, idx) => {
+                  const x = card.position.x + offsetX;
+                  const y = card.position.y + offsetY;
+                  const bgColor = card.color === '#ffffff' ? (darkMode ? '#3a3a3a' : 'white') : card.color;
+                  const textColor = card.color === '#ffffff' ? (darkMode ? 'white' : '#1f2937') : 'white';
+                  const borderColor = card.color === '#ffffff' ? (darkMode ? '#555' : '#d1d5db') : card.color;
+                  
+                  svg += `<rect x="${x}" y="${y}" width="${cardWidth}" height="${cardHeight}" rx="8" fill="${bgColor}" stroke="${borderColor}" stroke-width="1"/>`;
+                  
+                  // Scene number badge
+                  if (card.linkedSceneId) {
+                    const sceneNum = elements.filter(el => el.type === 'scene').findIndex(el => el.id === card.linkedSceneId) + 1;
+                    svg += `<circle cx="${x + 12}" cy="${y + 12}" r="10" fill="${darkMode ? '#484848' : '#e5e7eb'}"/>`;
+                    svg += `<text x="${x + 12}" y="${y + 16}" text-anchor="middle" font-size="9" fill="${darkMode ? 'white' : '#374151'}">${sceneNum}</text>`;
+                  }
+                  
+                  // Title
+                  const title = (card.title || '').substring(0, 25) + ((card.title || '').length > 25 ? '...' : '');
+                  svg += `<text x="${x + 10}" y="${y + 35}" font-size="11" font-weight="600" fill="${textColor}">${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text>`;
+                  
+                  // Synopsis
+                  if (card.synopsis) {
+                    const synopsisLines = (card.synopsis || '').substring(0, 80).split(/(.{30})/g).filter(Boolean).slice(0, 2);
+                    synopsisLines.forEach((line, lineIdx) => {
+                      svg += `<text x="${x + 10}" y="${y + 52 + lineIdx * 12}" font-size="9" fill="${card.color === '#ffffff' ? '#6b7280' : 'rgba(255,255,255,0.8)'}">${line.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text>`;
+                    });
+                  }
+                });
+                
+                svg += '</svg>';
+                
+                // Download
+                const blob = new Blob([svg], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.download = `beatboard-${new Date().toISOString().slice(0,10)}.svg`;
+                link.href = url;
+                link.click();
+                URL.revokeObjectURL(url);
+              }}
+              style={{ marginLeft: 4, padding: '4px 8px', borderRadius: 4, background: darkMode ? '#484848' : '#e5e7eb', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', gap: 4 }}
+              title="Exporter en SVG"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              SVG
+            </button>
           </div>
         )}
       </div>
@@ -5366,6 +5452,8 @@ export default function ScreenplayEditor() {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [draggedScene, setDraggedScene] = useState(null);
+  const [outlineDragIndex, setOutlineDragIndex] = useState(null); // Scene index being dragged in outline
+  const [outlineDropIndex, setOutlineDropIndex] = useState(null); // Drop target index in outline
   const [sceneSynopsis, setSceneSynopsis] = useState({}); // { sceneId: 'synopsis text' }
   const [visibleElementIndex, setVisibleElementIndex] = useState(0); // For scroll sync with comments
   const [elementPositions, setElementPositions] = useState({}); // { elementIndex: topPosition }
@@ -7163,8 +7251,24 @@ export default function ScreenplayEditor() {
         e.preventDefault();
         setActiveView(v => v === 'script' ? 'beatboard' : 'script');
       }
-      // Escape = Close panels (one at a time)
+      // B alone = Open Beat Board (only if not in input/textarea)
+      if (e.key === 'b' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const activeEl = document.activeElement;
+        const isInInput = activeEl && (
+          activeEl.tagName === 'INPUT' || 
+          activeEl.tagName === 'TEXTAREA' || 
+          activeEl.isContentEditable ||
+          activeEl.closest('[contenteditable="true"]')
+        );
+        if (!isInInput && activeView === 'script') {
+          e.preventDefault();
+          setActiveView('beatboard');
+        }
+      }
+      // Escape = Close panels (one at a time) - Beat Board first
       if (e.key === 'Escape') {
+        // Beat Board has priority - close it first
+        if (activeView === 'beatboard') { setActiveView('script'); return; }
         if (showGoToScene) { setShowGoToScene(false); return; }
         if (showShortcuts) { setShowShortcuts(false); return; }
         if (showRenameChar) { setShowRenameChar(false); return; }
@@ -8780,6 +8884,80 @@ export default function ScreenplayEditor() {
                   )}
                   <div 
                     data-outline-element-index={scene.index}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = 'move';
+                      setOutlineDragIndex(sceneIdx);
+                    }}
+                    onDragEnd={() => {
+                      setOutlineDragIndex(null);
+                      setOutlineDropIndex(null);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (outlineDragIndex !== null && outlineDragIndex !== sceneIdx) {
+                        setOutlineDropIndex(sceneIdx);
+                      }
+                    }}
+                    onDragLeave={() => {
+                      setOutlineDropIndex(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (outlineDragIndex === null || outlineDragIndex === sceneIdx) return;
+                      
+                      // Get the actual scene objects
+                      const draggedSceneObj = filteredOutline[outlineDragIndex];
+                      const targetSceneObj = filteredOutline[sceneIdx];
+                      
+                      if (!draggedSceneObj || !targetSceneObj) return;
+                      
+                      // Find scene boundaries in elements array
+                      const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
+                      
+                      // Get the dragged scene's elements (from scene to next scene or end)
+                      const draggedScenePos = sceneIndices.indexOf(draggedSceneObj.index);
+                      const draggedStart = draggedSceneObj.index;
+                      const draggedEnd = draggedScenePos < sceneIndices.length - 1 
+                        ? sceneIndices[draggedScenePos + 1] 
+                        : elements.length;
+                      const draggedElements = elements.slice(draggedStart, draggedEnd);
+                      
+                      // Remove dragged elements from array
+                      let newElements = [...elements];
+                      newElements.splice(draggedStart, draggedElements.length);
+                      
+                      // Calculate new insert position
+                      // If dropping after, insert after target scene's elements
+                      // If dropping before, insert at target scene's position
+                      const targetScenePos = sceneIndices.indexOf(targetSceneObj.index);
+                      let insertPos;
+                      
+                      if (outlineDragIndex < sceneIdx) {
+                        // Dragging down - insert after target
+                        const targetEnd = targetScenePos < sceneIndices.length - 1
+                          ? sceneIndices[targetScenePos + 1] - draggedElements.length
+                          : newElements.length;
+                        insertPos = targetEnd;
+                      } else {
+                        // Dragging up - insert before target
+                        insertPos = targetSceneObj.index;
+                      }
+                      
+                      // Insert dragged elements at new position
+                      newElements.splice(insertPos, 0, ...draggedElements);
+                      
+                      pushToUndo(elements);
+                      setElements(newElements);
+                      
+                      if (socketRef.current && connected && canEdit) {
+                        socketRef.current.emit('full-sync', { elements: newElements });
+                      }
+                      
+                      setOutlineDragIndex(null);
+                      setOutlineDropIndex(null);
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       setActiveIndex(scene.index);
@@ -8814,14 +8992,19 @@ export default function ScreenplayEditor() {
                     style={{ 
                       padding: '10px 12px', 
                       paddingLeft: cardColor ? 0 : 12,
-                      cursor: 'pointer', 
-                      background: activeIndex === scene.index 
-                        ? (darkMode ? '#484848' : '#f3f4f6')
-                        : 'transparent',
+                      cursor: outlineDragIndex !== null ? 'grabbing' : 'grab', 
+                      background: outlineDropIndex === sceneIdx 
+                        ? (darkMode ? '#3b82f6' : '#dbeafe')
+                        : activeIndex === scene.index 
+                          ? (darkMode ? '#484848' : '#f3f4f6')
+                          : 'transparent',
                       borderBottom: `1px solid ${darkMode ? '#484848' : '#f3f4f6'}`,
+                      borderTop: outlineDropIndex === sceneIdx ? '2px solid #3b82f6' : 'none',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 0
+                      gap: 0,
+                      opacity: outlineDragIndex === sceneIdx ? 0.5 : 1,
+                      transition: 'background 0.15s ease, border-top 0.15s ease'
                     }}
                   >
                     <span style={{ 
