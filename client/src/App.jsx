@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V228 - Wider color border in Outline to include scene number
+// V229 - Sync structure beats with outline chapters (bidirectional)
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3635,6 +3635,8 @@ const BeatBoard = React.memo(({
   setSceneStatus,
   beatCards,
   setBeatCards,
+  structureBeats,
+  setStructureBeats,
   t = (k) => k 
 }) => {
   const [selectedCards, setSelectedCards] = useState(new Set()); // Multi-select support
@@ -3651,8 +3653,6 @@ const BeatBoard = React.memo(({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const [whiteboardEnabled, setWhiteboardEnabled] = useState(false); // Whiteboard overlay toggle
-  const [structureBeats, setStructureBeats] = useState([]); // Structure row beats (Act 1, Act 2, etc.)
-  const [trimmingBeat, setTrimmingBeat] = useState(null); // { id, edge: 'left'|'right', startX, startFlex }
   const [whiteboardKey, setWhiteboardKey] = useState(0); // Key to force remount Excalidraw with current zoom/pan
   const [whiteboardElements, setWhiteboardElements] = useState([]); // Excalidraw elements
   const [convertMenuPos, setConvertMenuPos] = useState(null); // Position for convert menu
@@ -4263,31 +4263,6 @@ const BeatBoard = React.memo(({
         {/* Timeline content with fixed labels and scrollable content */}
         <div 
           style={{ display: 'flex', flex: 1 }}
-          onMouseMove={(e) => {
-            if (trimmingBeat) {
-              const deltaX = e.clientX - trimmingBeat.startX;
-              const flexChange = deltaX / 100;
-              setStructureBeats(prev => {
-                const idx = prev.findIndex(b => b.id === trimmingBeat.id);
-                if (idx === -1) return prev;
-                const newBeats = [...prev];
-                if (trimmingBeat.edge === 'right' && idx < prev.length - 1) {
-                  const newFlex = Math.max(0.2, trimmingBeat.startFlex + flexChange);
-                  const nextNewFlex = Math.max(0.2, (trimmingBeat.nextStartFlex || 1) - flexChange);
-                  newBeats[idx] = { ...newBeats[idx], flex: newFlex };
-                  newBeats[idx + 1] = { ...newBeats[idx + 1], flex: nextNewFlex };
-                } else if (trimmingBeat.edge === 'left' && idx > 0) {
-                  const prevNewFlex = Math.max(0.2, (trimmingBeat.prevStartFlex || 1) + flexChange);
-                  const newFlex = Math.max(0.2, trimmingBeat.startFlex - flexChange);
-                  newBeats[idx - 1] = { ...newBeats[idx - 1], flex: prevNewFlex };
-                  newBeats[idx] = { ...newBeats[idx], flex: newFlex };
-                }
-                return newBeats;
-              });
-            }
-          }}
-          onMouseUp={() => setTrimmingBeat(null)}
-          onMouseLeave={() => setTrimmingBeat(null)}
         >
           {/* Fixed labels column */}
           <div style={{ width: 50, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
@@ -4304,76 +4279,133 @@ const BeatBoard = React.memo(({
           {/* Scrollable content area - all rows scroll together */}
           <div ref={timelineScrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'visible', display: 'flex', flexDirection: 'column' }}>
             {/* Structure row */}
-            <div style={{ display: 'flex', height: 28, background: darkMode ? '#1f1f1f' : '#f8f9fa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, minWidth: 'fit-content' }}>
-              {structureBeats.length === 0 ? (
-                <div 
-                  style={{ width: Math.max(300, sceneMetrics.totalPages * 60 * timelineZoom), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 10, fontStyle: 'italic', cursor: 'pointer' }}
-                  onClick={() => {
-                    const label = prompt('Nom du premier bloc (ex: Acte 1)');
-                    if (label) setStructureBeats([{ id: 'struct_' + Date.now(), label, flex: 1, color: null }]);
-                  }}
-                >
-                  Cliquez pour ajouter une structure
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flex: 1, minWidth: Math.max(300, sceneMetrics.totalPages * 60 * timelineZoom) }}>
-                  {structureBeats.map((beat, idx) => (
+            <div style={{ display: 'flex', height: 28, background: darkMode ? '#1f1f1f' : '#f8f9fa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, minWidth: 'fit-content', position: 'relative' }}>
+              {(() => {
+                const totalWidth = Math.max(300, sceneMetrics.totalPages * 60 * timelineZoom);
+                
+                if (structureBeats.length === 0) {
+                  return (
+                    <div 
+                      style={{ width: totalWidth, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 10, fontStyle: 'italic', cursor: 'pointer' }}
+                      onClick={() => {
+                        // Create first beat starting at first scene
+                        const firstScene = elements.find(el => el.type === 'scene');
+                        const label = prompt('Nom du premier bloc (ex: Acte 1)');
+                        if (label && firstScene) setStructureBeats([{ id: 'struct_' + Date.now(), label, startSceneId: firstScene.id, color: null }]);
+                      }}
+                    >
+                      Cliquez pour ajouter une structure
+                    </div>
+                  );
+                }
+                
+                // Sort beats by their scene position
+                const sortedBeats = [...structureBeats].sort((a, b) => {
+                  const aCard = sceneMetrics.cards.find(c => c.linkedSceneId === a.startSceneId);
+                  const bCard = sceneMetrics.cards.find(c => c.linkedSceneId === b.startSceneId);
+                  return (aCard?.startPage || 0) - (bCard?.startPage || 0);
+                });
+                
+                return (
+                  <div style={{ display: 'flex', width: totalWidth, position: 'relative' }}>
+                    {sortedBeats.map((beat, idx) => {
+                      // Find the start position of this beat
+                      const startCard = sceneMetrics.cards.find(c => c.linkedSceneId === beat.startSceneId);
+                      const startPage = startCard?.startPage || 0;
+                      
+                      // Find the end position (start of next beat or end of timeline)
+                      const nextBeat = sortedBeats[idx + 1];
+                      let endPage = sceneMetrics.totalPages;
+                      if (nextBeat) {
+                        const nextCard = sceneMetrics.cards.find(c => c.linkedSceneId === nextBeat.startSceneId);
+                        endPage = nextCard?.startPage || sceneMetrics.totalPages;
+                      }
+                      
+                      const left = startPage * 60 * timelineZoom;
+                      const width = Math.max(40, (endPage - startPage) * 60 * timelineZoom);
+                      
+                      return (
+                        <div
+                          key={beat.id}
+                          style={{
+                            position: 'absolute',
+                            left,
+                            width,
+                            height: '100%',
+                            background: beat.color || (darkMode ? '#2a2a2a' : '#e5e7eb'),
+                            borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: beat.color ? 'white' : (darkMode ? '#d1d5db' : '#374151'),
+                            cursor: 'pointer',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            padding: '0 4px',
+                          }}
+                          onClick={() => {
+                            const newLabel = prompt('Nouveau nom:', beat.label);
+                            if (newLabel !== null) setStructureBeats(prev => prev.map(b => b.id === beat.id ? { ...b, label: newLabel } : b));
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            if (window.confirm(`Supprimer "${beat.label}" ?`)) {
+                              setStructureBeats(prev => prev.filter(b => b.id !== beat.id));
+                            }
+                          }}
+                        >
+                          {beat.label}
+                        </div>
+                      );
+                    })}
+                    {/* Add new beat button at end */}
                     <div
-                      key={beat.id}
                       style={{
-                        flex: beat.flex || 1,
-                        background: beat.color || (darkMode ? '#2a2a2a' : '#e5e7eb'),
-                        borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
+                        position: 'absolute',
+                        right: 4,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        fontSize: 14,
+                        color: '#6b7280',
+                        cursor: 'pointer',
+                        zIndex: 5,
+                        background: darkMode ? '#2a2a2a' : '#e5e7eb',
+                        borderRadius: '50%',
+                        width: 18,
+                        height: 18,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 10,
-                        fontWeight: 600,
-                        color: darkMode ? '#d1d5db' : '#374151',
-                        cursor: 'pointer',
-                        position: 'relative',
-                        minWidth: 40,
                       }}
-                      onClick={() => {
-                        const newLabel = prompt('Nouveau nom:', beat.label);
-                        if (newLabel !== null) setStructureBeats(prev => prev.map(b => b.id === beat.id ? { ...b, label: newLabel } : b));
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        if (window.confirm(`Supprimer "${beat.label}" ?`)) {
-                          setStructureBeats(prev => prev.filter(b => b.id !== beat.id));
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Find a scene that doesn't have a beat yet
+                        const scenes = elements.filter(el => el.type === 'scene');
+                        const usedSceneIds = new Set(structureBeats.map(b => b.startSceneId));
+                        const availableScenes = scenes.filter(s => !usedSceneIds.has(s.id));
+                        
+                        if (availableScenes.length === 0) {
+                          alert('Toutes les scènes ont déjà un bloc de structure');
+                          return;
+                        }
+                        
+                        const label = prompt('Nom du nouveau bloc:');
+                        if (label) {
+                          // Add at middle available scene
+                          const midScene = availableScenes[Math.floor(availableScenes.length / 2)];
+                          setStructureBeats(prev => [...prev, { id: 'struct_' + Date.now(), label, startSceneId: midScene.id, color: null }]);
                         }
                       }}
+                      title="Ajouter un bloc"
                     >
-                      {beat.label}
-                      {/* Left trim handle */}
-                      {idx > 0 && (
-                        <div
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                            setTrimmingBeat({ id: beat.id, edge: 'left', startX: e.clientX, startFlex: beat.flex || 1, prevStartFlex: structureBeats[idx - 1]?.flex || 1 });
-                          }}
-                          style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize', background: trimmingBeat?.id === beat.id && trimmingBeat?.edge === 'left' ? 'rgba(59,130,246,0.5)' : 'transparent', zIndex: 10 }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.3)'}
-                          onMouseLeave={(e) => { if (!trimmingBeat) e.currentTarget.style.background = 'transparent'; }}
-                        />
-                      )}
-                      {/* Right trim handle */}
-                      {idx < structureBeats.length - 1 && (
-                        <div
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                            setTrimmingBeat({ id: beat.id, edge: 'right', startX: e.clientX, startFlex: beat.flex || 1, nextStartFlex: structureBeats[idx + 1]?.flex || 1 });
-                          }}
-                          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'ew-resize', background: trimmingBeat?.id === beat.id && trimmingBeat?.edge === 'right' ? 'rgba(59,130,246,0.5)' : 'transparent', zIndex: 10 }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59,130,246,0.3)'}
-                          onMouseLeave={(e) => { if (!trimmingBeat) e.currentTarget.style.background = 'transparent'; }}
-                        />
-                      )}
+                      +
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                );
+              })()}
             </div>
             
             {/* Time and Page rulers */}
@@ -5322,7 +5354,7 @@ export default function ScreenplayEditor() {
   const [outlineFilter, setOutlineFilter] = useState({ status: '', assignee: '' });
   const [showStatusDropdown, setShowStatusDropdown] = useState(false); // Custom dropdown for status filter
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false); // Custom dropdown for assignee filter
-  const [outlineChapters, setOutlineChapters] = useState({}); // { sceneId: 'Acte 1' } - chapter before this scene
+  const [structureBeats, setStructureBeats] = useState([]); // { id, label, startSceneId, color } - unified structure for timeline and outline
   const [editingChapter, setEditingChapter] = useState(null); // sceneId being edited
   const [lastSaved, setLastSaved] = useState(null);
   const [lastModifiedBy, setLastModifiedBy] = useState(null); // { userName, timestamp }
@@ -8584,29 +8616,31 @@ export default function ScreenplayEditor() {
                   // Find linked card to get its color
                   const linkedCard = beatCards.find(c => c.linkedSceneId === scene.id);
                   const cardColor = linkedCard?.color && linkedCard.color !== '#ffffff' ? linkedCard.color : null;
+                  // Find structure beat that starts at this scene
+                  const chapterBeat = structureBeats.find(b => b.startSceneId === scene.id);
                   
                   return (
                   <React.Fragment key={scene.id}>
-                  {outlineChapters[scene.id] && (
+                  {chapterBeat && (
                     <div 
                       style={{ 
                         padding: '8px 12px', 
-                        background: darkMode ? '#4a4a4a' : '#dbeafe', 
-                        borderLeft: '3px solid #3b82f6',
+                        background: chapterBeat.color || (darkMode ? '#4a4a4a' : '#dbeafe'), 
+                        borderLeft: `3px solid ${chapterBeat.color || '#3b82f6'}`,
                         margin: '4px 8px',
                         borderRadius: 4,
                         fontSize: 11,
                         fontWeight: 600,
-                        color: darkMode ? '#93c5fd' : '#1e40af',
+                        color: chapterBeat.color ? 'white' : (darkMode ? '#93c5fd' : '#1e40af'),
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between'
                       }}
                     >
-                      <span>📁 {outlineChapters[scene.id]}</span>
+                      <span>📁 {chapterBeat.label}</span>
                       <button 
-                        onClick={(e) => { e.stopPropagation(); setOutlineChapters(prev => { const n = {...prev}; delete n[scene.id]; return n; }); }}
-                        style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 12, padding: 0 }}
+                        onClick={(e) => { e.stopPropagation(); setStructureBeats(prev => prev.filter(b => b.id !== chapterBeat.id)); }}
+                        style={{ background: 'none', border: 'none', color: chapterBeat.color ? 'rgba(255,255,255,0.7)' : '#6b7280', cursor: 'pointer', fontSize: 12, padding: 0 }}
                       >✕</button>
                     </div>
                   )}
@@ -8629,12 +8663,17 @@ export default function ScreenplayEditor() {
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
-                      const chapterName = prompt('Nom du chapitre/acte à insérer avant cette scène:', outlineChapters[scene.id] || '');
+                      const existingBeat = structureBeats.find(b => b.startSceneId === scene.id);
+                      const chapterName = prompt('Nom du chapitre/acte à insérer avant cette scène:', existingBeat?.label || '');
                       if (chapterName !== null) {
                         if (chapterName.trim()) {
-                          setOutlineChapters(prev => ({ ...prev, [scene.id]: chapterName.trim() }));
-                        } else {
-                          setOutlineChapters(prev => { const n = {...prev}; delete n[scene.id]; return n; });
+                          if (existingBeat) {
+                            setStructureBeats(prev => prev.map(b => b.id === existingBeat.id ? { ...b, label: chapterName.trim() } : b));
+                          } else {
+                            setStructureBeats(prev => [...prev, { id: 'struct_' + Date.now(), label: chapterName.trim(), startSceneId: scene.id, color: null }]);
+                          }
+                        } else if (existingBeat) {
+                          setStructureBeats(prev => prev.filter(b => b.id !== existingBeat.id));
                         }
                       }
                     }}
@@ -9038,6 +9077,8 @@ export default function ScreenplayEditor() {
           setSceneStatus={setSceneStatus}
           beatCards={beatCards}
           setBeatCards={setBeatCards}
+          structureBeats={structureBeats}
+          setStructureBeats={setStructureBeats}
           t={t}
         />
       </div>
