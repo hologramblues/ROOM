@@ -3666,6 +3666,8 @@ const BeatBoard = React.memo(({
   const [whiteboardKey, setWhiteboardKey] = useState(0); // Key to force remount Excalidraw with current zoom/pan
   const [convertMenuPos, setConvertMenuPos] = useState(null); // Position for convert menu
   const [selectedExcalidrawId, setSelectedExcalidrawId] = useState(null); // Selected excalidraw element for conversion
+  const [timelineDragId, setTimelineDragId] = useState(null); // Card ID being dragged in timeline
+  const [timelineDropIndex, setTimelineDropIndex] = useState(null); // Drop position index in timeline (between blocks)
   const lastClickRef = useRef({ cardId: null, time: 0 }); // For manual double-click detection
   const dragOriginalPosRef = useRef(null); // Store original position during drag
   const dragFromTimelineRef = useRef(false); // Track if drag started from timeline
@@ -4450,40 +4452,118 @@ const BeatBoard = React.memo(({
                   const isWhite = card.color === '#ffffff';
                   const blockBg = isWhite ? (darkMode ? '#555' : '#e5e7eb') : card.color;
                   const textColor = isWhite ? (darkMode ? 'white' : '#374151') : 'white';
+                  const isDragging = timelineDragId === card.id;
+                  
                   return (
-                    <div
-                      key={card.id}
-                      onMouseEnter={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        // Merge card (has pages from sceneMetrics) with fullCard (has synopsis from beatCards)
-                        setHoveredBlock({ id: card.id, rect, card: { ...card, synopsis: fullCard?.synopsis || card.synopsis } });
-                      }}
-                      onMouseLeave={() => setHoveredBlock(null)}
-                      onMouseDown={(e) => fullCard && handleDragStart(e, fullCard, true)}
-                      onDoubleClick={() => setEditModalCard(fullCard || card)}
-                      style={{
-                        width: blockWidth,
-                        height: '100%',
-                        background: blockBg,
-                        borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
-                        cursor: 'grab',
-                        position: 'relative',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'visible',
-                        opacity: selectedCards.has(card.id) ? 1 : 0.85,
-                        boxShadow: selectedCards.has(card.id) ? `inset 0 0 0 2px ${isWhite ? '#3b82f6' : 'white'}` : 'none',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {blockWidth > 60 && (
-                        <span style={{ fontSize: 9, color: textColor, textShadow: isWhite ? 'none' : '0 1px 2px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', maxWidth: '100%' }}>
-                          {card.title.replace(/^(INT\.|EXT\.|INT\/EXT\.)\s*/i, '').substring(0, 20)}
-                        </span>
+                    <React.Fragment key={card.id}>
+                      {/* Drop indicator - before first block */}
+                      {idx === 0 && timelineDropIndex === 0 && timelineDragId && (
+                        <div style={{
+                          width: 3,
+                          height: '100%',
+                          background: '#3b82f6',
+                          borderRadius: 2,
+                          boxShadow: '0 0 6px #3b82f6',
+                          flexShrink: 0,
+                          zIndex: 10
+                        }} />
                       )}
-                      
-                    </div>
+                      <div
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.effectAllowed = 'move';
+                          setTimelineDragId(card.id);
+                        }}
+                        onDragEnd={() => {
+                          setTimelineDragId(null);
+                          setTimelineDropIndex(null);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          if (timelineDragId && timelineDragId !== card.id) {
+                            // Determine drop position based on mouse X
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const midX = rect.left + rect.width / 2;
+                            const dropBefore = e.clientX < midX;
+                            setTimelineDropIndex(dropBefore ? idx : idx + 1);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (!timelineDragId || timelineDropIndex === null) return;
+                          
+                          // Reorder cards in timeline
+                          const draggedIdx = sceneMetrics.cards.findIndex(c => c.id === timelineDragId);
+                          if (draggedIdx === -1 || draggedIdx === timelineDropIndex || draggedIdx === timelineDropIndex - 1) {
+                            setTimelineDragId(null);
+                            setTimelineDropIndex(null);
+                            return;
+                          }
+                          
+                          // Reindex all timeline cards
+                          const orderedIds = sceneMetrics.cards.map(c => c.id);
+                          const [draggedId] = orderedIds.splice(draggedIdx, 1);
+                          const insertIdx = timelineDropIndex > draggedIdx ? timelineDropIndex - 1 : timelineDropIndex;
+                          orderedIds.splice(insertIdx, 0, draggedId);
+                          
+                          // Update timelineIndex for all cards
+                          setBeatCards(prev => prev.map(c => {
+                            const newIdx = orderedIds.indexOf(c.id);
+                            if (newIdx !== -1) {
+                              return { ...c, timelineIndex: newIdx };
+                            }
+                            return c;
+                          }));
+                          
+                          setTimelineDragId(null);
+                          setTimelineDropIndex(null);
+                        }}
+                        onMouseEnter={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setHoveredBlock({ id: card.id, rect, card: { ...card, synopsis: fullCard?.synopsis || card.synopsis } });
+                        }}
+                        onMouseLeave={() => setHoveredBlock(null)}
+                        onMouseDown={(e) => !e.dataTransfer && fullCard && handleDragStart(e, fullCard, true)}
+                        onDoubleClick={() => setEditModalCard(fullCard || card)}
+                        style={{
+                          width: blockWidth,
+                          height: '100%',
+                          background: blockBg,
+                          borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
+                          cursor: 'grab',
+                          position: 'relative',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'visible',
+                          opacity: isDragging ? 0.4 : (selectedCards.has(card.id) ? 1 : 0.85),
+                          boxShadow: selectedCards.has(card.id) ? `inset 0 0 0 2px ${isWhite ? '#3b82f6' : 'white'}` : 'none',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {blockWidth > 60 && (
+                          <span style={{ fontSize: 9, color: textColor, textShadow: isWhite ? 'none' : '0 1px 2px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', maxWidth: '100%' }}>
+                            {card.title.replace(/^(INT\.|EXT\.|INT\/EXT\.)\s*/i, '').substring(0, 20)}
+                          </span>
+                        )}
+                        
+                      </div>
+                      {/* Drop indicator - after block */}
+                      {timelineDropIndex === idx + 1 && timelineDragId && timelineDragId !== card.id && (
+                        <div style={{
+                          width: 3,
+                          height: '100%',
+                          background: '#3b82f6',
+                          borderRadius: 2,
+                          boxShadow: '0 0 6px #3b82f6',
+                          flexShrink: 0,
+                          zIndex: 10,
+                          marginLeft: -2,
+                          marginRight: -1
+                        }} />
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}
@@ -8897,7 +8977,11 @@ export default function ScreenplayEditor() {
                       e.preventDefault();
                       e.dataTransfer.dropEffect = 'move';
                       if (outlineDragIndex !== null && outlineDragIndex !== sceneIdx) {
-                        setOutlineDropIndex(sceneIdx);
+                        // Determine if dropping before or after based on mouse position
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const midY = rect.top + rect.height / 2;
+                        const dropBefore = e.clientY < midY;
+                        setOutlineDropIndex({ index: sceneIdx, position: dropBefore ? 'before' : 'after' });
                       }
                     }}
                     onDragLeave={() => {
@@ -8905,11 +8989,19 @@ export default function ScreenplayEditor() {
                     }}
                     onDrop={(e) => {
                       e.preventDefault();
-                      if (outlineDragIndex === null || outlineDragIndex === sceneIdx) return;
+                      if (outlineDragIndex === null || !outlineDropIndex) return;
+                      
+                      const targetIdx = outlineDropIndex.index;
+                      const dropBefore = outlineDropIndex.position === 'before';
+                      
+                      // Don't drop on self or adjacent position that would result in no change
+                      if (outlineDragIndex === targetIdx) return;
+                      if (dropBefore && outlineDragIndex === targetIdx - 1) return;
+                      if (!dropBefore && outlineDragIndex === targetIdx + 1) return;
                       
                       // Get the actual scene objects
                       const draggedSceneObj = filteredOutline[outlineDragIndex];
-                      const targetSceneObj = filteredOutline[sceneIdx];
+                      const targetSceneObj = filteredOutline[targetIdx];
                       
                       if (!draggedSceneObj || !targetSceneObj) return;
                       
@@ -8928,21 +9020,21 @@ export default function ScreenplayEditor() {
                       let newElements = [...elements];
                       newElements.splice(draggedStart, draggedElements.length);
                       
-                      // Calculate new insert position
-                      // If dropping after, insert after target scene's elements
-                      // If dropping before, insert at target scene's position
-                      const targetScenePos = sceneIndices.indexOf(targetSceneObj.index);
-                      let insertPos;
+                      // Recalculate scene indices after removal
+                      const newSceneIndices = newElements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
                       
-                      if (outlineDragIndex < sceneIdx) {
-                        // Dragging down - insert after target
-                        const targetEnd = targetScenePos < sceneIndices.length - 1
-                          ? sceneIndices[targetScenePos + 1] - draggedElements.length
-                          : newElements.length;
-                        insertPos = targetEnd;
+                      // Find target position in new array
+                      const targetSceneInNew = newElements.findIndex(el => el.id === targetSceneObj.id);
+                      const targetScenePosInNew = newSceneIndices.indexOf(targetSceneInNew);
+                      
+                      let insertPos;
+                      if (dropBefore) {
+                        insertPos = targetSceneInNew;
                       } else {
-                        // Dragging up - insert before target
-                        insertPos = targetSceneObj.index;
+                        // Insert after target scene's elements
+                        insertPos = targetScenePosInNew < newSceneIndices.length - 1
+                          ? newSceneIndices[targetScenePosInNew + 1]
+                          : newElements.length;
                       }
                       
                       // Insert dragged elements at new position
@@ -8993,20 +9085,43 @@ export default function ScreenplayEditor() {
                       padding: '10px 12px', 
                       paddingLeft: cardColor ? 0 : 12,
                       cursor: outlineDragIndex !== null ? 'grabbing' : 'grab', 
-                      background: outlineDropIndex === sceneIdx 
-                        ? (darkMode ? '#3b82f6' : '#dbeafe')
-                        : activeIndex === scene.index 
+                      background: activeIndex === scene.index 
                           ? (darkMode ? '#484848' : '#f3f4f6')
                           : 'transparent',
                       borderBottom: `1px solid ${darkMode ? '#484848' : '#f3f4f6'}`,
-                      borderTop: outlineDropIndex === sceneIdx ? '2px solid #3b82f6' : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 0,
                       opacity: outlineDragIndex === sceneIdx ? 0.5 : 1,
-                      transition: 'background 0.15s ease, border-top 0.15s ease'
+                      position: 'relative'
                     }}
                   >
+                    {/* Drop indicator line - before */}
+                    {outlineDropIndex?.index === sceneIdx && outlineDropIndex?.position === 'before' && (
+                      <div style={{
+                        position: 'absolute',
+                        top: -1,
+                        left: 8,
+                        right: 8,
+                        height: 2,
+                        background: '#3b82f6',
+                        borderRadius: 1,
+                        boxShadow: '0 0 4px #3b82f6'
+                      }} />
+                    )}
+                    {/* Drop indicator line - after */}
+                    {outlineDropIndex?.index === sceneIdx && outlineDropIndex?.position === 'after' && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: -1,
+                        left: 8,
+                        right: 8,
+                        height: 2,
+                        background: '#3b82f6',
+                        borderRadius: 1,
+                        boxShadow: '0 0 4px #3b82f6'
+                      }} />
+                    )}
                     <span style={{ 
                       fontSize: 10, 
                       color: cardColor ? 'white' : '#6b7280', 
