@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V220 - Fix: card hover preview below blocks, remove left position limit
+// V221 - Fix hover preview overflow, bigger buttons, hide Excalidraw promo
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -4301,7 +4301,7 @@ const BeatBoard = React.memo(({
           </div>
           
           {/* Scrollable content area - all rows scroll together */}
-          <div ref={timelineScrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div ref={timelineScrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'visible', display: 'flex', flexDirection: 'column' }}>
             {/* Structure row */}
             <div style={{ display: 'flex', height: 28, background: darkMode ? '#1f1f1f' : '#f8f9fa', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, minWidth: 'fit-content' }}>
               {structureBeats.length === 0 ? (
@@ -4396,7 +4396,7 @@ const BeatBoard = React.memo(({
             )}
             
             {/* Blocks row */}
-            <div style={{ display: 'flex', height: 40, position: 'relative', minWidth: 'fit-content' }}>
+            <div style={{ display: 'flex', height: 40, position: 'relative', minWidth: 'fit-content', overflow: 'visible' }}>
               {timelineCards.length === 0 ? (
                 <div style={{ flex: 1, minWidth: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 11, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 6, margin: 4 }}>
                   Glissez des cartes ici pour construire votre timeline
@@ -4510,6 +4510,17 @@ const BeatBoard = React.memo(({
               }
               .excalidraw canvas {
                 background: transparent !important;
+              }
+              /* Hide Excalidraw promo buttons */
+              .excalidraw .App-menu_top__left,
+              .excalidraw .App-menu_top__right,
+              .excalidraw .main-menu-trigger,
+              .excalidraw .help-icon,
+              .excalidraw [class*="HelpButton"],
+              .excalidraw [class*="UserList"],
+              .excalidraw .layer-ui__wrapper__top-right,
+              .excalidraw .layer-ui__wrapper__footer-right {
+                display: none !important;
               }
             `}</style>
             <Suspense fallback={
@@ -4633,17 +4644,17 @@ const BeatBoard = React.memo(({
           </div>
         )}
         
-        {/* Canvas controls overlay - Top left */}
-        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 6, zIndex: 100 }}>
-          <button onClick={addNewCard} style={{ padding: '6px 10px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
-            <span style={{ fontSize: 12 }}>+</span> Carte
+        {/* Canvas controls overlay - Top left - sized to match Excalidraw toolbar */}
+        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100 }}>
+          <button onClick={addNewCard} style={{ padding: '10px 16px', background: '#3b82f6', border: 'none', borderRadius: 8, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', height: 40 }}>
+            <span style={{ fontSize: 16 }}>+</span> Carte
           </button>
           <button onClick={() => {
             const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 / canvasZoom - pan.x, y: 150 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'note' };
             setBeatCards(prev => [...prev, newNote]);
             setSelectedCards(new Set([newNote.id]));
             setEditModalCard(newNote);
-          }} style={{ padding: '6px 10px', background: darkMode ? 'rgba(85,85,85,0.9)' : 'rgba(254,243,199,0.95)', border: 'none', borderRadius: 6, color: darkMode ? '#fbbf24' : '#92400e', fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+          }} style={{ padding: '10px 16px', background: darkMode ? 'rgba(85,85,85,0.95)' : 'rgba(254,243,199,0.98)', border: 'none', borderRadius: 8, color: darkMode ? '#fbbf24' : '#92400e', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', height: 40 }}>
             📝 Note
           </button>
           <button 
@@ -4652,17 +4663,18 @@ const BeatBoard = React.memo(({
               setWhiteboardEnabled(!whiteboardEnabled);
             }}
             style={{ 
-              padding: '6px 10px', 
-              background: whiteboardEnabled ? '#8b5cf6' : (darkMode ? 'rgba(58,58,58,0.9)' : 'rgba(255,255,255,0.95)'), 
+              padding: '10px 16px', 
+              height: 40,
+              background: whiteboardEnabled ? '#8b5cf6' : (darkMode ? 'rgba(58,58,58,0.95)' : 'rgba(255,255,255,0.98)'), 
               border: whiteboardEnabled ? 'none' : `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
-              borderRadius: 6, 
+              borderRadius: 8, 
               color: whiteboardEnabled ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'), 
-              fontSize: 11, 
-              fontWeight: 500, 
+              fontSize: 13, 
+              fontWeight: 600, 
               cursor: 'pointer', 
               display: 'flex', 
               alignItems: 'center', 
-              gap: 4,
+              gap: 6,
               boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             }}
             title="Activer le whiteboard pour dessiner"
