@@ -4440,7 +4440,62 @@ const BeatBoard = React.memo(({
             )}
             
             {/* Blocks row */}
-            <div style={{ display: 'flex', height: 40, position: 'relative', minWidth: 'fit-content', overflow: 'visible' }}>
+            <div 
+              style={{ display: 'flex', height: 40, position: 'relative', minWidth: 'fit-content', overflow: 'visible' }}
+              onMouseMove={(e) => {
+                if (!timelineDragId) return;
+                // Find which block we're over
+                const blocks = e.currentTarget.querySelectorAll('[data-timeline-block]');
+                let foundDropIndex = null;
+                blocks.forEach((block, idx) => {
+                  const rect = block.getBoundingClientRect();
+                  if (e.clientX >= rect.left && e.clientX <= rect.right) {
+                    const midX = rect.left + rect.width / 2;
+                    foundDropIndex = e.clientX < midX ? idx : idx + 1;
+                  }
+                });
+                // If past the last block
+                if (foundDropIndex === null && blocks.length > 0) {
+                  const lastRect = blocks[blocks.length - 1].getBoundingClientRect();
+                  if (e.clientX > lastRect.right) {
+                    foundDropIndex = blocks.length;
+                  } else if (e.clientX < blocks[0].getBoundingClientRect().left) {
+                    foundDropIndex = 0;
+                  }
+                }
+                if (foundDropIndex !== null && foundDropIndex !== timelineDropIndex) {
+                  setTimelineDropIndex(foundDropIndex);
+                }
+              }}
+              onMouseUp={() => {
+                if (timelineDragId && timelineDropIndex !== null) {
+                  // Reorder cards in timeline
+                  const draggedIdx = sceneMetrics.cards.findIndex(c => c.id === timelineDragId);
+                  if (draggedIdx !== -1 && draggedIdx !== timelineDropIndex && draggedIdx !== timelineDropIndex - 1) {
+                    const orderedIds = sceneMetrics.cards.map(c => c.id);
+                    const [draggedId] = orderedIds.splice(draggedIdx, 1);
+                    const insertIdx = timelineDropIndex > draggedIdx ? timelineDropIndex - 1 : timelineDropIndex;
+                    orderedIds.splice(insertIdx, 0, draggedId);
+                    
+                    setBeatCards(prev => prev.map(c => {
+                      const newIdx = orderedIds.indexOf(c.id);
+                      if (newIdx !== -1) {
+                        return { ...c, timelineIndex: newIdx };
+                      }
+                      return c;
+                    }));
+                  }
+                }
+                setTimelineDragId(null);
+                setTimelineDropIndex(null);
+              }}
+              onMouseLeave={() => {
+                if (timelineDragId) {
+                  setTimelineDragId(null);
+                  setTimelineDropIndex(null);
+                }
+              }}
+            >
               {timelineCards.length === 0 ? (
                 <div style={{ flex: 1, minWidth: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 11, border: `2px dashed ${darkMode ? '#484848' : '#d1d5db'}`, borderRadius: 6, margin: 4 }}>
                   Glissez des cartes ici pour construire votre timeline
@@ -4453,114 +4508,79 @@ const BeatBoard = React.memo(({
                   const blockBg = isWhite ? (darkMode ? '#555' : '#e5e7eb') : card.color;
                   const textColor = isWhite ? (darkMode ? 'white' : '#374151') : 'white';
                   const isDragging = timelineDragId === card.id;
+                  const draggedIdx = timelineDragId ? sceneMetrics.cards.findIndex(c => c.id === timelineDragId) : -1;
+                  const showDropBefore = timelineDropIndex === idx && timelineDragId && draggedIdx !== idx && draggedIdx !== idx - 1;
+                  const showDropAfter = timelineDropIndex === idx + 1 && timelineDragId && draggedIdx !== idx && draggedIdx !== idx + 1;
                   
                   return (
                     <React.Fragment key={card.id}>
-                      {/* Drop indicator - before first block */}
-                      {idx === 0 && timelineDropIndex === 0 && timelineDragId && (
+                      {/* Drop indicator - before this block */}
+                      {showDropBefore && (
                         <div style={{
-                          width: 3,
+                          width: 4,
                           height: '100%',
                           background: '#3b82f6',
                           borderRadius: 2,
-                          boxShadow: '0 0 6px #3b82f6',
+                          boxShadow: '0 0 8px #3b82f6, 0 0 16px #3b82f6',
                           flexShrink: 0,
-                          zIndex: 10
+                          zIndex: 20
                         }} />
                       )}
                       <div
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.effectAllowed = 'move';
+                        data-timeline-block={card.id}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           setTimelineDragId(card.id);
-                        }}
-                        onDragEnd={() => {
-                          setTimelineDragId(null);
-                          setTimelineDropIndex(null);
-                        }}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = 'move';
-                          if (timelineDragId && timelineDragId !== card.id) {
-                            // Determine drop position based on mouse X
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const midX = rect.left + rect.width / 2;
-                            const dropBefore = e.clientX < midX;
-                            setTimelineDropIndex(dropBefore ? idx : idx + 1);
-                          }
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          if (!timelineDragId || timelineDropIndex === null) return;
-                          
-                          // Reorder cards in timeline
-                          const draggedIdx = sceneMetrics.cards.findIndex(c => c.id === timelineDragId);
-                          if (draggedIdx === -1 || draggedIdx === timelineDropIndex || draggedIdx === timelineDropIndex - 1) {
-                            setTimelineDragId(null);
-                            setTimelineDropIndex(null);
-                            return;
-                          }
-                          
-                          // Reindex all timeline cards
-                          const orderedIds = sceneMetrics.cards.map(c => c.id);
-                          const [draggedId] = orderedIds.splice(draggedIdx, 1);
-                          const insertIdx = timelineDropIndex > draggedIdx ? timelineDropIndex - 1 : timelineDropIndex;
-                          orderedIds.splice(insertIdx, 0, draggedId);
-                          
-                          // Update timelineIndex for all cards
-                          setBeatCards(prev => prev.map(c => {
-                            const newIdx = orderedIds.indexOf(c.id);
-                            if (newIdx !== -1) {
-                              return { ...c, timelineIndex: newIdx };
-                            }
-                            return c;
-                          }));
-                          
-                          setTimelineDragId(null);
                           setTimelineDropIndex(null);
                         }}
                         onMouseEnter={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setHoveredBlock({ id: card.id, rect, card: { ...card, synopsis: fullCard?.synopsis || card.synopsis } });
+                          if (!timelineDragId) {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setHoveredBlock({ id: card.id, rect, card: { ...card, synopsis: fullCard?.synopsis || card.synopsis } });
+                          }
                         }}
-                        onMouseLeave={() => setHoveredBlock(null)}
-                        onMouseDown={(e) => !e.dataTransfer && fullCard && handleDragStart(e, fullCard, true)}
+                        onMouseLeave={() => {
+                          if (!timelineDragId) setHoveredBlock(null);
+                        }}
                         onDoubleClick={() => setEditModalCard(fullCard || card)}
                         style={{
                           width: blockWidth,
                           height: '100%',
-                          background: blockBg,
+                          background: isDragging ? '#3b82f6' : blockBg,
                           borderRight: `1px solid ${darkMode ? '#1a1a1a' : 'white'}`,
-                          cursor: 'grab',
+                          cursor: timelineDragId ? 'grabbing' : 'grab',
                           position: 'relative',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           overflow: 'visible',
-                          opacity: isDragging ? 0.4 : (selectedCards.has(card.id) ? 1 : 0.85),
-                          boxShadow: selectedCards.has(card.id) ? `inset 0 0 0 2px ${isWhite ? '#3b82f6' : 'white'}` : 'none',
+                          opacity: isDragging ? 0.6 : (selectedCards.has(card.id) ? 1 : 0.85),
+                          boxShadow: isDragging 
+                            ? '0 0 12px rgba(59, 130, 246, 0.8)' 
+                            : (selectedCards.has(card.id) ? `inset 0 0 0 2px ${isWhite ? '#3b82f6' : 'white'}` : 'none'),
                           flexShrink: 0,
+                          transition: 'opacity 0.15s, box-shadow 0.15s',
+                          transform: isDragging ? 'scale(1.05)' : 'scale(1)',
                         }}
                       >
                         {blockWidth > 60 && (
-                          <span style={{ fontSize: 9, color: textColor, textShadow: isWhite ? 'none' : '0 1px 2px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', maxWidth: '100%' }}>
+                          <span style={{ fontSize: 9, color: isDragging ? 'white' : textColor, textShadow: isWhite && !isDragging ? 'none' : '0 1px 2px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px', maxWidth: '100%' }}>
                             {card.title.replace(/^(INT\.|EXT\.|INT\/EXT\.)\s*/i, '').substring(0, 20)}
                           </span>
                         )}
-                        
                       </div>
-                      {/* Drop indicator - after block */}
-                      {timelineDropIndex === idx + 1 && timelineDragId && timelineDragId !== card.id && (
+                      {/* Drop indicator - after this block */}
+                      {showDropAfter && (
                         <div style={{
-                          width: 3,
+                          width: 4,
                           height: '100%',
                           background: '#3b82f6',
                           borderRadius: 2,
-                          boxShadow: '0 0 6px #3b82f6',
+                          boxShadow: '0 0 8px #3b82f6, 0 0 16px #3b82f6',
                           flexShrink: 0,
-                          zIndex: 10,
-                          marginLeft: -2,
-                          marginRight: -1
+                          zIndex: 20,
+                          marginLeft: -2
                         }} />
                       )}
                     </React.Fragment>
