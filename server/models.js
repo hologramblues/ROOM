@@ -123,6 +123,12 @@ const historyEntrySchema = new mongoose.Schema({
     newType: String,
     elements: [elementSchema],
     title: String,
+    // Beat Board data for snapshots
+    beatCards: Array,
+    structureBeats: Array,
+    sceneSynopsis: mongoose.Schema.Types.Mixed,
+    sceneStatus: mongoose.Schema.Types.Mixed,
+    whiteboardElements: Array,
   },
   createdAt: { type: Date, default: Date.now },
 });
@@ -159,6 +165,27 @@ const documentSchema = new mongoose.Schema({
   },
   suggestions: {
     type: [suggestionSchema],
+    default: [],
+  },
+  // Beat Board data
+  beatCards: {
+    type: Array,
+    default: [],
+  },
+  structureBeats: {
+    type: Array,
+    default: [],
+  },
+  sceneSynopsis: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {},
+  },
+  sceneStatus: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {},
+  },
+  whiteboardElements: {
+    type: Array,
     default: [],
   },
   ownerId: { 
