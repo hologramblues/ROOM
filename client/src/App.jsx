@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V222 - Fix hover preview with portal, reposition buttons below Excalidraw menu
+// V223 - Center Excalidraw menu, smaller buttons
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -4500,8 +4500,18 @@ const BeatBoard = React.memo(({
               .excalidraw [class*="HelpButton"],
               .excalidraw [class*="UserList"],
               .excalidraw .layer-ui__wrapper__top-right,
-              .excalidraw .layer-ui__wrapper__footer-right {
+              .excalidraw .layer-ui__wrapper__footer-right,
+              .excalidraw .layer-ui__wrapper__footer-left {
                 display: none !important;
+              }
+              /* Center Excalidraw toolbar */
+              .excalidraw .layer-ui__wrapper__top-center {
+                position: absolute !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+              }
+              .excalidraw .App-toolbar-container {
+                justify-content: center !important;
               }
             `}</style>
             <Suspense fallback={
@@ -4626,16 +4636,16 @@ const BeatBoard = React.memo(({
         )}
         
         {/* Canvas controls overlay - moves down when whiteboard is enabled to not hide Excalidraw menu */}
-        <div style={{ position: 'absolute', top: whiteboardEnabled ? 60 : 12, left: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100, transition: 'top 0.2s' }}>
-          <button onClick={addNewCard} style={{ padding: '10px 16px', background: '#3b82f6', border: 'none', borderRadius: 8, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', height: 40 }}>
-            <span style={{ fontSize: 16 }}>+</span> Carte
+        <div style={{ position: 'absolute', top: whiteboardEnabled ? 56 : 12, left: 12, display: 'flex', alignItems: 'center', gap: 6, zIndex: 100, transition: 'top 0.2s' }}>
+          <button onClick={addNewCard} style={{ padding: '7px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', height: 32 }}>
+            <span style={{ fontSize: 14 }}>+</span> Carte
           </button>
           <button onClick={() => {
             const newNote = { id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null, title: '📝 Note', synopsis: '', color: '#fbbf24', position: { x: 150 / canvasZoom - pan.x, y: 150 / canvasZoom - pan.y }, timelineIndex: null, status: null, isNew: true, type: 'note' };
             setBeatCards(prev => [...prev, newNote]);
             setSelectedCards(new Set([newNote.id]));
             setEditModalCard(newNote);
-          }} style={{ padding: '10px 16px', background: darkMode ? 'rgba(85,85,85,0.95)' : 'rgba(254,243,199,0.98)', border: 'none', borderRadius: 8, color: darkMode ? '#fbbf24' : '#92400e', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', height: 40 }}>
+          }} style={{ padding: '7px 12px', background: darkMode ? 'rgba(85,85,85,0.95)' : 'rgba(254,243,199,0.98)', border: 'none', borderRadius: 6, color: darkMode ? '#fbbf24' : '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', height: 32 }}>
             📝 Note
           </button>
           <button 
@@ -4644,18 +4654,18 @@ const BeatBoard = React.memo(({
               setWhiteboardEnabled(!whiteboardEnabled);
             }}
             style={{ 
-              padding: '10px 16px', 
-              height: 40,
+              padding: '7px 12px', 
+              height: 32,
               background: whiteboardEnabled ? '#8b5cf6' : (darkMode ? 'rgba(58,58,58,0.95)' : 'rgba(255,255,255,0.98)'), 
               border: whiteboardEnabled ? 'none' : `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
-              borderRadius: 8, 
+              borderRadius: 6, 
               color: whiteboardEnabled ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'), 
-              fontSize: 13, 
+              fontSize: 12, 
               fontWeight: 600, 
               cursor: 'pointer', 
               display: 'flex', 
               alignItems: 'center', 
-              gap: 6,
+              gap: 5,
               boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             }}
             title="Activer le whiteboard pour dessiner"
@@ -4665,7 +4675,7 @@ const BeatBoard = React.memo(({
         </div>
         
         {/* Stats and apply button - Top right - moves down when whiteboard is enabled */}
-        <div style={{ position: 'absolute', top: whiteboardEnabled ? 60 : 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100, transition: 'top 0.2s' }}>
+        <div style={{ position: 'absolute', top: whiteboardEnabled ? 56 : 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100, transition: 'top 0.2s' }}>
           <div style={{ background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.95)', padding: '6px 10px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 500 }}>{timelineCards.length} CUT</span>
             <span style={{ fontSize: 10, color: '#9ca3af' }}>{beatCards.filter(c => c.timelineIndex === null).length} UNCUT</span>
