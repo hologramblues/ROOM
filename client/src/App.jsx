@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V230 - Save and load all Beat Board data (beatCards, structureBeats, whiteboardElements, etc.)
+// V230 - Save and load all Beat Board data (beatCards, structureBeats, whiteboardElements, etc.) + Fix suggestion display after reload
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3146,6 +3146,8 @@ const renderContentWithHighlights = (content, highlights) => {
       );
     } else if (h.type === 'suggestion') {
       // Strikethrough original + green suggestion text
+      // Use stored originalText for reliability after reload
+      const originalTextToShow = h.originalText || content.slice(h.startOffset, h.endOffset);
       parts.push(
         <span 
           key={`suggestion-${h.id}`}
@@ -3157,7 +3159,7 @@ const renderContentWithHighlights = (content, highlights) => {
             color: '#dc2626', 
             background: 'rgba(220, 38, 38, 0.1)' 
           }}>
-            {highlightedText}
+            {originalTextToShow}
           </span>
           <span style={{ 
             color: '#16a34a', 
@@ -3220,11 +3222,12 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         html += escapeHtml(content.slice(lastEnd, h.startOffset));
       }
       
-      const markedText = escapeHtml(content.slice(h.startOffset, h.endOffset));
-      
       if (h.type === 'comment') {
+        const markedText = escapeHtml(content.slice(h.startOffset, h.endOffset));
         html += `<span data-comment-id="${h.id || h._id}">${markedText}</span>`;
       } else if (h.type === 'suggestion') {
+        // Use stored originalText for suggestions (more reliable after reload)
+        const markedText = escapeHtml(h.originalText || content.slice(h.startOffset, h.endOffset));
         const suggestedText = escapeHtml(h.suggestedText || '');
         html += `<span data-suggestion-id="${h.id || h._id}" data-suggested-text="${suggestedText}">${markedText}</span>`;
       }
@@ -6950,9 +6953,10 @@ export default function ScreenplayEditor() {
         });
       } else if (highlight.type === 'suggestion') {
         // Suggestion: show original (strikethrough) + suggested (green)
+        // Use stored originalText instead of slicing content (which may have changed)
         segments.push({
           type: 'suggestion',
-          originalContent: content.slice(highlight.startOffset, highlight.endOffset),
+          originalContent: highlight.originalText || content.slice(highlight.startOffset, highlight.endOffset),
           suggestedContent: highlight.suggestedText,
           suggestionId: highlight.suggestionId,
           userColor: highlight.userColor
