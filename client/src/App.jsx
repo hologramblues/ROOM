@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V227 - Sync card colors to Outline with colored border
+// V228 - Wider color border in Outline to include scene number
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -8640,23 +8640,27 @@ export default function ScreenplayEditor() {
                     }}
                     style={{ 
                       padding: '10px 12px', 
-                      paddingLeft: cardColor ? 8 : 12,
+                      paddingLeft: cardColor ? 0 : 12,
                       cursor: 'pointer', 
                       background: activeIndex === scene.index 
                         ? (darkMode ? '#484848' : '#f3f4f6')
                         : 'transparent',
                       borderBottom: `1px solid ${darkMode ? '#484848' : '#f3f4f6'}`,
-                      borderLeft: cardColor ? `4px solid ${cardColor}` : 'none',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 8
+                      gap: 0
                     }}
                   >
                     <span style={{ 
                       fontSize: 10, 
-                      color: '#6b7280', 
-                      minWidth: 20,
-                      textAlign: 'center'
+                      color: cardColor ? 'white' : '#6b7280', 
+                      minWidth: cardColor ? 32 : 28,
+                      textAlign: 'center',
+                      padding: '4px 0',
+                      marginRight: 8,
+                      background: cardColor || 'transparent',
+                      borderRadius: cardColor ? '0' : 0,
+                      fontWeight: cardColor ? 600 : 400
                     }}>{sceneIdx + 1}</span>
                     <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                       <div style={{ 
