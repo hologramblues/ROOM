@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V225 - Fix Excalidraw centering with visibility hidden instead of display none
+// V226 - Keep buttons at fixed top position to hide Excalidraw menu button
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -4627,7 +4627,7 @@ const BeatBoard = React.memo(({
         )}
         
         {/* Canvas controls overlay - moves down when whiteboard is enabled to not hide Excalidraw menu */}
-        <div style={{ position: 'absolute', top: whiteboardEnabled ? 56 : 12, left: 12, display: 'flex', alignItems: 'center', gap: 6, zIndex: 100, transition: 'top 0.2s' }}>
+        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 6, zIndex: 100 }}>
           <button onClick={addNewCard} style={{ padding: '7px 12px', background: '#3b82f6', border: 'none', borderRadius: 6, color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', height: 32 }}>
             <span style={{ fontSize: 14 }}>+</span> Carte
           </button>
@@ -4666,7 +4666,7 @@ const BeatBoard = React.memo(({
         </div>
         
         {/* Stats and apply button - Top right - moves down when whiteboard is enabled */}
-        <div style={{ position: 'absolute', top: whiteboardEnabled ? 56 : 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100, transition: 'top 0.2s' }}>
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100 }}>
           <div style={{ background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.95)', padding: '6px 10px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 500 }}>{timelineCards.length} CUT</span>
             <span style={{ fontSize: 10, color: '#9ca3af' }}>{beatCards.filter(c => c.timelineIndex === null).length} UNCUT</span>
