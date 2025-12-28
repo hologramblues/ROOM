@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V221 - Fix hover preview overflow, bigger buttons, hide Excalidraw promo
+// V222 - Fix hover preview with portal, reposition buttons below Excalidraw menu
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3643,7 +3643,7 @@ const BeatBoard = React.memo(({
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [timelineMode, setTimelineMode] = useState('blocks'); // Always blocks now
-  const [hoveredBlock, setHoveredBlock] = useState(null);
+  const [hoveredBlock, setHoveredBlock] = useState(null); // { id, rect } or null
   const [editModalCard, setEditModalCard] = useState(null); // Card being edited in modal
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -4411,7 +4411,11 @@ const BeatBoard = React.memo(({
                   return (
                     <div
                       key={card.id}
-                      onMouseEnter={() => setHoveredBlock(card.id)}
+                      onMouseEnter={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        // Merge card (has pages from sceneMetrics) with fullCard (has synopsis from beatCards)
+                        setHoveredBlock({ id: card.id, rect, card: { ...card, synopsis: fullCard?.synopsis || card.synopsis } });
+                      }}
                       onMouseLeave={() => setHoveredBlock(null)}
                       onMouseDown={(e) => fullCard && handleDragStart(e, fullCard, true)}
                       onDoubleClick={() => setEditModalCard(fullCard || card)}
@@ -4437,29 +4441,6 @@ const BeatBoard = React.memo(({
                         </span>
                       )}
                       
-                      {/* Card preview on hover */}
-                      {hoveredBlock === card.id && fullCard && (
-                        <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, zIndex: 100, pointerEvents: 'none' }}>
-                          <div style={{
-                            width: 180,
-                            minHeight: 100,
-                            background: isWhite ? (darkMode ? '#3a3a3a' : 'white') : fullCard.color,
-                            border: isWhite ? `1px solid ${darkMode ? '#555' : '#d1d5db'}` : 'none',
-                            borderRadius: 8,
-                            padding: 10,
-                            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                            borderLeft: isWhite ? `4px solid ${darkMode ? '#6b7280' : '#9ca3af'}` : 'none',
-                          }}>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: isWhite ? (darkMode ? 'white' : '#1f2937') : 'white', marginBottom: 6, lineHeight: 1.3 }}>{fullCard.title}</div>
-                            {fullCard.synopsis && <div style={{ fontSize: 10, color: isWhite ? (darkMode ? '#9ca3af' : '#6b7280') : 'rgba(255,255,255,0.85)', marginBottom: 6, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{fullCard.synopsis}</div>}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: isWhite ? '#9ca3af' : 'rgba(255,255,255,0.7)', borderTop: `1px solid ${isWhite ? (darkMode ? '#555' : '#e5e7eb') : 'rgba(255,255,255,0.2)'}`, paddingTop: 6, marginTop: 4 }}>
-                              <span>{card.pages.toFixed(1)} pages</span>
-                              <span>•</span>
-                              <span>{Math.floor(card.pages)}:{String(Math.round((card.pages % 1) * 60)).padStart(2, '0')}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   );
                 })
@@ -4644,8 +4625,8 @@ const BeatBoard = React.memo(({
           </div>
         )}
         
-        {/* Canvas controls overlay - Top left - sized to match Excalidraw toolbar */}
-        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100 }}>
+        {/* Canvas controls overlay - moves down when whiteboard is enabled to not hide Excalidraw menu */}
+        <div style={{ position: 'absolute', top: whiteboardEnabled ? 60 : 12, left: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100, transition: 'top 0.2s' }}>
           <button onClick={addNewCard} style={{ padding: '10px 16px', background: '#3b82f6', border: 'none', borderRadius: 8, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', height: 40 }}>
             <span style={{ fontSize: 16 }}>+</span> Carte
           </button>
@@ -4683,8 +4664,8 @@ const BeatBoard = React.memo(({
           </button>
         </div>
         
-        {/* Stats and apply button - Top right */}
-        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100 }}>
+        {/* Stats and apply button - Top right - moves down when whiteboard is enabled */}
+        <div style={{ position: 'absolute', top: whiteboardEnabled ? 60 : 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 100, transition: 'top 0.2s' }}>
           <div style={{ background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.95)', padding: '6px 10px', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 500 }}>{timelineCards.length} CUT</span>
             <span style={{ fontSize: 10, color: '#9ca3af' }}>{beatCards.filter(c => c.timelineIndex === null).length} UNCUT</span>
@@ -4711,6 +4692,38 @@ const BeatBoard = React.memo(({
           </div>
         )}
       </div>
+      
+      {/* Hover preview for timeline blocks - rendered outside timeline to avoid overflow issues */}
+      {hoveredBlock && hoveredBlock.card && (
+        <div 
+          style={{ 
+            position: 'fixed', 
+            left: hoveredBlock.rect.left + hoveredBlock.rect.width / 2 - 90, // center it (180/2 = 90)
+            top: hoveredBlock.rect.bottom + 8,
+            zIndex: 1000, 
+            pointerEvents: 'none' 
+          }}
+        >
+          <div style={{
+            width: 180,
+            minHeight: 100,
+            background: hoveredBlock.card.color === '#ffffff' ? (darkMode ? '#3a3a3a' : 'white') : hoveredBlock.card.color,
+            border: hoveredBlock.card.color === '#ffffff' ? `1px solid ${darkMode ? '#555' : '#d1d5db'}` : 'none',
+            borderRadius: 8,
+            padding: 10,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+            borderLeft: hoveredBlock.card.color === '#ffffff' ? `4px solid ${darkMode ? '#6b7280' : '#9ca3af'}` : 'none',
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: hoveredBlock.card.color === '#ffffff' ? (darkMode ? 'white' : '#1f2937') : 'white', marginBottom: 6, lineHeight: 1.3 }}>{hoveredBlock.card.title}</div>
+            {hoveredBlock.card.synopsis && <div style={{ fontSize: 10, color: hoveredBlock.card.color === '#ffffff' ? (darkMode ? '#9ca3af' : '#6b7280') : 'rgba(255,255,255,0.85)', marginBottom: 6, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{hoveredBlock.card.synopsis}</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: hoveredBlock.card.color === '#ffffff' ? '#9ca3af' : 'rgba(255,255,255,0.7)', borderTop: `1px solid ${hoveredBlock.card.color === '#ffffff' ? (darkMode ? '#555' : '#e5e7eb') : 'rgba(255,255,255,0.2)'}`, paddingTop: 6, marginTop: 4 }}>
+              <span>{(hoveredBlock.card.pages || 1).toFixed(1)} pages</span>
+              <span>•</span>
+              <span>{Math.floor(hoveredBlock.card.pages || 1)}:{String(Math.round(((hoveredBlock.card.pages || 1) % 1) * 60)).padStart(2, '0')}</span>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Edit Card Modal */}
       {editModalCard && (
