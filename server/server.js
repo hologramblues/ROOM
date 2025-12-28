@@ -1,4 +1,4 @@
-// Server V8 - Added Waitlist feature
+// Server V9 - Added Beat Board data persistence (beatCards, structureBeats, sceneSynopsis, sceneStatus, whiteboardElements)
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -281,9 +281,40 @@ app.put('/api/documents/:shortId/bulk', optionalAuthMiddleware, async (req, res)
       doc.elements = req.body.elements;
       doc.markModified('elements');
     }
+    
+    // Beat Board data
+    if (req.body.beatCards !== undefined) {
+      doc.beatCards = req.body.beatCards;
+      doc.markModified('beatCards');
+    }
+    if (req.body.structureBeats !== undefined) {
+      doc.structureBeats = req.body.structureBeats;
+      doc.markModified('structureBeats');
+    }
+    if (req.body.sceneSynopsis !== undefined) {
+      doc.sceneSynopsis = req.body.sceneSynopsis;
+      doc.markModified('sceneSynopsis');
+    }
+    if (req.body.sceneStatus !== undefined) {
+      doc.sceneStatus = req.body.sceneStatus;
+      doc.markModified('sceneStatus');
+    }
+    if (req.body.whiteboardElements !== undefined) {
+      doc.whiteboardElements = req.body.whiteboardElements;
+      doc.markModified('whiteboardElements');
+    }
+    
     await doc.save();
     
-    io.to(req.params.shortId).emit('document-restored', { title: doc.title, elements: doc.elements });
+    io.to(req.params.shortId).emit('document-restored', { 
+      title: doc.title, 
+      elements: doc.elements,
+      beatCards: doc.beatCards,
+      structureBeats: doc.structureBeats,
+      sceneSynopsis: doc.sceneSynopsis,
+      sceneStatus: doc.sceneStatus,
+      whiteboardElements: doc.whiteboardElements
+    });
     
     console.log('Bulk saved document', req.params.shortId, 'with', doc.elements.length, 'elements');
     res.json({ success: true, elementsCount: doc.elements.length });
@@ -293,7 +324,7 @@ app.put('/api/documents/:shortId/bulk', optionalAuthMiddleware, async (req, res)
   }
 });
 
-// Autosave - silent save without history entry or broadcast (for auto-save every 5s)
+// Autosave - silent save without history entry or broadcast (for auto-save every 10s)
 app.put('/api/documents/:shortId/autosave', optionalAuthMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
@@ -305,6 +336,29 @@ app.put('/api/documents/:shortId/autosave', optionalAuthMiddleware, async (req, 
       doc.elements = req.body.elements;
       doc.markModified('elements');
     }
+    
+    // Beat Board data
+    if (req.body.beatCards !== undefined) {
+      doc.beatCards = req.body.beatCards;
+      doc.markModified('beatCards');
+    }
+    if (req.body.structureBeats !== undefined) {
+      doc.structureBeats = req.body.structureBeats;
+      doc.markModified('structureBeats');
+    }
+    if (req.body.sceneSynopsis !== undefined) {
+      doc.sceneSynopsis = req.body.sceneSynopsis;
+      doc.markModified('sceneSynopsis');
+    }
+    if (req.body.sceneStatus !== undefined) {
+      doc.sceneStatus = req.body.sceneStatus;
+      doc.markModified('sceneStatus');
+    }
+    if (req.body.whiteboardElements !== undefined) {
+      doc.whiteboardElements = req.body.whiteboardElements;
+      doc.markModified('whiteboardElements');
+    }
+    
     await doc.save();
     
     // No broadcast, no history entry - just silent save
@@ -328,9 +382,32 @@ app.post('/api/documents/:shortId/snapshot', authMiddleware, async (req, res) =>
       doc.elements = req.body.elements;
       doc.markModified('elements');
     }
+    
+    // Beat Board data
+    if (req.body.beatCards !== undefined) {
+      doc.beatCards = req.body.beatCards;
+      doc.markModified('beatCards');
+    }
+    if (req.body.structureBeats !== undefined) {
+      doc.structureBeats = req.body.structureBeats;
+      doc.markModified('structureBeats');
+    }
+    if (req.body.sceneSynopsis !== undefined) {
+      doc.sceneSynopsis = req.body.sceneSynopsis;
+      doc.markModified('sceneSynopsis');
+    }
+    if (req.body.sceneStatus !== undefined) {
+      doc.sceneStatus = req.body.sceneStatus;
+      doc.markModified('sceneStatus');
+    }
+    if (req.body.whiteboardElements !== undefined) {
+      doc.whiteboardElements = req.body.whiteboardElements;
+      doc.markModified('whiteboardElements');
+    }
+    
     await doc.save();
     
-    // Create history entry
+    // Create history entry with Beat Board data
     const isAuto = req.body.auto === true;
     await HistoryEntry.create({ 
       documentId: doc._id, 
@@ -339,7 +416,15 @@ app.post('/api/documents/:shortId/snapshot', authMiddleware, async (req, res) =>
       userColor: req.user.color, 
       action: 'snapshot', 
       snapshotName: isAuto ? `Auto-save ${new Date().toLocaleString('fr-FR')}` : (req.body.snapshotName || null),
-      data: { title: doc.title, elements: doc.elements } 
+      data: { 
+        title: doc.title, 
+        elements: doc.elements,
+        beatCards: doc.beatCards,
+        structureBeats: doc.structureBeats,
+        sceneSynopsis: doc.sceneSynopsis,
+        sceneStatus: doc.sceneStatus,
+        whiteboardElements: doc.whiteboardElements
+      } 
     });
     
     console.log(isAuto ? '[AUTO-SNAPSHOT]' : '[SNAPSHOT]', 'Created for', req.params.shortId);
@@ -370,6 +455,12 @@ app.get('/api/documents/:shortId', optionalAuthMiddleware, async (req, res) => {
       locations: doc.locations, 
       comments: doc.comments, 
       suggestions: doc.suggestions || [],
+      // Beat Board data
+      beatCards: doc.beatCards || [],
+      structureBeats: doc.structureBeats || [],
+      sceneSynopsis: doc.sceneSynopsis || {},
+      sceneStatus: doc.sceneStatus || {},
+      whiteboardElements: doc.whiteboardElements || [],
       isOwner: req.user && doc.ownerId.equals(req.user._id), 
       publicAccess: doc.publicAccess 
     });
@@ -391,9 +482,48 @@ app.post('/api/documents/:shortId/restore/:historyId', authMiddleware, async (re
     if (!doc || !checkDocumentAccess(doc, req.user, 'editor')) return res.status(403).json({ error: 'Acces refuse' });
     const entry = await HistoryEntry.findById(req.params.historyId);
     if (!entry || entry.action !== 'snapshot') return res.status(404).json({ error: 'Snapshot non trouve' });
-    await HistoryEntry.create({ documentId: doc._id, userId: req.user._id, userName: req.user.name, userColor: req.user.color, action: 'snapshot', data: { title: doc.title, elements: doc.elements } });
-    doc.title = entry.data.title; doc.elements = entry.data.elements; await doc.save();
-    io.to(req.params.shortId).emit('document-restored', { title: doc.title, elements: doc.elements });
+    
+    // Save current state before restoring
+    await HistoryEntry.create({ 
+      documentId: doc._id, 
+      userId: req.user._id, 
+      userName: req.user.name, 
+      userColor: req.user.color, 
+      action: 'snapshot', 
+      snapshotName: `Before restore - ${new Date().toLocaleString('fr-FR')}`,
+      data: { 
+        title: doc.title, 
+        elements: doc.elements,
+        beatCards: doc.beatCards,
+        structureBeats: doc.structureBeats,
+        sceneSynopsis: doc.sceneSynopsis,
+        sceneStatus: doc.sceneStatus,
+        whiteboardElements: doc.whiteboardElements
+      } 
+    });
+    
+    // Restore document
+    doc.title = entry.data.title;
+    doc.elements = entry.data.elements;
+    
+    // Restore Beat Board data if present in snapshot
+    if (entry.data.beatCards) doc.beatCards = entry.data.beatCards;
+    if (entry.data.structureBeats) doc.structureBeats = entry.data.structureBeats;
+    if (entry.data.sceneSynopsis) doc.sceneSynopsis = entry.data.sceneSynopsis;
+    if (entry.data.sceneStatus) doc.sceneStatus = entry.data.sceneStatus;
+    if (entry.data.whiteboardElements) doc.whiteboardElements = entry.data.whiteboardElements;
+    
+    await doc.save();
+    
+    io.to(req.params.shortId).emit('document-restored', { 
+      title: doc.title, 
+      elements: doc.elements,
+      beatCards: doc.beatCards,
+      structureBeats: doc.structureBeats,
+      sceneSynopsis: doc.sceneSynopsis,
+      sceneStatus: doc.sceneStatus,
+      whiteboardElements: doc.whiteboardElements
+    });
     res.json({ success: true });
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
