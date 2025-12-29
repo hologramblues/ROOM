@@ -3266,6 +3266,8 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         blockquote: false,
         codeBlock: false,
         horizontalRule: false,
+        // Disable TipTap's built-in history - we use our own global undo system
+        history: false,
         // Keep hardBreak for line breaks within elements
         hardBreak: true,
         // Keep paragraph but style it
@@ -3291,6 +3293,12 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       handleKeyDown: (view, event) => {
         if (!view) return false;
         try {
+        // Let Cmd+Z / Ctrl+Z bubble up to global handler (don't block it)
+        if ((event.metaKey || event.ctrlKey) && event.key === 'z') {
+          // Don't handle here - let it bubble to global handler
+          return false;
+        }
+        
         // Autocomplete navigation
         if (showAuto && filtered.length > 0) {
           if (event.key === 'ArrowDown') {
@@ -7443,8 +7451,9 @@ export default function ScreenplayEditor() {
         if (showOutline) setShowOutline(false);
       }
     };
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    // Use capture phase to ensure we get the event before TipTap/ProseMirror
+    window.addEventListener('keydown', handleGlobalKeyDown, true);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
   }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, token, docId, title, elements, activeIndex, undo, redo, duplicateScene, activeView]);
 
   // Typewriter sound effect - placeholder for custom audio files
