@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V232 - Timeline Live/Staging modes, Outline→Timeline sync, Comments follow scenes on reorder
+// V233 - Fix browser zoom hijack, Excalidraw-style pan/zoom speed
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3991,29 +3991,43 @@ const BeatBoard = React.memo(({
   
   const handlePanEnd = useCallback(() => setIsPanning(false), []);
   
-  // Zoom with pinch (two fingers) or Ctrl+wheel - throttled for performance
-  const lastWheelTime = useRef(0);
-  const handleWheel = useCallback((e) => { 
-    e.preventDefault();
+  // Wheel/pinch handler - must use addEventListener with passive:false to prevent browser zoom
+  useEffect(() => {
+    if (!isActive || whiteboardEnabled) return;
     
-    // Throttle to max 60fps
-    const now = Date.now();
-    if (now - lastWheelTime.current < 16) return;
-    lastWheelTime.current = now;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     
-    // Pinch zoom (trackpad) or Ctrl+wheel
-    if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) < 50) {
-      // Pinch gesture typically has small deltaY values
-      const zoomFactor = e.deltaY > 0 ? 0.95 : 1.05;
-      setCanvasZoom(z => Math.min(3, Math.max(0.2, z * zoomFactor)));
-    } else {
-      // Regular scroll (two finger swipe) = pan
-      setPan(p => ({ 
-        x: p.x - e.deltaX / canvasZoom, 
-        y: p.y - e.deltaY / canvasZoom 
-      }));
-    }
-  }, [canvasZoom]);
+    let lastWheelTime = 0;
+    
+    const handleWheel = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Throttle to max 60fps
+      const now = Date.now();
+      if (now - lastWheelTime < 16) return;
+      lastWheelTime = now;
+      
+      // Pinch zoom detection: ctrlKey is set by trackpad pinch, or small deltaY without deltaX
+      const isPinch = e.ctrlKey || (Math.abs(e.deltaY) < 50 && Math.abs(e.deltaX) < 10);
+      
+      if (isPinch) {
+        // Zoom - Excalidraw style with smooth factor
+        const zoomFactor = 1 - e.deltaY * 0.01;
+        setCanvasZoom(z => Math.min(3, Math.max(0.2, z * zoomFactor)));
+      } else {
+        // Pan - direct 1:1 movement like Excalidraw (no zoom division)
+        setPan(p => ({ 
+          x: p.x - e.deltaX, 
+          y: p.y - e.deltaY 
+        }));
+      }
+    };
+    
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, [isActive, whiteboardEnabled]);
   
   // Space key listener for pan mode - only when BeatBoard is active
   useEffect(() => {
@@ -4873,7 +4887,7 @@ const BeatBoard = React.memo(({
       </div>
       
       {/* Canvas zone */}
-      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onWheel={!whiteboardEnabled ? handleWheel : undefined} onClick={!whiteboardEnabled ? () => setSelectedCards(new Set()) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : (isSpacePressed ? 'grab' : 'default'), backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x * canvasZoom}px ${pan.y * canvasZoom}px` }}>
+      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onClick={!whiteboardEnabled ? () => setSelectedCards(new Set()) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : (isSpacePressed ? 'grab' : 'default'), touchAction: 'none', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x * canvasZoom}px ${pan.y * canvasZoom}px` }}>
         {/* Beat cards layer - ABOVE Excalidraw so cards remain interactive */}
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: whiteboardEnabled ? 60 : 1, overflow: 'hidden' }}>
           {canvasCards.map(card => (
