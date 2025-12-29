@@ -3824,6 +3824,9 @@ const BeatBoard = React.memo(({
     });
   };
   
+  // Throttle ref for drag move
+  const dragMoveRAF = useRef(null);
+  
   const handleDragMove = useCallback((e) => {
     // Check if we should start dragging (mouse moved enough from start)
     if (pendingDrag && !draggedCard) {
@@ -3844,42 +3847,58 @@ const BeatBoard = React.memo(({
     }
     
     if (!draggedCard || !canvasRef.current) return;
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    const timelineRect = timelineRef.current?.getBoundingClientRect();
     
-    // Only highlight timeline when cursor is actually over the timeline zone
-    const isOverTimelineZone = timelineRect && 
-      e.clientY >= timelineRect.top && 
-      e.clientY <= timelineRect.bottom;
-    setIsOverTimeline(isOverTimelineZone);
+    // Throttle position updates with RAF for smooth 60fps
+    if (dragMoveRAF.current) return;
     
-    // Only update position if dragging from canvas (not from timeline)
-    if (!dragFromTimelineRef.current) {
-      // New coordinate system: screenPos = (cardPos + scroll) * zoom
-      // Inverse: cardPos = (screenPos / zoom) - scroll
-      const screenX = e.clientX - canvasRect.left - dragOffset.x;
-      const screenY = e.clientY - canvasRect.top - dragOffset.y;
-      const newX = (screenX / canvasZoom) - pan.x;
-      const newY = (screenY / canvasZoom) - pan.y;
+    dragMoveRAF.current = requestAnimationFrame(() => {
+      dragMoveRAF.current = null;
       
-      // Calculate delta from original position
-      const originalPos = dragOriginalPosRef.current;
-      const deltaX = newX - originalPos.x;
-      const deltaY = newY - originalPos.y;
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      if (!canvasRect) return;
       
-      // Move all selected cards together
-      const selectedPositions = dragSelectedPositionsRef.current;
-      setBeatCards(prev => prev.map(c => {
-        if (selectedPositions && selectedPositions.has(c.id)) {
-          const origPos = selectedPositions.get(c.id);
-          return { ...c, position: { x: origPos.x + deltaX, y: origPos.y + deltaY } };
-        }
-        return c;
-      }));
-    }
+      const timelineRect = timelineRef.current?.getBoundingClientRect();
+    
+      // Only highlight timeline when cursor is actually over the timeline zone
+      const isOverTimelineZone = timelineRect && 
+        e.clientY >= timelineRect.top && 
+        e.clientY <= timelineRect.bottom;
+      setIsOverTimeline(isOverTimelineZone);
+      
+      // Only update position if dragging from canvas (not from timeline)
+      if (!dragFromTimelineRef.current) {
+        // New coordinate system: screenPos = (cardPos + scroll) * zoom
+        // Inverse: cardPos = (screenPos / zoom) - scroll
+        const screenX = e.clientX - canvasRect.left - dragOffset.x;
+        const screenY = e.clientY - canvasRect.top - dragOffset.y;
+        const newX = (screenX / canvasZoom) - pan.x;
+        const newY = (screenY / canvasZoom) - pan.y;
+        
+        // Calculate delta from original position
+        const originalPos = dragOriginalPosRef.current;
+        const deltaX = newX - originalPos.x;
+        const deltaY = newY - originalPos.y;
+        
+        // Move all selected cards together
+        const selectedPositions = dragSelectedPositionsRef.current;
+        setBeatCards(prev => prev.map(c => {
+          if (selectedPositions && selectedPositions.has(c.id)) {
+            const origPos = selectedPositions.get(c.id);
+            return { ...c, position: { x: origPos.x + deltaX, y: origPos.y + deltaY } };
+          }
+          return c;
+        }));
+      }
+    });
   }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag]);
   
   const handleDragEnd = useCallback((e) => {
+    // Cancel any pending RAF
+    if (dragMoveRAF.current) {
+      cancelAnimationFrame(dragMoveRAF.current);
+      dragMoveRAF.current = null;
+    }
+    
     // Handle click/double-click when no actual drag happened
     if (pendingDrag) {
       const card = pendingDrag.card;
@@ -3956,19 +3975,31 @@ const BeatBoard = React.memo(({
   
   // Navigation handlers - Excalidraw style
   // Pan with Space + drag
-  const handlePanStart = (e) => { 
+  const handlePanStart = useCallback((e) => { 
     if (isSpacePressed && (e.target === canvasRef.current || e.target.classList.contains('beat-canvas-bg'))) { 
       e.preventDefault();
       setIsPanning(true); 
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); 
     } 
-  };
-  const handlePanMove = (e) => { if (isPanning) setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y }); };
-  const handlePanEnd = () => setIsPanning(false);
+  }, [isSpacePressed, pan]);
   
-  // Zoom with pinch (two fingers) or Ctrl+wheel
-  const handleWheel = (e) => { 
+  const handlePanMove = useCallback((e) => { 
+    if (isPanning) {
+      setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y }); 
+    }
+  }, [isPanning, panStart]);
+  
+  const handlePanEnd = useCallback(() => setIsPanning(false), []);
+  
+  // Zoom with pinch (two fingers) or Ctrl+wheel - throttled for performance
+  const lastWheelTime = useRef(0);
+  const handleWheel = useCallback((e) => { 
     e.preventDefault();
+    
+    // Throttle to max 60fps
+    const now = Date.now();
+    if (now - lastWheelTime.current < 16) return;
+    lastWheelTime.current = now;
     
     // Pinch zoom (trackpad) or Ctrl+wheel
     if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) < 50) {
@@ -3982,7 +4013,7 @@ const BeatBoard = React.memo(({
         y: p.y - e.deltaY / canvasZoom 
       }));
     }
-  };
+  }, [canvasZoom]);
   
   // Space key listener for pan mode - only when BeatBoard is active
   useEffect(() => {
