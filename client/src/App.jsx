@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V233 - Fix browser zoom hijack, Excalidraw-style pan/zoom speed
+// V234 - Editor performance: memoized callbacks, stable refs, RAF throttling
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -3190,6 +3190,10 @@ const renderContentWithHighlights = (content, highlights) => {
 };
 
 // ============ SCENE LINE (TIPTAP VERSION) ============
+// Empty array constant to avoid creating new arrays on each render
+const emptyHighlights = [];
+const emptyArray = [];
+
 const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset, t = (k) => k }) => {
   const containerRef = useRef(null);
   const [showAuto, setShowAuto] = useState(false);
@@ -3197,7 +3201,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const [filtered, setFiltered] = useState([]);
   const [autoType, setAutoType] = useState(null);
   const [editorReady, setEditorReady] = useState(false);
-  const usersOnLine = remoteCursors.filter(u => u.cursor?.index === index);
+  const usersOnLine = useMemo(() => remoteCursors.filter(u => u.cursor?.index === index), [remoteCursors, index]);
   const lastContentRef = useRef(element.content);
   const lastHighlightsRef = useRef(null);
   
@@ -7922,6 +7926,42 @@ export default function ScreenplayEditor() {
     }
   }, []);
 
+  // Memoized callbacks for SceneLine to prevent re-renders
+  const handleNoteClick = useCallback((id) => setShowNoteFor(id), []);
+  
+  const handleTextSelectCb = useCallback((selection) => {
+    if (canComment) {
+      setTextSelection(selection);
+      if (selection && selection.rect) {
+        setContextMenuTop(selection.rect.top);
+      }
+    }
+  }, [canComment]);
+  
+  const handleHighlightClick = useCallback((commentId) => {
+    setShowComments(true);
+    setSelectedCommentId(commentId);
+    setSelectedSuggestionId(null);
+    setTimeout(() => {
+      const commentCard = document.querySelector(`[data-comment-card-id="${commentId}"]`);
+      if (commentCard) {
+        commentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 150);
+  }, []);
+  
+  const handleSuggestionClickCb = useCallback((suggestionId) => {
+    setShowComments(true);
+    setSelectedSuggestionId(suggestionId);
+    setSelectedCommentId(null);
+    setTimeout(() => {
+      const suggestionCard = document.querySelector(`[data-suggestion-card-id="${suggestionId}"]`);
+      if (suggestionCard) {
+        suggestionCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 150);
+  }, []);
+
   const handleKeyDown = useCallback((e, index) => {
     if (!canEdit) return;
     const el = elements[index];
@@ -9709,42 +9749,12 @@ export default function ScreenplayEditor() {
                       sceneNumber={sceneNumbersMap[element.id]}
                       showSceneNumbers={showSceneNumbers}
                       note={notes[element.id]}
-                      onNoteClick={(id) => setShowNoteFor(id)}
-                      highlights={getElementHighlights(element.id)}
+                      onNoteClick={handleNoteClick}
+                      highlights={highlightsByElement[element.id] || emptyHighlights}
                       initialCursorOffset={activeIndex === index ? cursorOffset : null}
-                      onTextSelect={(selection) => {
-                        if (canComment) {
-                          setTextSelection(selection);
-                          // Update menu position to selection position
-                          if (selection && selection.rect) {
-                            setContextMenuTop(selection.rect.top);
-                          }
-                        }
-                      }}
-                      onHighlightClick={(commentId) => {
-                        setShowComments(true);
-                        setSelectedCommentId(commentId);
-                        setSelectedSuggestionId(null);
-                        // Scroll to the comment card in the sidebar
-                        setTimeout(() => {
-                          const commentCard = document.querySelector(`[data-comment-card-id="${commentId}"]`);
-                          if (commentCard) {
-                            commentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          }
-                        }, 150);
-                      }}
-                      onSuggestionClick={(suggestionId) => {
-                        setShowComments(true);
-                        setSelectedSuggestionId(suggestionId);
-                        setSelectedCommentId(null);
-                        // Scroll to the suggestion card in the sidebar
-                        setTimeout(() => {
-                          const suggestionCard = document.querySelector(`[data-suggestion-card-id="${suggestionId}"]`);
-                          if (suggestionCard) {
-                            suggestionCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          }
-                        }, 150);
-                      }}
+                      onTextSelect={handleTextSelectCb}
+                      onHighlightClick={handleHighlightClick}
+                      onSuggestionClick={handleSuggestionClickCb}
                       t={t}
                     />
                   </div>
