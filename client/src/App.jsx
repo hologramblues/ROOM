@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V234 - Editor performance: memoized callbacks, stable refs, RAF throttling
+// V235 - Editor performance: debounced updates, page virtualization
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -621,6 +621,7 @@ const ELEMENT_TYPES = [
 const TYPE_TO_FDX = { scene: 'Scene Heading', action: 'Action', character: 'Character', dialogue: 'Dialogue', parenthetical: 'Parenthetical', transition: 'Transition' };
 const FDX_TO_TYPE = { 'Scene Heading': 'scene', 'Action': 'action', 'Character': 'character', 'Dialogue': 'dialogue', 'Parenthetical': 'parenthetical', 'Transition': 'transition', 'General': 'action' };
 const LINES_PER_PAGE = 55;
+const VIRTUAL_BUFFER = 3; // Virtualization: render ±3 pages around active page
 
 // ============ AUTH MODAL ============
 const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
@@ -3196,6 +3197,7 @@ const emptyArray = [];
 
 const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset, t = (k) => k }) => {
   const containerRef = useRef(null);
+  const updateTimeoutRef = useRef(null); // For debouncing updates
   const [showAuto, setShowAuto] = useState(false);
   const [autoIdx, setAutoIdx] = useState(0);
   const [filtered, setFiltered] = useState([]);
@@ -3204,6 +3206,15 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const usersOnLine = useMemo(() => remoteCursors.filter(u => u.cursor?.index === index), [remoteCursors, index]);
   const lastContentRef = useRef(element.content);
   const lastHighlightsRef = useRef(null);
+  
+  // Cleanup debounce timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
+  }, []);
   
   // Build HTML content with comment and suggestion marks applied
   const buildContentWithMarks = useCallback((content, highlightsList) => {
@@ -3409,14 +3420,20 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       },
     },
     
-    // Sync content changes back to parent
+    // Sync content changes back to parent - DEBOUNCED for performance
     onUpdate: ({ editor }) => {
       if (!editor || !editor.view) return;
       try {
         const text = editor.getText();
         if (text !== lastContentRef.current) {
           lastContentRef.current = text;
-          onUpdate(index, { ...element, content: text });
+          // Debounce the parent update to avoid re-rendering the entire app on each keystroke
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current);
+          }
+          updateTimeoutRef.current = setTimeout(() => {
+            onUpdate(index, { ...element, content: text });
+          }, 150); // 150ms debounce
         }
       } catch (e) {
         // Editor not ready
@@ -3453,6 +3470,24 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       try {
         if (!isActive) {
           onFocus(index, null);
+        }
+      } catch (e) {
+        // Editor not ready
+      }
+    },
+    
+    // Flush debounced update when losing focus
+    onBlur: ({ editor }) => {
+      if (!editor || !editor.view) return;
+      try {
+        // Immediately sync any pending changes
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+          updateTimeoutRef.current = null;
+          const text = editor.getText();
+          if (text !== element.content) {
+            onUpdate(index, { ...element, content: text });
+          }
         }
       } catch (e) {
         // Editor not ready
@@ -3625,6 +3660,23 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         </div>
       )}
     </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison for React.memo - only re-render when these important props change
+  return (
+    prevProps.element.id === nextProps.element.id &&
+    prevProps.element.content === nextProps.element.content &&
+    prevProps.element.type === nextProps.element.type &&
+    prevProps.index === nextProps.index &&
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.canEdit === nextProps.canEdit &&
+    prevProps.isLocked === nextProps.isLocked &&
+    prevProps.sceneNumber === nextProps.sceneNumber &&
+    prevProps.showSceneNumbers === nextProps.showSceneNumbers &&
+    prevProps.highlights === nextProps.highlights &&
+    prevProps.note === nextProps.note &&
+    prevProps.initialCursorOffset === nextProps.initialCursorOffset &&
+    prevProps.remoteCursors === nextProps.remoteCursors
   );
 });
 
@@ -6816,6 +6868,23 @@ export default function ScreenplayEditor() {
     return result;
   }, [elements]);
 
+  // Calculate which page the active element is on
+  const activePageNumber = useMemo(() => {
+    for (const page of pages) {
+      if (page.elements.some(e => e.index === activeIndex)) {
+        return page.number;
+      }
+    }
+    return 1;
+  }, [pages, activeIndex]);
+
+  // Virtualization: only render pages within buffer of active page
+  const visiblePages = useMemo(() => {
+    return pages.filter(page => 
+      Math.abs(page.number - activePageNumber) <= VIRTUAL_BUFFER
+    );
+  }, [pages, activePageNumber]);
+
   const totalPages = pages.length;
   const extractedCharacters = useMemo(() => { const c = new Set(characters); elements.forEach(el => { if (el.type === 'character' && el.content.trim()) c.add(el.content.trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); }, [elements, characters]);
   const remoteCursors = useMemo(() => users.filter(u => u.id !== myId), [users, myId]);
@@ -9704,7 +9773,12 @@ export default function ScreenplayEditor() {
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {pages.map((page) => (
+            {/* Placeholder for pages before visible range */}
+            {activePageNumber > VIRTUAL_BUFFER + 1 && (
+              <div style={{ height: `${(activePageNumber - VIRTUAL_BUFFER - 1) * 320}mm` }} />
+            )}
+            
+            {visiblePages.map((page) => (
               <div key={page.number} style={{ position: 'relative' }}>
                 {/* Page content */}
                 <div className="script-page" style={{ 
@@ -9762,6 +9836,11 @@ export default function ScreenplayEditor() {
               </div>
             </div>
           ))}
+          
+          {/* Placeholder for pages after visible range */}
+          {activePageNumber + VIRTUAL_BUFFER < totalPages && (
+            <div style={{ height: `${(totalPages - activePageNumber - VIRTUAL_BUFFER) * 320}mm` }} />
+          )}
         </div>
       </div>
       
