@@ -3657,6 +3657,7 @@ const BeatBoard = React.memo(({
   whiteboardElements,
   setWhiteboardElements,
   onPushToUndo,
+  isActive = false,
   t = (k) => k 
 }) => {
   const [selectedCards, setSelectedCards] = useState(new Set()); // Multi-select support
@@ -3670,6 +3671,7 @@ const BeatBoard = React.memo(({
   const [editModalCard, setEditModalCard] = useState(null); // Card being edited in modal
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const [isSpacePressed, setIsSpacePressed] = useState(false); // For space+drag panning like Excalidraw
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const [whiteboardEnabled, setWhiteboardEnabled] = useState(false); // Whiteboard overlay toggle
@@ -3952,10 +3954,66 @@ const BeatBoard = React.memo(({
     }
   }, [draggedCard, pendingDrag, handleDragMove, handleDragEnd]);
   
-  const handlePanStart = (e) => { if (e.target === canvasRef.current || e.target.classList.contains('beat-canvas-bg')) { setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); } };
+  // Navigation handlers - Excalidraw style
+  // Pan with Space + drag
+  const handlePanStart = (e) => { 
+    if (isSpacePressed && (e.target === canvasRef.current || e.target.classList.contains('beat-canvas-bg'))) { 
+      e.preventDefault();
+      setIsPanning(true); 
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); 
+    } 
+  };
   const handlePanMove = (e) => { if (isPanning) setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y }); };
   const handlePanEnd = () => setIsPanning(false);
-  const handleWheel = (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCanvasZoom(z => Math.min(2, Math.max(0.3, z * (e.deltaY > 0 ? 0.9 : 1.1)))); } };
+  
+  // Zoom with pinch (two fingers) or Ctrl+wheel
+  const handleWheel = (e) => { 
+    e.preventDefault();
+    
+    // Pinch zoom (trackpad) or Ctrl+wheel
+    if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) < 50) {
+      // Pinch gesture typically has small deltaY values
+      const zoomFactor = e.deltaY > 0 ? 0.95 : 1.05;
+      setCanvasZoom(z => Math.min(3, Math.max(0.2, z * zoomFactor)));
+    } else {
+      // Regular scroll (two finger swipe) = pan
+      setPan(p => ({ 
+        x: p.x - e.deltaX / canvasZoom, 
+        y: p.y - e.deltaY / canvasZoom 
+      }));
+    }
+  };
+  
+  // Space key listener for pan mode - only when BeatBoard is active
+  useEffect(() => {
+    if (!isActive) {
+      // Reset state when leaving BeatBoard
+      setIsSpacePressed(false);
+      setIsPanning(false);
+      return;
+    }
+    
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' && !e.repeat && 
+          !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) &&
+          !document.activeElement?.isContentEditable) {
+        e.preventDefault();
+        setIsSpacePressed(true);
+      }
+    };
+    const handleKeyUp = (e) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+        setIsPanning(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isActive]);
   
   const addNewCard = () => {
     // Position in visible area: screenPos = (cardPos + scroll) * zoom
@@ -4784,7 +4842,7 @@ const BeatBoard = React.memo(({
       </div>
       
       {/* Canvas zone */}
-      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onWheel={!whiteboardEnabled ? handleWheel : undefined} onClick={!whiteboardEnabled ? () => setSelectedCards(new Set()) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : 'default', backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x * canvasZoom}px ${pan.y * canvasZoom}px` }}>
+      <div ref={canvasRef} className="beat-canvas-bg" onMouseDown={!whiteboardEnabled ? handlePanStart : undefined} onMouseMove={!whiteboardEnabled ? handlePanMove : undefined} onMouseUp={!whiteboardEnabled ? handlePanEnd : undefined} onMouseLeave={!whiteboardEnabled ? handlePanEnd : undefined} onWheel={!whiteboardEnabled ? handleWheel : undefined} onClick={!whiteboardEnabled ? () => setSelectedCards(new Set()) : undefined} style={{ flex: 1, position: 'relative', overflow: 'hidden', cursor: isPanning ? 'grabbing' : (isSpacePressed ? 'grab' : 'default'), backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)', backgroundSize: `${20 * canvasZoom}px ${20 * canvasZoom}px`, backgroundPosition: `${pan.x * canvasZoom}px ${pan.y * canvasZoom}px` }}>
         {/* Beat cards layer - ABOVE Excalidraw so cards remain interactive */}
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: whiteboardEnabled ? 60 : 1, overflow: 'hidden' }}>
           {canvasCards.map(card => (
@@ -9800,6 +9858,7 @@ export default function ScreenplayEditor() {
           whiteboardElements={whiteboardElements}
           setWhiteboardElements={setWhiteboardElements}
           onPushToUndo={pushToUndo}
+          isActive={activeView === 'beatboard'}
           t={t}
         />
       </div>
