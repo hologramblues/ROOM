@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V231 - Keyboard shortcuts (B/Escape), Beat Board export, Outline/Timeline drag & drop with undo support
+// V232 - Timeline Live/Staging modes, Outline→Timeline sync, Comments follow scenes on reorder
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -1714,12 +1714,13 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
     return map;
   }, [comments, elements]);
 
-  // Get element indices for suggestions
+  // Get element indices for suggestions - use elementId like comments for consistency when scenes are reordered
   const suggestionsByElementIndex = useMemo(() => {
     const map = {};
     if (suggestions) {
       suggestions.filter(s => s.status === 'pending').forEach(s => {
-        const idx = s.elementIndex;
+        // Use elementId to find current index (like comments), not stored elementIndex
+        const idx = elements.findIndex(el => el.id === s.elementId);
         if (idx >= 0) {
           if (!map[idx]) map[idx] = [];
           map[idx].push(s);
@@ -1727,7 +1728,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
       });
     }
     return map;
-  }, [suggestions]);
+  }, [suggestions, elements]);
 
   // Get sorted element indices that have comments OR suggestions
   const sortedIndices = useMemo(() => {
@@ -3677,6 +3678,8 @@ const BeatBoard = React.memo(({
   const [selectedExcalidrawId, setSelectedExcalidrawId] = useState(null); // Selected excalidraw element for conversion
   const [timelineDragId, setTimelineDragId] = useState(null); // Card ID being dragged in timeline
   const [timelineDropIndex, setTimelineDropIndex] = useState(null); // Drop position index in timeline (between blocks)
+  const [timelineSyncMode, setTimelineSyncMode] = useState('live'); // 'live' = sync with script, 'staging' = isolated changes
+  const [hasTimelineChanges, setHasTimelineChanges] = useState(false); // Track if staging has uncommitted changes
   const lastClickRef = useRef({ cardId: null, time: 0 }); // For manual double-click detection
   const dragOriginalPosRef = useRef(null); // Store original position during drag
   const dragFromTimelineRef = useRef(false); // Track if drag started from timeline
@@ -3792,6 +3795,13 @@ const BeatBoard = React.memo(({
       return; // Don't start drag on shift-click
     }
     
+    // Determine which cards will be dragged
+    // If clicking on unselected card, only drag this one
+    // If clicking on selected card, drag all selected cards
+    const willDragCards = selectedCards.has(card.id) 
+      ? beatCards.filter(c => selectedCards.has(c.id))
+      : [card];
+    
     // If clicking on unselected card, select only this one
     if (!selectedCards.has(card.id)) {
       setSelectedCards(new Set([card.id]));
@@ -3807,8 +3817,8 @@ const BeatBoard = React.memo(({
       time: Date.now(),
       originalPosition: { ...card.position }, // Store original position to restore after timeline drop
       fromTimeline, // Track if dragging from timeline
-      // Store all selected cards' original positions for multi-drag
-      selectedPositions: new Map(beatCards.filter(c => selectedCards.has(c.id) || c.id === card.id).map(c => [c.id, { ...c.position }]))
+      // Store only the cards that will actually be dragged
+      selectedPositions: new Map(willDragCards.map(c => [c.id, { ...c.position }]))
     });
   };
   
@@ -4269,6 +4279,112 @@ const BeatBoard = React.memo(({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}` }}>
           <span style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>TIMELINE</span>
           
+          {/* Mode toggle: Live / Staging */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: darkMode ? '#333' : '#e5e7eb', borderRadius: 4, padding: 2 }}>
+            <button
+              onClick={() => { setTimelineSyncMode('live'); setHasTimelineChanges(false); }}
+              style={{
+                padding: '2px 8px',
+                fontSize: 9,
+                fontWeight: 500,
+                background: timelineSyncMode === 'live' ? '#3b82f6' : 'transparent',
+                color: timelineSyncMode === 'live' ? 'white' : '#6b7280',
+                border: 'none',
+                borderRadius: 3,
+                cursor: 'pointer'
+              }}
+              title="Synchronisation automatique avec le script"
+            >
+              Live
+            </button>
+            <button
+              onClick={() => setTimelineSyncMode('staging')}
+              style={{
+                padding: '2px 8px',
+                fontSize: 9,
+                fontWeight: 500,
+                background: timelineSyncMode === 'staging' ? '#f59e0b' : 'transparent',
+                color: timelineSyncMode === 'staging' ? 'white' : '#6b7280',
+                border: 'none',
+                borderRadius: 3,
+                cursor: 'pointer'
+              }}
+              title="Mode brouillon - les changements ne sont pas appliqués au script"
+            >
+              Brouillon
+            </button>
+          </div>
+          
+          {/* Commit button - only in staging mode with changes */}
+          {timelineSyncMode === 'staging' && hasTimelineChanges && (
+            <button
+              onClick={() => {
+                onPushToUndo?.();
+                
+                // Get the current timeline order of scene IDs
+                const timelineOrder = beatCards
+                  .filter(c => c.timelineIndex !== null)
+                  .sort((a, b) => a.timelineIndex - b.timelineIndex)
+                  .map(c => c.linkedSceneId)
+                  .filter(Boolean);
+                
+                // Reorder elements to match timeline
+                const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
+                
+                // Build new elements array
+                let newElements = [];
+                let usedSceneIds = new Set();
+                
+                timelineOrder.forEach(sceneId => {
+                  const sceneIdx = elements.findIndex(el => el.id === sceneId);
+                  if (sceneIdx === -1) return;
+                  
+                  const scenePos = sceneIndices.indexOf(sceneIdx);
+                  const nextSceneIdx = scenePos < sceneIndices.length - 1 ? sceneIndices[scenePos + 1] : elements.length;
+                  
+                  newElements.push(...elements.slice(sceneIdx, nextSceneIdx));
+                  usedSceneIds.add(sceneId);
+                });
+                
+                // Add any scenes not in timeline at the end
+                elements.filter(el => el.type === 'scene').forEach(scene => {
+                  if (!usedSceneIds.has(scene.id)) {
+                    const sceneIdx = elements.findIndex(el => el.id === scene.id);
+                    const scenePos = sceneIndices.indexOf(sceneIdx);
+                    const nextSceneIdx = scenePos < sceneIndices.length - 1 ? sceneIndices[scenePos + 1] : elements.length;
+                    newElements.push(...elements.slice(sceneIdx, nextSceneIdx));
+                  }
+                });
+                
+                setElements(newElements);
+                setHasTimelineChanges(false);
+              }}
+              style={{
+                padding: '3px 10px',
+                fontSize: 10,
+                fontWeight: 600,
+                background: '#22c55e',
+                color: 'white',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                animation: 'pulse 2s infinite'
+              }}
+              title="Appliquer l'ordre de la timeline au script"
+            >
+              ✓ Appliquer au script
+            </button>
+          )}
+          
+          {timelineSyncMode === 'staging' && !hasTimelineChanges && (
+            <span style={{ fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>
+              Réorganisez les blocs puis appliquez
+            </span>
+          )}
+          
           <div style={{ flex: 1 }} />
           
           {/* Zoom slider - calculated based on card count */}
@@ -4503,6 +4619,50 @@ const BeatBoard = React.memo(({
                       }
                       return c;
                     }));
+                    
+                    // In live mode, also reorder the script
+                    if (timelineSyncMode === 'live') {
+                      // Get the new order of scene IDs from timeline
+                      const newSceneOrder = orderedIds
+                        .map(id => beatCards.find(c => c.id === id)?.linkedSceneId)
+                        .filter(Boolean);
+                      
+                      // Reorder elements to match timeline
+                      const sceneElements = elements.filter(el => el.type === 'scene');
+                      const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
+                      
+                      // Build new elements array
+                      let newElements = [];
+                      let usedSceneIds = new Set();
+                      
+                      newSceneOrder.forEach(sceneId => {
+                        const sceneEl = elements.find(el => el.id === sceneId);
+                        if (!sceneEl) return;
+                        
+                        const sceneIdx = elements.findIndex(el => el.id === sceneId);
+                        const scenePos = sceneIndices.indexOf(sceneIdx);
+                        const nextSceneIdx = scenePos < sceneIndices.length - 1 ? sceneIndices[scenePos + 1] : elements.length;
+                        
+                        // Add this scene and all its elements
+                        newElements.push(...elements.slice(sceneIdx, nextSceneIdx));
+                        usedSceneIds.add(sceneId);
+                      });
+                      
+                      // Add any scenes not in timeline at the end
+                      sceneElements.forEach(scene => {
+                        if (!usedSceneIds.has(scene.id)) {
+                          const sceneIdx = elements.findIndex(el => el.id === scene.id);
+                          const scenePos = sceneIndices.indexOf(sceneIdx);
+                          const nextSceneIdx = scenePos < sceneIndices.length - 1 ? sceneIndices[scenePos + 1] : elements.length;
+                          newElements.push(...elements.slice(sceneIdx, nextSceneIdx));
+                        }
+                      });
+                      
+                      setElements(newElements);
+                    } else {
+                      // Staging mode - mark as having changes
+                      setHasTimelineChanges(true);
+                    }
                   }
                 }
                 setTimelineDragId(null);
@@ -9138,6 +9298,36 @@ export default function ScreenplayEditor() {
                       newElements.splice(insertPos, 0, ...draggedElements);
                       
                       setElements(newElements);
+                      
+                      // Also update timeline order to match new scene order
+                      // Get new scene order
+                      const newSceneOrder = newElements.filter(el => el.type === 'scene').map(el => el.id);
+                      
+                      // Update beatCards timelineIndex to match new scene order (for cards in timeline)
+                      setBeatCards(prev => {
+                        const cardsInTimeline = prev.filter(c => c.timelineIndex !== null && c.linkedSceneId);
+                        if (cardsInTimeline.length === 0) return prev;
+                        
+                        // Sort cards by their scene's new position
+                        const sortedCards = [...cardsInTimeline].sort((a, b) => {
+                          const aPos = newSceneOrder.indexOf(a.linkedSceneId);
+                          const bPos = newSceneOrder.indexOf(b.linkedSceneId);
+                          return aPos - bPos;
+                        });
+                        
+                        // Create new timelineIndex mapping
+                        const newIndexMap = {};
+                        sortedCards.forEach((card, idx) => {
+                          newIndexMap[card.id] = idx;
+                        });
+                        
+                        return prev.map(c => {
+                          if (newIndexMap[c.id] !== undefined) {
+                            return { ...c, timelineIndex: newIndexMap[c.id] };
+                          }
+                          return c;
+                        });
+                      });
                       
                       if (socketRef.current && connected && canEdit) {
                         socketRef.current.emit('full-sync', { elements: newElements });
