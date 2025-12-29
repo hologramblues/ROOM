@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Mark, mergeAttributes } from '@tiptap/core';
 
-// V235 - Editor performance: debounced updates, page virtualization
+// V236 - Fix virtualization: track scroll position, not just active element
 
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
@@ -621,7 +621,7 @@ const ELEMENT_TYPES = [
 const TYPE_TO_FDX = { scene: 'Scene Heading', action: 'Action', character: 'Character', dialogue: 'Dialogue', parenthetical: 'Parenthetical', transition: 'Transition' };
 const FDX_TO_TYPE = { 'Scene Heading': 'scene', 'Action': 'action', 'Character': 'character', 'Dialogue': 'dialogue', 'Parenthetical': 'parenthetical', 'Transition': 'transition', 'General': 'action' };
 const LINES_PER_PAGE = 55;
-const VIRTUAL_BUFFER = 3; // Virtualization: render ±3 pages around active page
+const VIRTUAL_BUFFER = 5; // Virtualization: render ±5 pages around visible area
 
 // ============ AUTH MODAL ============
 const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
@@ -6868,6 +6868,43 @@ export default function ScreenplayEditor() {
     return result;
   }, [elements]);
 
+  // Track visible page based on scroll position (not just active element)
+  const [scrollVisiblePage, setScrollVisiblePage] = useState(1);
+  
+  // Update scrollVisiblePage based on scroll position
+  useEffect(() => {
+    const script = scriptContainerRef.current;
+    if (!script || pages.length === 0) return;
+    
+    let rafId = null;
+    const PAGE_HEIGHT = 320; // Approximate page height in pixels (297mm + gap)
+    
+    const updateVisiblePage = () => {
+      const scrollTop = script.scrollTop;
+      const viewportHeight = script.clientHeight;
+      // Calculate which page is in the center of the viewport
+      const centerScroll = scrollTop + viewportHeight / 2;
+      const estimatedPage = Math.max(1, Math.min(pages.length, Math.ceil(centerScroll / PAGE_HEIGHT)));
+      setScrollVisiblePage(estimatedPage);
+    };
+    
+    const handleScroll = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        updateVisiblePage();
+      });
+    };
+    
+    script.addEventListener('scroll', handleScroll, { passive: true });
+    updateVisiblePage(); // Initial calculation
+    
+    return () => {
+      script.removeEventListener('scroll', handleScroll);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [pages.length]);
+
   // Calculate which page the active element is on
   const activePageNumber = useMemo(() => {
     for (const page of pages) {
@@ -6878,12 +6915,15 @@ export default function ScreenplayEditor() {
     return 1;
   }, [pages, activeIndex]);
 
-  // Virtualization: only render pages within buffer of active page
+  // Use the higher of scroll position or active element for virtualization
+  const virtualCenterPage = Math.max(scrollVisiblePage, activePageNumber);
+
+  // Virtualization: only render pages within buffer of visible area
   const visiblePages = useMemo(() => {
     return pages.filter(page => 
-      Math.abs(page.number - activePageNumber) <= VIRTUAL_BUFFER
+      Math.abs(page.number - virtualCenterPage) <= VIRTUAL_BUFFER
     );
-  }, [pages, activePageNumber]);
+  }, [pages, virtualCenterPage]);
 
   const totalPages = pages.length;
   const extractedCharacters = useMemo(() => { const c = new Set(characters); elements.forEach(el => { if (el.type === 'character' && el.content.trim()) c.add(el.content.trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); }, [elements, characters]);
@@ -9774,8 +9814,8 @@ export default function ScreenplayEditor() {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {/* Placeholder for pages before visible range */}
-            {activePageNumber > VIRTUAL_BUFFER + 1 && (
-              <div style={{ height: `${(activePageNumber - VIRTUAL_BUFFER - 1) * 320}mm` }} />
+            {virtualCenterPage > VIRTUAL_BUFFER + 1 && (
+              <div style={{ height: `${(virtualCenterPage - VIRTUAL_BUFFER - 1) * 320}mm` }} />
             )}
             
             {visiblePages.map((page) => (
@@ -9838,8 +9878,8 @@ export default function ScreenplayEditor() {
           ))}
           
           {/* Placeholder for pages after visible range */}
-          {activePageNumber + VIRTUAL_BUFFER < totalPages && (
-            <div style={{ height: `${(totalPages - activePageNumber - VIRTUAL_BUFFER) * 320}mm` }} />
+          {virtualCenterPage + VIRTUAL_BUFFER < totalPages && (
+            <div style={{ height: `${(totalPages - virtualCenterPage - VIRTUAL_BUFFER) * 320}mm` }} />
           )}
         </div>
       </div>
