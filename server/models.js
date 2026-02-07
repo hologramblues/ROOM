@@ -207,6 +207,10 @@ const documentSchema = new mongoose.Schema({
   lastSnapshotAt: { type: Date, default: Date.now },
 });
 
+// Indexes for query performance
+documentSchema.index({ ownerId: 1, updatedAt: -1 });
+documentSchema.index({ 'collaborators.userId': 1 });
+
 documentSchema.pre('save', function(next) {
   this.updatedAt = new Date();
   next();

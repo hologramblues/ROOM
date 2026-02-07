@@ -4,7 +4,17 @@ const jwt = require('jsonwebtoken');
 const { User } = require('./models');
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'screenplay-collab-secret-key-change-in-production';
+
+// JWT Secret — require env var in production, random fallback for dev only
+const envSecret = process.env.JWT_SECRET;
+if (!envSecret && process.env.NODE_ENV === 'production') {
+  console.error('FATAL: JWT_SECRET environment variable is not set. Cannot start in production.');
+  process.exit(1);
+}
+if (!envSecret) {
+  console.warn('WARNING: JWT_SECRET not set — using random secret (sessions won\'t survive restart). Set JWT_SECRET in .env.');
+}
+const JWT_SECRET = envSecret || require('crypto').randomBytes(32).toString('hex');
 const JWT_EXPIRES_IN = '7d';
 
 const generateToken = (user) => jwt.sign({ userId: user._id, email: user.email, name: user.name, color: user.color }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });

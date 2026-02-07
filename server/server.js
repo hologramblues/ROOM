@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 const Anthropic = require('@anthropic-ai/sdk');
 const { User, Document, HistoryEntry } = require('./models');
+const rateLimit = require('express-rate-limit');
 const { router: authRouter, authMiddleware, optionalAuthMiddleware, socketAuthMiddleware } = require('./auth');
 
 const app = express();
@@ -68,13 +69,26 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use('/api/auth', authRouter);
+
+// Rate limiting
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: 'Too many auth attempts, try again later' } });
+const apiLimiter = rateLimit({ windowMs: 1 * 60 * 1000, max: 120, message: { error: 'Too many requests, slow down' } });
+const aiLimiter = rateLimit({ windowMs: 1 * 60 * 1000, max: 10, message: { error: 'Too many AI requests, try again later' } });
+
+app.use('/api/auth', authLimiter, authRouter);
+app.use('/api/ai', aiLimiter);
+app.use('/api/', apiLimiter);
 
 app.get('/api/health', async (req, res) => {
-  const docCount = await Document.countDocuments();
-  const userCount = await User.countDocuments();
-  const waitlistCount = await Waitlist.countDocuments();
-  res.json({ status: 'ok', documents: docCount, users: userCount, waitlist: waitlistCount, aiEnabled: !!anthropic });
+  try {
+    const docCount = await Document.countDocuments();
+    const userCount = await User.countDocuments();
+    const waitlistCount = await Waitlist.countDocuments();
+    res.json({ status: 'ok', documents: docCount, users: userCount, waitlist: waitlistCount, aiEnabled: !!anthropic });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(503).json({ status: 'error', error: 'Database unavailable' });
+  }
 });
 
 // ============ WAITLIST ROUTES ============
@@ -133,7 +147,7 @@ app.get('/api/waitlist/count', async (req, res) => {
 app.get('/api/waitlist', async (req, res) => {
   try {
     const adminSecret = req.headers['x-admin-secret'];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
+    if (!process.env.ADMIN_SECRET || !adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     
@@ -151,16 +165,24 @@ app.get('/api/waitlist', async (req, res) => {
 app.get('/api/waitlist/export', async (req, res) => {
   try {
     const adminSecret = req.headers['x-admin-secret'];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
+    if (!process.env.ADMIN_SECRET || !adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     
     const entries = await Waitlist.find().sort({ createdAt: -1 });
     
-    // Generate CSV
+    // Generate CSV (with injection protection)
+    const sanitizeCsv = (val) => {
+      const s = String(val || '');
+      // Escape fields that start with formula triggers
+      if (/^[=+\-@\t\r]/.test(s)) return `"'${s.replace(/"/g, '""')}"`;
+      // Quote if contains comma, newline, or double-quote
+      if (/[,"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
     const csv = ['email,source,createdAt,notified'];
     entries.forEach(e => {
-      csv.push(`${e.email},${e.source},${e.createdAt.toISOString()},${e.notified}`);
+      csv.push(`${sanitizeCsv(e.email)},${sanitizeCsv(e.source)},${e.createdAt.toISOString()},${e.notified}`);
     });
     
     res.setHeader('Content-Type', 'text/csv');
@@ -175,7 +197,7 @@ app.get('/api/waitlist/export', async (req, res) => {
 app.delete('/api/waitlist/:email', async (req, res) => {
   try {
     const adminSecret = req.headers['x-admin-secret'];
-    if (adminSecret !== process.env.ADMIN_SECRET) {
+    if (!process.env.ADMIN_SECRET || !adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     
@@ -226,7 +248,7 @@ app.post('/api/documents', authMiddleware, async (req, res) => {
       ownerId: req.user._id, 
       title: req.body.title || 'SANS TITRE',
       elements: req.body.elements || [{ id: uuidv4(), type: 'scene', content: '' }], 
-      publicAccess: { enabled: true, role: 'editor' } 
+      publicAccess: { enabled: false, role: 'viewer' }
     });
     await doc.save();
     await HistoryEntry.create({ documentId: doc._id, userId: req.user._id, userName: req.user.name, userColor: req.user.color, action: 'snapshot', data: { title: doc.title, elements: doc.elements } });
@@ -249,7 +271,7 @@ app.post('/api/documents/import', authMiddleware, async (req, res) => {
       ownerId: req.user._id, 
       title: title || 'SANS TITRE',
       elements: elements,
-      publicAccess: { enabled: true, role: 'editor' } 
+      publicAccess: { enabled: false, role: 'viewer' }
     });
     await doc.save();
     await HistoryEntry.create({ 
@@ -683,8 +705,17 @@ const activeRooms = new Map();
 io.use(socketAuthMiddleware);
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  console.log('User connected:', socket.id, socket.user ? `(${socket.user.name})` : '(anonymous)');
   let currentDocId = null;
+
+  // Guard: require authentication for write operations
+  const requireAuth = () => {
+    if (!socket.user) {
+      socket.emit('error', { message: 'Authentication required' });
+      return false;
+    }
+    return true;
+  };
 
   socket.on('join-document', async ({ docId }) => {
     try {
@@ -733,56 +764,80 @@ io.on('connection', (socket) => {
   });
 
   socket.on('title-change', async ({ title }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !requireAuth()) return;
     try {
-      const doc = await Document.findOne({ shortId: currentDocId });
+      const doc = await Document.findOneAndUpdate(
+        { shortId: currentDocId },
+        { $set: { title } },
+        { new: false }
+      );
       if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
-      doc.title = title; await doc.save();
       socket.to(currentDocId).emit('title-updated', { title });
     } catch (error) { console.error('Title error:', error); }
   });
 
   socket.on('element-change', async ({ index, element }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !requireAuth()) return;
     try {
-      const doc = await Document.findOne({ shortId: currentDocId });
+      if (index < 0) return;
+      const doc = await Document.findOneAndUpdate(
+        { shortId: currentDocId, [`elements.${index}`]: { $exists: true } },
+        { $set: { [`elements.${index}`]: element } },
+        { new: false }
+      );
       if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
-      if (index >= 0 && index < doc.elements.length) {
-        doc.elements[index] = element; doc.markModified('elements'); await doc.save();
-        socket.to(currentDocId).emit('element-updated', { index, element });
-      }
+      socket.to(currentDocId).emit('element-updated', { index, element });
     } catch (error) { console.error('Element error:', error); }
   });
 
   socket.on('element-type-change', async ({ index, type }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !requireAuth()) return;
     try {
-      const doc = await Document.findOne({ shortId: currentDocId });
+      if (index < 0) return;
+      const doc = await Document.findOneAndUpdate(
+        { shortId: currentDocId, [`elements.${index}`]: { $exists: true } },
+        { $set: { [`elements.${index}.type`]: type } },
+        { new: false }
+      );
       if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
-      if (index >= 0 && index < doc.elements.length) {
-        doc.elements[index].type = type; doc.markModified('elements'); await doc.save();
-        socket.to(currentDocId).emit('element-type-updated', { index, type });
-      }
+      socket.to(currentDocId).emit('element-type-updated', { index, type });
     } catch (error) { console.error('Type error:', error); }
   });
 
   socket.on('element-insert', async ({ afterIndex, element }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !requireAuth()) return;
     try {
-      const doc = await Document.findOne({ shortId: currentDocId });
-      if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
-      doc.elements.splice(afterIndex + 1, 0, element); doc.markModified('elements'); await doc.save();
+      // Use $push with $position for atomic insert
+      const insertPos = afterIndex + 1;
+      const doc = await Document.findOneAndUpdate(
+        { shortId: currentDocId },
+        { $push: { elements: { $each: [element], $position: insertPos } } },
+        { new: false }
+      );
+      if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) {
+        // Rollback: remove the inserted element
+        if (doc) await Document.updateOne({ shortId: currentDocId }, { $pull: { elements: { id: element.id } } });
+        return;
+      }
       socket.to(currentDocId).emit('element-inserted', { afterIndex, element });
     } catch (error) { console.error('Insert error:', error); }
   });
 
   socket.on('element-delete', async ({ index }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !requireAuth()) return;
     try {
+      // Check access first
       const doc = await Document.findOne({ shortId: currentDocId });
       if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
-      if (doc.elements.length > 1) {
-        doc.elements.splice(index, 1); doc.markModified('elements'); await doc.save();
+      if (doc.elements.length <= 1 || index < 0 || index >= doc.elements.length) return;
+      // Use $unset + $pull null pattern for atomic delete by index
+      const elementId = doc.elements[index]?.id;
+      if (!elementId) return;
+      const result = await Document.updateOne(
+        { shortId: currentDocId, 'elements.1': { $exists: true } }, // ensure >1 element
+        { $pull: { elements: { id: elementId } } }
+      );
+      if (result.modifiedCount > 0) {
         socket.to(currentDocId).emit('element-deleted', { index });
       }
     } catch (error) { console.error('Delete error:', error); }
@@ -791,10 +846,8 @@ io.on('connection', (socket) => {
   // ============ COMMENT SOCKET HANDLERS ============
 
   socket.on('comment-add', async ({ comment }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !requireAuth()) return;
     try {
-      const doc = await Document.findOne({ shortId: currentDocId });
-      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) return;
       const newComment = {
         id: comment.id,
         elementId: comment.elementId,
@@ -808,8 +861,17 @@ io.on('connection', (socket) => {
         replies: [],
         resolved: false
       };
-      doc.comments.push(newComment);
-      await doc.save();
+      // Atomic push — check access on the pre-update doc
+      const doc = await Document.findOneAndUpdate(
+        { shortId: currentDocId },
+        { $push: { comments: newComment } },
+        { new: false }
+      );
+      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) {
+        // Rollback
+        if (doc) await Document.updateOne({ shortId: currentDocId }, { $pull: { comments: { id: newComment.id } } });
+        return;
+      }
       socket.to(currentDocId).emit('comment-added', { comment: newComment });
     } catch (error) { console.error('Comment add error:', error); }
   });
@@ -817,11 +879,8 @@ io.on('connection', (socket) => {
   // ============ SUGGESTION SOCKET HANDLERS ============
 
   socket.on('suggestion-add', async ({ suggestion }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !requireAuth()) return;
     try {
-      const doc = await Document.findOne({ shortId: currentDocId });
-      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) return;
-      
       const newSuggestion = {
         id: suggestion.id,
         elementId: suggestion.elementId,
@@ -836,47 +895,65 @@ io.on('connection', (socket) => {
         status: 'pending',
         createdAt: new Date()
       };
-      
-      if (!doc.suggestions) doc.suggestions = [];
-      doc.suggestions.push(newSuggestion);
-      doc.markModified('suggestions');
-      await doc.save();
-      
+      // Atomic push
+      const doc = await Document.findOneAndUpdate(
+        { shortId: currentDocId },
+        { $push: { suggestions: newSuggestion } },
+        { new: false }
+      );
+      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) {
+        if (doc) await Document.updateOne({ shortId: currentDocId }, { $pull: { suggestions: { id: newSuggestion.id } } });
+        return;
+      }
       socket.to(currentDocId).emit('suggestion-added', { suggestion: newSuggestion });
       console.log('Suggestion added:', newSuggestion.id);
     } catch (error) { console.error('Suggestion add error:', error); }
   });
 
   socket.on('suggestion-accept', async ({ suggestionId }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !requireAuth()) return;
     try {
       const doc = await Document.findOne({ shortId: currentDocId });
       if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
-      
+
       const suggestionIndex = doc.suggestions?.findIndex(s => s.id === suggestionId);
       if (suggestionIndex !== -1 && suggestionIndex !== undefined) {
         const suggestion = doc.suggestions[suggestionIndex];
-        
+
         // Apply the suggestion to the element
         const elementIndex = doc.elements.findIndex(el => el.id === suggestion.elementId);
         if (elementIndex !== -1) {
           const element = doc.elements[elementIndex];
-          const newContent = 
-            element.content.substring(0, suggestion.startOffset) + 
-            suggestion.suggestedText + 
-            element.content.substring(suggestion.endOffset);
-          doc.elements[elementIndex].content = newContent;
-          doc.markModified('elements');
-          
-          // Broadcast element update
-          socket.to(currentDocId).emit('element-updated', { index: elementIndex, element: doc.elements[elementIndex] });
+          const content = element.content || '';
+
+          // Verify offsets are still valid and originalText matches
+          if (suggestion.startOffset >= 0 && suggestion.endOffset <= content.length &&
+              suggestion.startOffset < suggestion.endOffset) {
+            const currentSlice = content.substring(suggestion.startOffset, suggestion.endOffset);
+            if (currentSlice === suggestion.originalText) {
+              // Safe to apply — text hasn't changed at these offsets
+              const newContent =
+                content.substring(0, suggestion.startOffset) +
+                suggestion.suggestedText +
+                content.substring(suggestion.endOffset);
+              doc.elements[elementIndex].content = newContent;
+              doc.markModified('elements');
+
+              // Broadcast element update
+              socket.to(currentDocId).emit('element-updated', { index: elementIndex, element: doc.elements[elementIndex] });
+            } else {
+              console.warn('Suggestion accept: originalText mismatch, content may have changed. Suggestion removed without applying.');
+            }
+          } else {
+            console.warn('Suggestion accept: offsets out of bounds. Suggestion removed without applying.');
+          }
         }
-        
-        // Remove the suggestion
+
+        // Remove the suggestion regardless
         doc.suggestions.splice(suggestionIndex, 1);
         doc.markModified('suggestions');
         await doc.save();
-        
+
         // Broadcast suggestion acceptance
         io.to(currentDocId).emit('suggestion-accepted', { suggestionId });
         console.log('Suggestion accepted:', suggestionId);
@@ -885,7 +962,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('suggestion-reject', async ({ suggestionId }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !requireAuth()) return;
     try {
       const doc = await Document.findOne({ shortId: currentDocId });
       if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;

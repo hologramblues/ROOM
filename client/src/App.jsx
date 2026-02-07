@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext, lazy, Suspense } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, lazy, Suspense } from 'react';
 import { io } from 'socket.io-client';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -229,18 +229,11 @@ const translations = {
     noDocuments: "Aucun document",
     noHistory: "Aucun historique",
     loadingDocument: "Chargement du document...",
-    validated: "Validé",
-    
+
     // Outline filters
     allStatuses: "Tous les statuts",
-    inProgress: "En cours",
-    urgent: "Urgent",
     notDefined: "Non défini",
-    status: "Statut",
-    assigned: "Assigné à",
-    assignTo: "Assigner",
     allAssignees: "Tous",
-    unassigned: "Non assigné",
     noCommentsOrSuggestions: "Aucun commentaire ou suggestion",
     sequence: "Séquence",
     newDocumentPlaceholder: "Nouveau document",
@@ -474,18 +467,11 @@ const translations = {
     noDocuments: "No documents",
     noHistory: "No history",
     loadingDocument: "Loading document...",
-    validated: "Done",
-    
+
     // Outline filters
     allStatuses: "All statuses",
-    inProgress: "In progress",
-    urgent: "Urgent",
     notDefined: "Not defined",
-    status: "Status",
-    assigned: "Assigned to",
-    assignTo: "Assign",
     allAssignees: "All",
-    unassigned: "Unassigned",
     noCommentsOrSuggestions: "No comments or suggestions",
     sequence: "Sequence",
     newDocumentPlaceholder: "New document",
@@ -510,6 +496,7 @@ const translations = {
 };
 
 // Language Context
+// eslint-disable-next-line no-unused-vars
 const LanguageContext = createContext({ language: 'fr', t: (key) => key, setLanguage: () => {} });
 
 // ============ TIPTAP COMMENT MARK ============
@@ -605,7 +592,7 @@ const generateId = () => {
   // Fallback for older browsers (Safari, etc.)
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0;
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    return (c === 'x' ? r : ((r & 0x3) | 0x8)).toString(16);
   });
 };
 
@@ -1525,7 +1512,7 @@ const InlineComment = React.memo(({ comment, onReply, onResolve, onDelete, onEdi
 const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollContainerRef, scriptScrollHeight, token, docId, canComment, onClose, darkMode, t = (k) => k, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
-  const [newCommentFor, setNewCommentFor] = useState(null);
+  const [, setNewCommentFor] = useState(null);
   const [newCommentText, setNewCommentText] = useState('');
   const [inlineCommentText, setInlineCommentText] = useState('');
   const [suggestionText, setSuggestionText] = useState('');
@@ -1537,6 +1524,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   const suggestionInputRef = useRef(null);
   const fallbackRef = useRef(null);
   const sidebarRef = scrollContainerRef || fallbackRef; // Use external ref for scroll sync
+  // eslint-disable-next-line no-unused-vars
   const commentRefs = useRef({});
   const prevActiveIndexRef = useRef(activeIndex);
 
@@ -1693,6 +1681,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
     } catch (err) { console.error(err); }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const submitNewComment = async (elementId) => {
     if (!newCommentText.trim()) return;
     try {
@@ -1794,8 +1783,9 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   
   // Cleanup observers on unmount
   useEffect(() => {
+    const observers = observersRef.current;
     return () => {
-      Object.values(observersRef.current).forEach(obs => obs.disconnect());
+      Object.values(observers).forEach(obs => obs.disconnect());
     };
   }, []);
   
@@ -2357,7 +2347,6 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             <p style={{ color: '#6b7280', textAlign: 'center', padding: 20, fontSize: 12 }}>{t('noCommentsOrSuggestions')}</p>
           ) : sortedIndices.length > 0 ? (
             sortedIndices.map((idx, arrayIndex) => {
-              const element = elements[idx];
               const elementComments = commentsByElementIndex[idx] || [];
               const topPosition = adjustedPositions[idx] || 0;
               
@@ -2861,6 +2850,7 @@ const GoToSceneModal = ({ onClose, onGoTo, maxScene, darkMode }) => {
 };
 
 // ============ WRITING GOALS MODAL ============
+// eslint-disable-next-line no-unused-vars
 const WritingGoalsModal = ({ goal, onUpdate, onClose, currentWords, darkMode }) => {
   const [dailyGoal, setDailyGoal] = useState(goal.daily);
   const progress = Math.min(100, Math.round((goal.todayWords / goal.daily) * 100));
@@ -2911,7 +2901,7 @@ const WritingGoalsModal = ({ goal, onUpdate, onClose, currentWords, darkMode }) 
             <button
               key={preset}
               onClick={() => setDailyGoal(preset)}
-              style={{ flex: 1, padding: '8px', background: dailyGoal == preset ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), border: 'none', borderRadius: 6, color: dailyGoal == preset ? 'white' : (darkMode ? 'white' : 'black'), cursor: 'pointer', fontSize: 12 }}
+              style={{ flex: 1, padding: '8px', background: Number(dailyGoal) === preset ? '#3b82f6' : (darkMode ? '#484848' : '#f3f4f6'), border: 'none', borderRadius: 6, color: Number(dailyGoal) === preset ? 'white' : (darkMode ? 'white' : 'black'), cursor: 'pointer', fontSize: 12 }}
             >
               {preset}
             </button>
@@ -3114,6 +3104,7 @@ const RemoteCursor = ({ user }) => (
 
 // ============ RENDER CONTENT WITH HIGHLIGHTS ============
 // Renders text with visual highlights for comments and suggestions
+// eslint-disable-next-line no-unused-vars
 const renderContentWithHighlights = (content, highlights) => {
   if (!content) return '\u200B';
   if (!highlights || highlights.length === 0) return content;
@@ -3192,7 +3183,6 @@ const renderContentWithHighlights = (content, highlights) => {
 // ============ SCENE LINE (TIPTAP VERSION) ============
 // Empty array constant to avoid creating new arrays on each render
 const emptyHighlights = [];
-const emptyArray = [];
 
 const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset, t = (k) => k }) => {
   const containerRef = useRef(null);
@@ -3588,8 +3578,6 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     }
   }, [element.content, element.type, isActive, characters, locations]);
   
-  const hasHighlights = highlights && highlights.length > 0;
-
   return (
     <div ref={containerRef} style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
       {/* Remote cursors */}
@@ -3721,7 +3709,7 @@ const BeatBoard = React.memo(({
   const [isOverTimeline, setIsOverTimeline] = useState(false);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [timelineZoom, setTimelineZoom] = useState(1);
-  const [timelineMode, setTimelineMode] = useState('blocks'); // Always blocks now
+  // timelineMode removed — always 'blocks' now
   const [hoveredBlock, setHoveredBlock] = useState(null); // { id, rect } or null
   const [editModalCard, setEditModalCard] = useState(null); // Card being edited in modal
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -3731,7 +3719,7 @@ const BeatBoard = React.memo(({
   const [pendingDrag, setPendingDrag] = useState(null); // For delayed drag start
   const [whiteboardEnabled, setWhiteboardEnabled] = useState(false); // Whiteboard overlay toggle
   const [whiteboardKey, setWhiteboardKey] = useState(0); // Key to force remount Excalidraw with current zoom/pan
-  const [convertMenuPos, setConvertMenuPos] = useState(null); // Position for convert menu
+  // convertMenuPos removed — unused
   const [selectedExcalidrawId, setSelectedExcalidrawId] = useState(null); // Selected excalidraw element for conversion
   const [timelineDragId, setTimelineDragId] = useState(null); // Card ID being dragged in timeline
   const [timelineDropIndex, setTimelineDropIndex] = useState(null); // Drop position index in timeline (between blocks)
@@ -3775,8 +3763,8 @@ const BeatBoard = React.memo(({
       });
       return [...sceneCards, ...customCards];
     });
-  }, [elements, sceneSynopsis, sceneStatus]);
-  
+  }, [elements, sceneSynopsis, sceneStatus, setBeatCards]);
+
   const timelineCards = useMemo(() => beatCards.filter(c => c.timelineIndex !== null).sort((a, b) => a.timelineIndex - b.timelineIndex), [beatCards]);
   // Canvas shows ALL cards (they all live here, timeline is just a "cut" view)
   const canvasCards = useMemo(() => beatCards, [beatCards]);
@@ -3945,8 +3933,8 @@ const BeatBoard = React.memo(({
         }));
       }
     });
-  }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag]);
-  
+  }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag, setBeatCards]);
+
   const handleDragEnd = useCallback((e) => {
     // Cancel any pending RAF
     if (dragMoveRAF.current) {
@@ -4018,8 +4006,8 @@ const BeatBoard = React.memo(({
     dragOriginalPosRef.current = null;
     dragFromTimelineRef.current = false;
     dragSelectedPositionsRef.current = null;
-  }, [draggedCard, pendingDrag, onPushToUndo]);
-  
+  }, [draggedCard, pendingDrag, onPushToUndo, setBeatCards]);
+
   useEffect(() => {
     if (draggedCard || pendingDrag) {
       window.addEventListener('mousemove', handleDragMove);
@@ -4177,7 +4165,7 @@ const BeatBoard = React.memo(({
       elements: elements.filter(el => el.id !== elementId && el.containerId !== elementId)
     });
     
-    setConvertMenuPos(null);
+    // convertMenuPos removed
     setSelectedExcalidrawId(null);
   };
   
@@ -4209,11 +4197,11 @@ const BeatBoard = React.memo(({
         setSelectedExcalidrawId(selectedIds[0]);
       } else {
         setSelectedExcalidrawId(null);
-        setConvertMenuPos(null);
+        // convertMenuPos removed
       }
     } else {
       setSelectedExcalidrawId(null);
-      setConvertMenuPos(null);
+      // convertMenuPos removed
     }
   };
   
@@ -4302,7 +4290,6 @@ const BeatBoard = React.memo(({
     const noteStyle = isNote ? (noteColors[card.color] || { bg: '#fef3c7', darkBg: '#78350f', text: '#92400e', darkText: '#fcd34d' }) : null;
     
     // Color bar or left border for white cards
-    const colorBarHeight = inTimeline ? 4 : 6 * zoom;
     const leftBorderWidth = inTimeline ? 4 : 4 * zoom;
     
     return (
@@ -5862,8 +5849,7 @@ export default function ScreenplayEditor() {
   const [lockedScenes, setLockedScenes] = useState(new Set()); // Set of scene element IDs
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showRenameChar, setShowRenameChar] = useState(false);
-  const [renameFrom, setRenameFrom] = useState('');
-  const [renameTo, setRenameTo] = useState('');
+  // renameFrom/renameTo removed — unused
   const [focusMode, setFocusMode] = useState(false);
   const [sceneAssignments, setSceneAssignments] = useState({}); // { sceneId: { userId, userName, userColor } }
   const [assignmentMenu, setAssignmentMenu] = useState(null); // { sceneId, x, y }
@@ -5883,16 +5869,16 @@ export default function ScreenplayEditor() {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false); // Custom dropdown for status filter
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false); // Custom dropdown for assignee filter
   const [structureBeats, setStructureBeats] = useState([]); // { id, label, startSceneId, color } - unified structure for timeline and outline
-  const [editingChapter, setEditingChapter] = useState(null); // sceneId being edited
+  // editingChapter removed — unused
   const [lastSaved, setLastSaved] = useState(null);
-  const [lastModifiedBy, setLastModifiedBy] = useState(null); // { userName, timestamp }
-  const [undoStack, setUndoStack] = useState([]);
-  const [redoStack, setRedoStack] = useState([]);
-  const [draggedScene, setDraggedScene] = useState(null);
+  const [, setLastModifiedBy] = useState(null); // { userName, timestamp }
+  const [, setUndoStack] = useState([]);
+  const [, setRedoStack] = useState([]);
+  // draggedScene removed — unused
   const [outlineDragIndex, setOutlineDragIndex] = useState(null); // Scene index being dragged in outline
   const [outlineDropIndex, setOutlineDropIndex] = useState(null); // Drop target index in outline
   const [sceneSynopsis, setSceneSynopsis] = useState({}); // { sceneId: 'synopsis text' }
-  const [visibleElementIndex, setVisibleElementIndex] = useState(0); // For scroll sync with comments
+  // visibleElementIndex removed — unused
   const [elementPositions, setElementPositions] = useState({}); // { elementIndex: topPosition }
   const [scriptScrollHeight, setScriptScrollHeight] = useState(0);
   const [writingGoal, setWritingGoal] = useState(() => {
@@ -5900,7 +5886,8 @@ export default function ScreenplayEditor() {
     return saved ? JSON.parse(saved) : { daily: 1000, todayWords: 0, lastDate: null };
   });
   const [showGoToScene, setShowGoToScene] = useState(false);
-  const [editingSynopsis, setEditingSynopsis] = useState(null);
+  // editingSynopsis removed — unused
+  // eslint-disable-next-line no-unused-vars
   const [typewriterSound, setTypewriterSound] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [activeView, setActiveView] = useState('script'); // 'script' | 'beatboard'
@@ -5962,7 +5949,7 @@ export default function ScreenplayEditor() {
         
         for (const el of sceneElements) {
           const idx = parseInt(el.getAttribute('data-element-index'), 10);
-          if (isNaN(idx) || elements[idx]?.type !== 'scene') continue;
+          if (isNaN(idx) || elementsRef.current[idx]?.type !== 'scene') continue;
           
           const rect = el.getBoundingClientRect();
           if (rect.top >= scriptRect.top - 50 && rect.top <= scriptRect.top + 150) {
@@ -6025,7 +6012,7 @@ export default function ScreenplayEditor() {
       
       for (const el of sceneElements) {
         const idx = parseInt(el.getAttribute('data-element-index'), 10);
-        if (isNaN(idx) || elements[idx]?.type !== 'scene') continue;
+        if (isNaN(idx) || elementsRef.current[idx]?.type !== 'scene') continue;
         
         const rect = el.getBoundingClientRect();
         // Scene is at or near the top of the viewport
@@ -6165,23 +6152,24 @@ export default function ScreenplayEditor() {
     const attachTimeout = setTimeout(attachListeners, 100);
     const attachTimeout2 = setTimeout(attachListeners, 500);
     
+    // Capture ref values now for cleanup (React warns about using refs in cleanup)
+    const commentsEl = commentsSidebarRef.current;
+    const outlineEl = outlineSidebarRef.current;
+
     return () => {
       script.removeEventListener('scroll', handleScriptScroll);
-      
-      const comments = commentsSidebarRef.current;
-      const outline = outlineSidebarRef.current;
-      
-      if (comments && commentsListener) {
-        comments.removeEventListener('scroll', commentsListener);
+
+      if (commentsEl && commentsListener) {
+        commentsEl.removeEventListener('scroll', commentsListener);
       }
-      if (outline && outlineListener) {
-        outline.removeEventListener('scroll', outlineListener);
+      if (outlineEl && outlineListener) {
+        outlineEl.removeEventListener('scroll', outlineListener);
       }
       if (outlineRAF) cancelAnimationFrame(outlineRAF);
       clearTimeout(attachTimeout);
       clearTimeout(attachTimeout2);
     };
-  }, [showComments, showOutline, elements]);
+  }, [showComments, showOutline]); // Removed 'elements' — uses elementsRef instead
 
   // Track script's scrollHeight for comments sidebar min-height
   useEffect(() => {
@@ -6225,13 +6213,20 @@ export default function ScreenplayEditor() {
     return () => observer.disconnect();
   }, [elements.length]);
   
-  // Chat notification audio - Web Audio synthesis
+  // Chat notification audio - Web Audio synthesis (reuse single AudioContext)
+  const audioCtxRef = useRef(null);
   const playChatNotification = useCallback(() => {
     if (!chatNotificationSoundRef.current) return;
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // Reuse or create a single AudioContext
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      // Resume if suspended (browser autoplay policy)
+      if (ctx.state === 'suspended') ctx.resume();
       const now = ctx.currentTime;
-      
+
       // Create pleasant notification chime (two notes)
       [880, 1100].forEach((freq, i) => {
         const osc = ctx.createOscillator();
@@ -6272,26 +6267,29 @@ export default function ScreenplayEditor() {
   }, [docId, token]);
 
   // Auto-backup to localStorage every 30 seconds
+  // Uses refs to avoid resetting the 30s interval on every keystroke
   useEffect(() => {
-    if (!docId || elements.length === 0) return;
+    if (!docId) return;
     const backupInterval = setInterval(() => {
+      const currentElements = elementsRef.current;
+      if (!currentElements || currentElements.length === 0) return;
       const backup = {
         docId,
-        title,
-        elements,
+        title: titleRef.current,
+        elements: currentElements,
         timestamp: new Date().toISOString(),
-        sceneSynopsis,
-        sceneStatus,
-        notes,
+        sceneSynopsis: sceneSynopsisRef.current,
+        sceneStatus: sceneStatusRef.current,
+        notes: notesRef.current,
         // Beat Board data
-        beatCards,
-        structureBeats,
-        whiteboardElements,
+        beatCards: beatCardsRef.current,
+        structureBeats: structureBeatsRef.current,
+        whiteboardElements: whiteboardElementsRef.current,
       };
       localStorage.setItem(`rooms-backup-${docId}`, JSON.stringify(backup));
     }, 30000);
     return () => clearInterval(backupInterval);
-  }, [docId, title, elements, sceneSynopsis, sceneStatus, notes, beatCards, structureBeats, whiteboardElements]);
+  }, [docId]); // Only recreate when docId changes
 
   // Track last saved state for auto-save comparison
   const lastSavedElementsRef = useRef(null);
@@ -6304,7 +6302,8 @@ export default function ScreenplayEditor() {
   const sceneSynopsisRef = useRef(sceneSynopsis);
   const sceneStatusRef = useRef(sceneStatus);
   const whiteboardElementsRef = useRef(whiteboardElements);
-  
+  const notesRef = useRef(notes);
+
   // Keep refs in sync
   useEffect(() => {
     elementsRef.current = elements;
@@ -6333,6 +6332,10 @@ export default function ScreenplayEditor() {
   useEffect(() => {
     whiteboardElementsRef.current = whiteboardElements;
   }, [whiteboardElements]);
+
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
   
   // Auto-save to cloud every 10 seconds (only if changes detected)
   useEffect(() => {
@@ -6410,42 +6413,47 @@ export default function ScreenplayEditor() {
   };
 
   // Auto-snapshot every 15 minutes (only when document is open and has content)
+  // Uses refs to avoid resetting the 15-min interval on every keystroke
   useEffect(() => {
-    if (!docId || !token || elements.length === 0) return;
-    
+    if (!docId || !token) return;
+
     const autoSnapshotInterval = setInterval(async () => {
+      const currentElements = elementsRef.current;
+      if (!currentElements || currentElements.length === 0) return;
+
       // Only create snapshot if document has meaningful content
-      const hasContent = elements.some(el => el.content && el.content.trim().length > 0);
+      const hasContent = currentElements.some(el => el.content && el.content.trim().length > 0);
       if (!hasContent) return;
-      
+
       try {
-        const snapshotName = formatSnapshotName(title, true);
+        const currentTitle = titleRef.current;
+        const snapshotName = formatSnapshotName(currentTitle, true);
         const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/snapshot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-          body: JSON.stringify({ 
-            title, 
-            elements, 
-            auto: true, 
+          body: JSON.stringify({
+            title: currentTitle,
+            elements: currentElements,
+            auto: true,
             snapshotName,
             // Beat Board data
-            beatCards,
-            structureBeats,
-            sceneSynopsis,
-            sceneStatus,
-            whiteboardElements
+            beatCards: beatCardsRef.current,
+            structureBeats: structureBeatsRef.current,
+            sceneSynopsis: sceneSynopsisRef.current,
+            sceneStatus: sceneStatusRef.current,
+            whiteboardElements: whiteboardElementsRef.current
           })
         });
         if (res.ok) {
           console.log('[AUTO-SNAPSHOT] Created:', snapshotName);
         }
-      } catch (err) { 
-        console.error('[AUTO-SNAPSHOT] Error:', err); 
+      } catch (err) {
+        console.error('[AUTO-SNAPSHOT] Error:', err);
       }
     }, 15 * 60 * 1000); // 15 minutes
-    
+
     return () => clearInterval(autoSnapshotInterval);
-  }, [docId, token, elements, title, beatCards, structureBeats, sceneSynopsis, sceneStatus, whiteboardElements]);
+  }, [docId, token]); // Only recreate when docId or token changes
 
   // Track writing goals daily reset
   useEffect(() => {
@@ -6586,44 +6594,45 @@ export default function ScreenplayEditor() {
   // Socket connection (skip for local mode)
   useEffect(() => {
     if (docId === 'local') return; // Don't connect socket in local mode
-    
+    let isStale = false; // Guard against stale updates after cleanup
+
     const socket = io(SERVER_URL, { transports: ['websocket', 'polling'], auth: { token }, reconnectionAttempts: 10, timeout: 30000 });
     socketRef.current = socket;
-    
-    socket.on('connect', () => { setConnected(true); setMyId(socket.id); if (docId && docId !== 'local') socket.emit('join-document', { docId }); });
-    socket.on('disconnect', () => setConnected(false));
-    socket.on('document-state', data => { 
-      setUsers(data.users || []); 
+
+    socket.on('connect', () => { if (isStale) return; setConnected(true); setMyId(socket.id); if (docId && docId !== 'local') socket.emit('join-document', { docId }); });
+    socket.on('disconnect', () => { if (isStale) return; setConnected(false); });
+    socket.on('document-state', data => {
+      if (isStale) return;
+      setUsers(data.users || []);
       if (data.role) setMyRole(data.role);
       if (data.suggestions) setSuggestions(data.suggestions);
-      // Use server collaborators if available, otherwise build from online users
-      console.log('Received collaborators:', data.collaborators);
       if (data.collaborators && data.collaborators.length > 0) {
         setCollaborators(data.collaborators);
       }
     });
-    socket.on('title-updated', ({ title }) => setTitle(title));
-    socket.on('element-updated', ({ index, element }) => setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = element; return u; }));
-    socket.on('element-type-updated', ({ index, type }) => setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = { ...u[index], type }; return u; }));
-    socket.on('element-inserted', ({ afterIndex, element }) => setElements(p => { const u = [...p]; u.splice(afterIndex + 1, 0, element); return u; }));
-    socket.on('element-deleted', ({ index }) => setElements(p => p.filter((_, i) => i !== index)));
-    socket.on('user-joined', ({ users }) => setUsers(users));
-    socket.on('user-left', ({ users }) => setUsers(users));
-    socket.on('cursor-updated', ({ userId, cursor }) => setUsers(p => p.map(u => u.id === userId ? { ...u, cursor } : u)));
-    socket.on('document-restored', ({ title, elements }) => { setTitle(title); setElements(elements); });
-    socket.on('comment-added', ({ comment }) => setComments(p => [...p, comment]));
-    socket.on('comment-reply-added', ({ commentId, reply }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, replies: [...(c.replies || []), reply] } : c)));
-    socket.on('comment-resolved', ({ commentId, resolved }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, resolved } : c)));
-    socket.on('comment-deleted', ({ commentId }) => setComments(p => p.filter(c => c.id !== commentId && c._id !== commentId)));
-    socket.on('comment-updated', ({ commentId, content }) => setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, content } : c)));
-    
+    socket.on('title-updated', ({ title }) => { if (!isStale) setTitle(title); });
+    socket.on('element-updated', ({ index, element }) => { if (!isStale) setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = element; return u; }); });
+    socket.on('element-type-updated', ({ index, type }) => { if (!isStale) setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = { ...u[index], type }; return u; }); });
+    socket.on('element-inserted', ({ afterIndex, element }) => { if (!isStale) setElements(p => { const u = [...p]; u.splice(afterIndex + 1, 0, element); return u; }); });
+    socket.on('element-deleted', ({ index }) => { if (!isStale) setElements(p => p.filter((_, i) => i !== index)); });
+    socket.on('user-joined', ({ users }) => { if (!isStale) setUsers(users); });
+    socket.on('user-left', ({ users }) => { if (!isStale) setUsers(users); });
+    socket.on('cursor-updated', ({ userId, cursor }) => { if (!isStale) setUsers(p => p.map(u => u.id === userId ? { ...u, cursor } : u)); });
+    socket.on('document-restored', ({ title, elements }) => { if (!isStale) { setTitle(title); setElements(elements); } });
+    socket.on('comment-added', ({ comment }) => { if (!isStale) setComments(p => [...p, comment]); });
+    socket.on('comment-reply-added', ({ commentId, reply }) => { if (!isStale) setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, replies: [...(c.replies || []), reply] } : c)); });
+    socket.on('comment-resolved', ({ commentId, resolved }) => { if (!isStale) setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, resolved } : c)); });
+    socket.on('comment-deleted', ({ commentId }) => { if (!isStale) setComments(p => p.filter(c => c.id !== commentId && c._id !== commentId)); });
+    socket.on('comment-updated', ({ commentId, content }) => { if (!isStale) setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, content } : c)); });
+
     // Suggestion socket listeners
-    socket.on('suggestion-added', ({ suggestion }) => setSuggestions(p => [...p, suggestion]));
-    socket.on('suggestion-accepted', ({ suggestionId }) => setSuggestions(p => p.filter(s => s.id !== suggestionId)));
-    socket.on('suggestion-rejected', ({ suggestionId }) => setSuggestions(p => p.filter(s => s.id !== suggestionId)));
-    
+    socket.on('suggestion-added', ({ suggestion }) => { if (!isStale) setSuggestions(p => [...p, suggestion]); });
+    socket.on('suggestion-accepted', ({ suggestionId }) => { if (!isStale) setSuggestions(p => p.filter(s => s.id !== suggestionId)); });
+    socket.on('suggestion-rejected', ({ suggestionId }) => { if (!isStale) setSuggestions(p => p.filter(s => s.id !== suggestionId)); });
+
     // Chat messages
     socket.on('chat-message', (message) => {
+      if (isStale) return;
       // Deduplicate - don't add if already exists
       setChatMessages(prev => {
         if (prev.some(m => m.id === message.id)) return prev;
@@ -6635,9 +6644,9 @@ export default function ScreenplayEditor() {
         playChatNotification();
       }
     });
-    socket.on('chat-history', (messages) => setChatMessages(messages));
-    
-    return () => socket.disconnect();
+    socket.on('chat-history', (messages) => { if (!isStale) setChatMessages(messages); });
+
+    return () => { isStale = true; socket.disconnect(); };
   }, [docId, token, playChatNotification]);
 
   const handleLogin = (user, newToken) => { 
@@ -6833,11 +6842,6 @@ export default function ScreenplayEditor() {
 
   const selectDocument = (id) => { loadedDocRef.current = null; window.location.hash = id; setShowDocsList(false); };
 
-  const navigateToElement = useCallback((index) => {
-    setActiveIndex(index);
-    setTimeout(() => { const el = document.querySelector(`[data-element-index="${index}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50);
-  }, []);
-
   // Group elements into pages
   const pages = useMemo(() => {
     const result = [];
@@ -6867,7 +6871,6 @@ export default function ScreenplayEditor() {
     return result;
   }, [elements]);
 
-  const totalPages = pages.length;
   const extractedCharacters = useMemo(() => { const c = new Set(characters); elements.forEach(el => { if (el.type === 'character' && el.content.trim()) c.add(el.content.trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); }, [elements, characters]);
   const remoteCursors = useMemo(() => users.filter(u => u.id !== myId), [users, myId]);
   const canEdit = myRole === 'editor';
@@ -7101,25 +7104,26 @@ export default function ScreenplayEditor() {
     }
   };
 
-  // Create snapshot manually
-  const createSnapshot = async () => {
+  // Create snapshot manually (uses refs for stable callback)
+  const createSnapshot = useCallback(async () => {
     if (!token || !docId) return;
     try {
-      const snapshotName = formatSnapshotName(title, false);
+      const curTitle = titleRef.current;
+      const snapshotName = formatSnapshotName(curTitle, false);
       const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ 
-          title, 
-          elements, 
-          auto: false, 
+        body: JSON.stringify({
+          title: curTitle,
+          elements: elementsRef.current,
+          auto: false,
           snapshotName,
           // Beat Board data
-          beatCards,
-          structureBeats,
-          sceneSynopsis,
-          sceneStatus,
-          whiteboardElements
+          beatCards: beatCardsRef.current,
+          structureBeats: structureBeatsRef.current,
+          sceneSynopsis: sceneSynopsisRef.current,
+          sceneStatus: sceneStatusRef.current,
+          whiteboardElements: whiteboardElementsRef.current
         })
       });
       if (res.ok) {
@@ -7133,7 +7137,7 @@ export default function ScreenplayEditor() {
         }
       }
     } catch (err) { console.error(err); }
-  };
+  }, [token, docId]);
 
   // Close dropdown menus when clicking outside
   useEffect(() => {
@@ -7421,6 +7425,7 @@ export default function ScreenplayEditor() {
 
   // Get initials from a name (e.g. "Jeremie Goldstein" -> "JG", "RomainV" -> "RV")
   // Render text content with highlighted comments (legacy fallback)
+  // eslint-disable-next-line no-unused-vars
   const renderTextWithHighlights = (content, elementId) => {
     if (!content) return '';
     
@@ -7568,86 +7573,90 @@ export default function ScreenplayEditor() {
   const emitTitle = useCallback(t => { setTitle(t); if (socketRef.current && connected && canEdit) socketRef.current.emit('title-change', { title: t }); }, [connected, canEdit]);
   
   // Save to undo stack before changes - saves complete state snapshot
+  // Uses refs to avoid recreating on every keystroke (prevents cascade re-renders)
   const pushToUndo = useCallback((snapshot = null) => {
-    // Create a complete state snapshot
     const currentSnapshot = snapshot || {
-      elements,
-      beatCards,
-      structureBeats,
-      sceneSynopsis,
-      sceneStatus
+      elements: elementsRef.current,
+      beatCards: beatCardsRef.current,
+      structureBeats: structureBeatsRef.current,
+      sceneSynopsis: sceneSynopsisRef.current,
+      sceneStatus: sceneStatusRef.current
     };
-    setUndoStack(prev => [...prev.slice(-30), currentSnapshot]); // Keep last 30 (reduced for memory with larger snapshots)
+    setUndoStack(prev => [...prev.slice(-30), currentSnapshot]); // Keep last 30
     setRedoStack([]); // Clear redo on new action
-  }, [elements, beatCards, structureBeats, sceneSynopsis, sceneStatus]);
+  }, []); // Stable — reads from refs
 
   const undo = useCallback(() => {
-    if (undoStack.length === 0) return;
-    const previous = undoStack[undoStack.length - 1];
-    
-    // Save current state to redo stack
-    const currentSnapshot = {
-      elements,
-      beatCards,
-      structureBeats,
-      sceneSynopsis,
-      sceneStatus
-    };
-    setRedoStack(prev => [...prev, currentSnapshot]);
-    setUndoStack(prev => prev.slice(0, -1));
-    
-    // Restore previous state - handle both old format (just elements array) and new format (full snapshot)
-    if (Array.isArray(previous)) {
-      // Old format - just elements
-      setElements(previous);
-      if (socketRef.current && connected && canEdit) {
-        socketRef.current.emit('full-sync', { elements: previous });
+    setUndoStack(prev => {
+      if (prev.length === 0) return prev;
+      const previous = prev[prev.length - 1];
+
+      // Save current state to redo stack
+      const currentSnapshot = {
+        elements: elementsRef.current,
+        beatCards: beatCardsRef.current,
+        structureBeats: structureBeatsRef.current,
+        sceneSynopsis: sceneSynopsisRef.current,
+        sceneStatus: sceneStatusRef.current
+      };
+      setRedoStack(r => [...r, currentSnapshot]);
+
+      // Restore previous state - handle both old format (just elements array) and new format (full snapshot)
+      if (Array.isArray(previous)) {
+        setElements(previous);
+        if (socketRef.current) {
+          socketRef.current.emit('full-sync', { elements: previous });
+        }
+      } else {
+        if (previous.elements) setElements(previous.elements);
+        if (previous.beatCards) setBeatCards(previous.beatCards);
+        if (previous.structureBeats) setStructureBeats(previous.structureBeats);
+        if (previous.sceneSynopsis) setSceneSynopsis(previous.sceneSynopsis);
+        if (previous.sceneStatus) setSceneStatus(previous.sceneStatus);
+        if (socketRef.current) {
+          socketRef.current.emit('full-sync', { elements: previous.elements || elementsRef.current });
+        }
       }
-    } else {
-      // New format - full snapshot
-      if (previous.elements) setElements(previous.elements);
-      if (previous.beatCards) setBeatCards(previous.beatCards);
-      if (previous.structureBeats) setStructureBeats(previous.structureBeats);
-      if (previous.sceneSynopsis) setSceneSynopsis(previous.sceneSynopsis);
-      if (previous.sceneStatus) setSceneStatus(previous.sceneStatus);
-      if (socketRef.current && connected && canEdit) {
-        socketRef.current.emit('full-sync', { elements: previous.elements || elements });
-      }
-    }
-  }, [undoStack, elements, beatCards, structureBeats, sceneSynopsis, sceneStatus, connected, canEdit]);
+
+      return prev.slice(0, -1);
+    });
+  }, []); // Stable — reads from refs and uses functional updaters
 
   const redo = useCallback(() => {
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
-    
-    // Save current state to undo stack
-    const currentSnapshot = {
-      elements,
-      beatCards,
-      structureBeats,
-      sceneSynopsis,
-      sceneStatus
-    };
-    setUndoStack(prev => [...prev, currentSnapshot]);
-    setRedoStack(prev => prev.slice(0, -1));
-    
-    // Restore next state - handle both old format and new format
-    if (Array.isArray(next)) {
-      setElements(next);
-      if (socketRef.current && connected && canEdit) {
-        socketRef.current.emit('full-sync', { elements: next });
+    setRedoStack(prev => {
+      if (prev.length === 0) return prev;
+      const next = prev[prev.length - 1];
+
+      // Save current state to undo stack
+      const currentSnapshot = {
+        elements: elementsRef.current,
+        beatCards: beatCardsRef.current,
+        structureBeats: structureBeatsRef.current,
+        sceneSynopsis: sceneSynopsisRef.current,
+        sceneStatus: sceneStatusRef.current
+      };
+      setUndoStack(u => [...u, currentSnapshot]);
+
+      // Restore next state - handle both old format and new format
+      if (Array.isArray(next)) {
+        setElements(next);
+        if (socketRef.current) {
+          socketRef.current.emit('full-sync', { elements: next });
+        }
+      } else {
+        if (next.elements) setElements(next.elements);
+        if (next.beatCards) setBeatCards(next.beatCards);
+        if (next.structureBeats) setStructureBeats(next.structureBeats);
+        if (next.sceneSynopsis) setSceneSynopsis(next.sceneSynopsis);
+        if (next.sceneStatus) setSceneStatus(next.sceneStatus);
+        if (socketRef.current) {
+          socketRef.current.emit('full-sync', { elements: next.elements || elementsRef.current });
+        }
       }
-    } else {
-      if (next.elements) setElements(next.elements);
-      if (next.beatCards) setBeatCards(next.beatCards);
-      if (next.structureBeats) setStructureBeats(next.structureBeats);
-      if (next.sceneSynopsis) setSceneSynopsis(next.sceneSynopsis);
-      if (next.sceneStatus) setSceneStatus(next.sceneStatus);
-      if (socketRef.current && connected && canEdit) {
-        socketRef.current.emit('full-sync', { elements: next.elements || elements });
-      }
-    }
-  }, [redoStack, elements, beatCards, structureBeats, sceneSynopsis, sceneStatus, connected, canEdit]);
+
+      return prev.slice(0, -1);
+    });
+  }, []); // Stable — reads from refs and uses functional updaters
 
   // Duplicate scene function (moved here for proper hoisting)
   const duplicateScene = useCallback((sceneIndex) => {
@@ -7772,7 +7781,7 @@ export default function ScreenplayEditor() {
     // Use capture phase to ensure we get the event before TipTap/ProseMirror
     window.addEventListener('keydown', handleGlobalKeyDown, true);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
-  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, token, docId, title, elements, activeIndex, undo, redo, duplicateScene, activeView]);
+  }, [showSearch, showOutline, showNoteFor, showCharactersPanel, showShortcuts, showRenameChar, showGoToScene, token, docId, title, elements, activeIndex, undo, redo, duplicateScene, activeView, createSnapshot]);
 
   // Typewriter sound effect - placeholder for custom audio files
   // To add real typewriter sounds, place audio files in public folder and update URLs below
@@ -7835,29 +7844,29 @@ export default function ScreenplayEditor() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [typewriterSound, playTypewriterSound]);
 
-  const updateElement = useCallback((i, el, skipUndo = false) => { 
+  const updateElement = useCallback((i, el, skipUndo = false) => {
     if (!skipUndo) pushToUndo();
-    setElements(p => { const u = [...p]; u[i] = el; return u; }); 
-    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el }); 
+    setElements(p => { const u = [...p]; u[i] = el; return u; });
+    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el });
     setLastSaved(new Date());
     setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
-  }, [connected, canEdit, elements, pushToUndo, currentUser]);
-  const insertElement = useCallback((after, type) => { 
+  }, [connected, canEdit, pushToUndo, currentUser]);
+  const insertElement = useCallback((after, type) => {
     pushToUndo();
-    const el = { id: generateId(), type, content: '' }; 
-    setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; }); 
-    setActiveIndex(after + 1); 
-    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-insert', { afterIndex: after, element: el }); 
+    const el = { id: generateId(), type, content: '' };
+    setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; });
+    setActiveIndex(after + 1);
+    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-insert', { afterIndex: after, element: el });
     setLastSaved(new Date());
-  }, [connected, canEdit, elements, pushToUndo]);
-  const deleteElement = useCallback(i => { 
-    if (elements.length === 1) return; 
+  }, [connected, canEdit, pushToUndo]);
+  const deleteElement = useCallback(i => {
+    if (elementsRef.current.length === 1) return;
     pushToUndo();
-    setElements(p => p.filter((_, idx) => idx !== i)); 
-    setActiveIndex(Math.max(0, i - 1)); 
-    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-delete', { index: i }); 
+    setElements(p => p.filter((_, idx) => idx !== i));
+    setActiveIndex(Math.max(0, i - 1));
+    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-delete', { index: i });
     setLastSaved(new Date());
-  }, [elements, connected, canEdit, pushToUndo]);
+  }, [connected, canEdit, pushToUndo]);
   const changeType = useCallback((i, t) => { setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-type-change', { index: i, type: t }); }, [connected, canEdit]);
   const handleCursor = useCallback((i, pos) => { if (socketRef.current && connected) socketRef.current.emit('cursor-move', { index: i, position: pos }); }, [connected]);
   const handleSelectChar = useCallback((i, name) => { updateElement(i, { ...elements[i], content: name }); setTimeout(() => insertElement(i, 'dialogue'), 50); }, [elements, updateElement, insertElement]);
@@ -7894,6 +7903,7 @@ export default function ScreenplayEditor() {
   }, [elements, connected, canEdit]);
 
   // Move scene (drag & drop)
+  // eslint-disable-next-line no-unused-vars
   const moveScene = useCallback((fromSceneIndex, toSceneIndex) => {
     if (fromSceneIndex === toSceneIndex) return;
     
@@ -8245,6 +8255,7 @@ export default function ScreenplayEditor() {
   };
 
   // ============ BULK SAVE (for existing doc) ============
+  // eslint-disable-next-line no-unused-vars
   const bulkSave = async () => {
     if (!token || !docId) return;
     try {
