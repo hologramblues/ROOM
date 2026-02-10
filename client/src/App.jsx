@@ -3077,9 +3077,17 @@ const RenameCharacterModal = ({ characters, onRename, onClose, darkMode, t = (k)
   );
 };
 
+// ============ FONT OPTIONS ============
+const FONT_OPTIONS = {
+  'courier-prime': { family: "'Courier Prime', 'Courier New', monospace", label: 'Courier Prime' },
+  'courier-new': { family: "'Courier New', Courier, monospace", label: 'Courier New' },
+  'courier': { family: "Courier, 'Courier New', monospace", label: 'Courier' },
+};
+const getFontFamily = (key) => FONT_OPTIONS[key]?.family || FONT_OPTIONS['courier-prime'].family;
+
 // ============ ELEMENT STYLES ============
-const getElementStyle = (type) => {
-  const base = { fontFamily: 'Courier Prime, Courier New, monospace', fontSize: '12pt', lineHeight: '1', outline: 'none', border: 'none', width: '100%', background: 'transparent', resize: 'none', padding: 0, margin: 0, display: 'block', minHeight: '1em' };
+const getElementStyle = (type, fontKey) => {
+  const base = { fontFamily: getFontFamily(fontKey), fontSize: '12pt', lineHeight: '1', outline: 'none', border: 'none', width: '100%', background: 'transparent', resize: 'none', padding: 0, margin: 0, display: 'block', minHeight: '1em' };
   switch (type) {
     case 'scene': return { ...base, textTransform: 'uppercase', fontWeight: 'bold', marginTop: '2.5em', marginBottom: '0.5em' };
     case 'action': return { ...base, marginTop: '1em', marginBottom: 0, lineHeight: '1.1' };
@@ -3184,7 +3192,7 @@ const renderContentWithHighlights = (content, highlights) => {
 // Empty array constant to avoid creating new arrays on each render
 const emptyHighlights = [];
 
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset, t = (k) => k }) => {
+const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset, scriptFont, t = (k) => k }) => {
   const containerRef = useRef(null);
   const updateTimeoutRef = useRef(null); // For debouncing updates
   const [showAuto, setShowAuto] = useState(false);
@@ -3291,7 +3299,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       attributes: {
         'data-element-id': element.id,
         'data-placeholder': getPlaceholder(element.type),
-        style: buildStyleString(element.type, canEdit, isLocked),
+        style: buildStyleString(element.type, canEdit, isLocked, scriptFont),
       },
       
       // Handle keyboard events
@@ -3590,12 +3598,12 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       
       {/* Scene number left */}
       {element.type === 'scene' && showSceneNumbers && sceneNumber && (
-        <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: 'inherit', fontWeight: 'bold' }}>{sceneNumber}</span>
+        <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: getFontFamily(scriptFont), color: 'inherit', fontWeight: 'bold' }}>{sceneNumber}</span>
       )}
       
       {/* Scene number right */}
       {element.type === 'scene' && showSceneNumbers && sceneNumber && (
-        <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: 'Courier Prime, monospace', color: 'inherit', fontWeight: 'bold' }}>{sceneNumber}</span>
+        <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: getFontFamily(scriptFont), color: 'inherit', fontWeight: 'bold' }}>{sceneNumber}</span>
       )}
       
       {/* Note indicator */}
@@ -3624,7 +3632,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
             <div
               key={s}
               onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }}
-              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#3a3a3a' : '#1e1e1e', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
+              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#3a3a3a' : '#1e1e1e', color: '#e0e0e0', fontFamily: getFontFamily(scriptFont), fontSize: '12pt' }}
             >
               {s}
             </div>
@@ -3639,7 +3647,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
             <div
               key={s}
               onClick={() => { onSelectLocation(index, s); setShowAuto(false); }}
-              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#3a3a3a' : '#1e1e1e', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
+              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#3a3a3a' : '#1e1e1e', color: '#e0e0e0', fontFamily: getFontFamily(scriptFont), fontSize: '12pt' }}
             >
               {s}
             </div>
@@ -3663,13 +3671,14 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     prevProps.highlights === nextProps.highlights &&
     prevProps.note === nextProps.note &&
     prevProps.initialCursorOffset === nextProps.initialCursorOffset &&
-    prevProps.remoteCursors === nextProps.remoteCursors
+    prevProps.remoteCursors === nextProps.remoteCursors &&
+    prevProps.scriptFont === nextProps.scriptFont
   );
 });
 
 // Helper to build style string for TipTap editor
-function buildStyleString(elementType, canEdit, isLocked) {
-  const base = getElementStyle(elementType);
+function buildStyleString(elementType, canEdit, isLocked, fontKey) {
+  const base = getElementStyle(elementType, fontKey);
   // Character/dialogue/parenthetical: tight minHeight to avoid gaps between name and line
   const tightTypes = ['character', 'dialogue', 'parenthetical'];
   const styles = {
@@ -5821,6 +5830,7 @@ export default function ScreenplayEditor() {
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
+  const [scriptFont, setScriptFont] = useState(() => localStorage.getItem('rooms-script-font') || 'courier-prime');
   const [language, setLanguage] = useState(() => localStorage.getItem('rooms-language') || 'fr');
   
   // Translation function
@@ -8759,6 +8769,13 @@ export default function ScreenplayEditor() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
                   {t('sceneNumbers')} {showSceneNumbers && '✓'}
                 </button>
+                {/* Font selector */}
+                {Object.entries(FONT_OPTIONS).map(([key, { label }]) => (
+                  <button key={key} onClick={() => { setScriptFont(key); localStorage.setItem('rooms-script-font', key); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: scriptFont === key ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                    {label} {scriptFont === key && '✓'}
+                  </button>
+                ))}
                 <div style={{ height: 1, background: darkMode ? '#484848' : '#e5e7eb', margin: '4px 0' }} />
                 <button onClick={() => { setChatNotificationSound(!chatNotificationSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: chatNotificationSound ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -9808,6 +9825,7 @@ export default function ScreenplayEditor() {
                       onTextSelect={handleTextSelectCb}
                       onHighlightClick={handleHighlightClick}
                       onSuggestionClick={handleSuggestionClickCb}
+                      scriptFont={scriptFont}
                       t={t}
                     />
                   </div>
