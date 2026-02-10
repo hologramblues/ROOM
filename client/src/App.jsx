@@ -5927,113 +5927,55 @@ export default function ScreenplayEditor() {
 
   // Simple 1:1 scroll sync between Script and Comments (like they're glued together)
   // + Scene-based sync between Script and Outline
-  // DISABLED on Safari due to performance issues
+  // Scroll sync for script <-> comments <-> outline (works on all browsers including Safari)
   useEffect(() => {
     const script = scriptContainerRef.current;
     if (!script) return;
-    
-    // Detect Safari for this effect
-    const safariDetected = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    
-    // On Safari, completely disable scroll sync for comments - it causes too much jank
-    // Users can scroll each panel independently
-    if (safariDetected && showComments) {
-      // Only keep outline sync on Safari, skip comments sync entirely
-      let isScrollingOutline = false;
-      let outlineRAF = null;
-      let lastTopScene = null;
-      
-      const findTopSceneInScript = () => {
-        const scriptRect = script.getBoundingClientRect();
-        const sceneElements = script.querySelectorAll('[data-element-index]');
-        
-        for (const el of sceneElements) {
-          const idx = parseInt(el.getAttribute('data-element-index'), 10);
-          if (isNaN(idx) || elementsRef.current[idx]?.type !== 'scene') continue;
-          
-          const rect = el.getBoundingClientRect();
-          if (rect.top >= scriptRect.top - 50 && rect.top <= scriptRect.top + 150) {
-            return idx;
-          }
-          if (rect.bottom > scriptRect.top + 50) {
-            return idx;
-          }
-        }
-        return null;
-      };
-      
-      const scrollOutlineToScene = (sceneIndex) => {
-        const outline = outlineSidebarRef.current;
-        if (!outline) return;
-        const sceneEl = outline.querySelector(`[data-outline-element-index="${sceneIndex}"]`);
-        if (sceneEl) {
-          const outlineRect = outline.getBoundingClientRect();
-          const sceneRect = sceneEl.getBoundingClientRect();
-          const targetScroll = outline.scrollTop + (sceneRect.top - outlineRect.top) - 10;
-          outline.scrollTop = Math.max(0, targetScroll);
-        }
-      };
-      
-      const handleScriptScroll = () => {
-        const outline = outlineSidebarRef.current;
-        // Only sync outline, NOT comments
-        if (!isScrollingOutline && outline) {
-          if (outlineRAF) cancelAnimationFrame(outlineRAF);
-          outlineRAF = requestAnimationFrame(() => {
-            const topScene = findTopSceneInScript();
-            if (topScene !== null && topScene !== lastTopScene) {
-              lastTopScene = topScene;
-              isScrollingOutline = true;
-              scrollOutlineToScene(topScene);
-              setTimeout(() => { isScrollingOutline = false; }, 200);
-            }
-          });
-        }
-      };
-      
-      script.addEventListener('scroll', handleScriptScroll, { passive: true });
-      
-      return () => {
-        script.removeEventListener('scroll', handleScriptScroll);
-        if (outlineRAF) cancelAnimationFrame(outlineRAF);
-      };
-    }
-    
-    // Chrome/Firefox: Full scroll sync
-    let isScrollingComments = false;
-    let isScrollingOutline = false;
+
+    const isSafariSync = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+    // Use a timestamp-based lock instead of RAF flag to prevent scroll loops on Safari
+    // Safari fires scroll events asynchronously, so RAF-based flags can miss the loop
+    let scrollSource = null; // 'script' | 'comments' | 'outline' | null
+    let lockTimeout = null;
+    const LOCK_MS = isSafariSync ? 60 : 0; // Safari needs a brief lock window
+
+    const acquireLock = (source) => {
+      if (scrollSource && scrollSource !== source) return false;
+      scrollSource = source;
+      if (lockTimeout) clearTimeout(lockTimeout);
+      lockTimeout = setTimeout(() => { scrollSource = null; }, LOCK_MS);
+      return true;
+    };
+
     let outlineRAF = null;
     let lastTopScene = null;
-    
-    // Find which scene element is at the top of the script viewport
+
     const findTopSceneInScript = () => {
       const scriptRect = script.getBoundingClientRect();
       const sceneElements = script.querySelectorAll('[data-element-index]');
-      
+
       for (const el of sceneElements) {
         const idx = parseInt(el.getAttribute('data-element-index'), 10);
         if (isNaN(idx) || elementsRef.current[idx]?.type !== 'scene') continue;
-        
+
         const rect = el.getBoundingClientRect();
-        // Scene is at or near the top of the viewport
         if (rect.top >= scriptRect.top - 50 && rect.top <= scriptRect.top + 150) {
           return idx;
         }
-        // First scene that's below the top (we've scrolled past it)
         if (rect.bottom > scriptRect.top + 50) {
           return idx;
         }
       }
       return null;
     };
-    
-    // Find which scene is at the top of the outline
+
     const findTopSceneInOutline = () => {
       const outline = outlineSidebarRef.current;
       if (!outline) return null;
       const outlineRect = outline.getBoundingClientRect();
       const sceneElements = outline.querySelectorAll('[data-outline-element-index]');
-      
+
       for (const el of sceneElements) {
         const rect = el.getBoundingClientRect();
         if (rect.top >= outlineRect.top - 20 && rect.top <= outlineRect.top + 80) {
@@ -6045,8 +5987,7 @@ export default function ScreenplayEditor() {
       }
       return null;
     };
-    
-    // Scroll outline to show a specific scene at top
+
     const scrollOutlineToScene = (sceneIndex) => {
       const outline = outlineSidebarRef.current;
       if (!outline) return;
@@ -6058,8 +5999,7 @@ export default function ScreenplayEditor() {
         outline.scrollTop = Math.max(0, targetScroll);
       }
     };
-    
-    // Scroll script to show a specific scene at top
+
     const scrollScriptToScene = (sceneIndex) => {
       const sceneEl = script.querySelector(`[data-element-index="${sceneIndex}"]`);
       if (sceneEl) {
@@ -6069,72 +6009,59 @@ export default function ScreenplayEditor() {
         script.scrollTop = Math.max(0, targetScroll);
       }
     };
-    
+
     const handleScriptScroll = () => {
+      if (!acquireLock('script')) return;
+
       const comments = commentsSidebarRef.current;
       const outline = outlineSidebarRef.current;
-      
+
       // 1:1 sync with comments
-      if (!isScrollingComments && comments) {
-        isScrollingComments = true;
+      if (comments) {
         comments.scrollTop = script.scrollTop;
-        requestAnimationFrame(() => { isScrollingComments = false; });
       }
-      
+
       // Scene-based sync with outline (throttled)
-      if (!isScrollingOutline && outline) {
+      if (outline) {
         if (outlineRAF) cancelAnimationFrame(outlineRAF);
         outlineRAF = requestAnimationFrame(() => {
           const topScene = findTopSceneInScript();
           if (topScene !== null && topScene !== lastTopScene) {
             lastTopScene = topScene;
-            isScrollingOutline = true;
             scrollOutlineToScene(topScene);
-            setTimeout(() => { isScrollingOutline = false; }, 100);
           }
         });
       }
     };
-    
+
     const handleCommentsScroll = () => {
-      const comments = commentsSidebarRef.current;
-      if (!comments) return;
-      
-      if (!isScrollingComments) {
-        isScrollingComments = true;
-        script.scrollTop = comments.scrollTop;
-        requestAnimationFrame(() => { isScrollingComments = false; });
-      }
+      if (!acquireLock('comments')) return;
+      script.scrollTop = commentsSidebarRef.current.scrollTop;
     };
-    
+
     const handleOutlineScroll = () => {
-      if (isScrollingOutline) return;
-      
+      if (!acquireLock('outline')) return;
+
       if (outlineRAF) cancelAnimationFrame(outlineRAF);
       outlineRAF = requestAnimationFrame(() => {
         const topScene = findTopSceneInOutline();
         if (topScene !== null && topScene !== lastTopScene) {
           lastTopScene = topScene;
-          isScrollingOutline = true;
           scrollScriptToScene(topScene);
-          // Comments will follow via the 1:1 sync (triggered by script scroll)
-          setTimeout(() => { isScrollingOutline = false; }, 100);
         }
       });
     };
-    
+
     // Attach listeners
     script.addEventListener('scroll', handleScriptScroll, { passive: true });
-    
-    // We need to attach outline/comments listeners when they become available
-    // Use a MutationObserver or just check periodically
+
     let commentsListener = null;
     let outlineListener = null;
-    
+
     const attachListeners = () => {
       const comments = commentsSidebarRef.current;
       const outline = outlineSidebarRef.current;
-      
+
       if (comments && !commentsListener) {
         commentsListener = handleCommentsScroll;
         comments.addEventListener('scroll', commentsListener, { passive: true });
@@ -6144,21 +6071,16 @@ export default function ScreenplayEditor() {
         outline.addEventListener('scroll', outlineListener, { passive: true });
       }
     };
-    
-    // Initial attach
+
     attachListeners();
-    
-    // Re-check after a short delay (in case panels just mounted)
     const attachTimeout = setTimeout(attachListeners, 100);
     const attachTimeout2 = setTimeout(attachListeners, 500);
-    
-    // Capture ref values now for cleanup (React warns about using refs in cleanup)
+
     const commentsEl = commentsSidebarRef.current;
     const outlineEl = outlineSidebarRef.current;
 
     return () => {
       script.removeEventListener('scroll', handleScriptScroll);
-
       if (commentsEl && commentsListener) {
         commentsEl.removeEventListener('scroll', commentsListener);
       }
@@ -6166,10 +6088,11 @@ export default function ScreenplayEditor() {
         outlineEl.removeEventListener('scroll', outlineListener);
       }
       if (outlineRAF) cancelAnimationFrame(outlineRAF);
+      if (lockTimeout) clearTimeout(lockTimeout);
       clearTimeout(attachTimeout);
       clearTimeout(attachTimeout2);
     };
-  }, [showComments, showOutline]); // Removed 'elements' — uses elementsRef instead
+  }, [showComments, showOutline]);
 
   // Track script's scrollHeight for comments sidebar min-height
   useEffect(() => {
