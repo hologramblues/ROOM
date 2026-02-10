@@ -8114,12 +8114,10 @@ export default function ScreenplayEditor() {
     
     if (e.key === 'Tab') {
       e.preventDefault();
-      const prev = index > 0 ? elements[index - 1] : null;
-      const fromDial = prev && (prev.type === 'dialogue' || prev.type === 'parenthetical');
-      // After dialogue: character <-> action <-> scene cycle
-      if (el.type === 'action') changeType(index, fromDial ? (e.shiftKey ? 'character' : 'scene') : (e.shiftKey ? 'scene' : 'character'));
-      else if (el.type === 'character') changeType(index, fromDial ? (e.shiftKey ? 'scene' : 'action') : (e.shiftKey ? 'action' : 'scene'));
-      else if (el.type === 'scene') changeType(index, fromDial ? (e.shiftKey ? 'action' : 'character') : (e.shiftKey ? 'character' : 'action'));
+      // Tab cycle: action -> character -> scene (Tab), reverse with Shift+Tab
+      if (el.type === 'action') changeType(index, e.shiftKey ? 'scene' : 'character');
+      else if (el.type === 'character') changeType(index, e.shiftKey ? 'action' : 'scene');
+      else if (el.type === 'scene') changeType(index, e.shiftKey ? 'character' : 'action');
       else if (el.type === 'dialogue' && !e.shiftKey) changeType(index, 'parenthetical');
       else if (el.type === 'parenthetical' && !e.shiftKey) { if (el.content.trim()) { let c = el.content.trim(); if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } changeType(index, 'dialogue'); }
     }

@@ -11,3 +11,13 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Remove TipTap/ProseMirror default paragraph margins for tight character/dialogue spacing */
+.ProseMirror {
+  margin: 0;
+  padding: 0;
+}
+.ProseMirror p {
+  margin: 0;
+  padding: 0;
+}
