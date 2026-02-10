@@ -8853,8 +8853,41 @@ export default function ScreenplayEditor() {
               Beat Board
             </button>
           </div>
+
+          {/* ELEMENT TYPE SELECTOR - only visible in script view when an element is active */}
+          {activeView === 'script' && activeIndex !== null && activeIndex >= 0 && elements[activeIndex] && (
+            <div style={{ display: 'flex', marginLeft: 8, background: darkMode ? '#484848' : '#e5e7eb', borderRadius: 6, padding: 2, alignItems: 'center' }}>
+              {[
+                { type: 'scene', label: 'Scène' },
+                { type: 'action', label: 'Action' },
+                { type: 'character', label: 'Perso' },
+                { type: 'dialogue', label: 'Dial.' },
+                { type: 'parenthetical', label: 'Paren.' },
+                { type: 'transition', label: 'Trans.' },
+              ].map(({ type, label }) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); changeType(activeIndex, type); }}
+                  style={{
+                    padding: '4px 8px',
+                    border: 'none',
+                    borderRadius: 4,
+                    background: elements[activeIndex].type === type ? (darkMode ? '#2563eb' : '#2563eb') : 'transparent',
+                    color: elements[activeIndex].type === type ? 'white' : (darkMode ? '#aaa' : '#6b7280'),
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: elements[activeIndex].type === type ? 600 : 400,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        
+
         {/* CENTER ZONE: Title only */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center', minWidth: 0 }}>
           <div className="header-btn" data-tooltip={title} style={{ position: 'relative' }}>
@@ -9719,7 +9752,7 @@ export default function ScreenplayEditor() {
                   </div>
                   
                   {page.elements.map(({ element, index }) => (
-                    <div key={element.id} data-element-index={index}>
+                    <div key={element.id} data-element-index={index} style={activeIndex === index ? { position: 'relative', zIndex: 10 } : undefined}>
                       <SceneLine 
                       element={element} 
                       index={index} 
