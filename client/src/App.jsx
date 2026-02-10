@@ -3670,13 +3670,15 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
 // Helper to build style string for TipTap editor
 function buildStyleString(elementType, canEdit, isLocked) {
   const base = getElementStyle(elementType);
+  // Character/dialogue/parenthetical: tight minHeight to avoid gaps between name and line
+  const tightTypes = ['character', 'dialogue', 'parenthetical'];
   const styles = {
     ...base,
     cursor: canEdit ? 'text' : 'default',
     opacity: canEdit ? 1 : 0.7,
     background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
     whiteSpace: 'pre-wrap',
-    minHeight: '1.5em',
+    minHeight: tightTypes.includes(elementType) ? '1em' : '1.5em',
     outline: 'none',
   };
   return Object.entries(styles)
