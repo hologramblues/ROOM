@@ -5850,6 +5850,7 @@ export default function ScreenplayEditor() {
   const [showLanguageSubmenu, setShowLanguageSubmenu] = useState(false);
   const [lockedScenes, setLockedScenes] = useState(new Set()); // Set of scene element IDs
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showTypeMenu, setShowTypeMenu] = useState(false);
   const [showRenameChar, setShowRenameChar] = useState(false);
   // renameFrom/renameTo removed — unused
   const [focusMode, setFocusMode] = useState(false);
@@ -8854,36 +8855,66 @@ export default function ScreenplayEditor() {
             </button>
           </div>
 
-          {/* ELEMENT TYPE SELECTOR - only visible in script view when an element is active */}
+          {/* ELEMENT TYPE SELECTOR - compact dropdown */}
           {activeView === 'script' && activeIndex !== null && activeIndex >= 0 && elements[activeIndex] && (
-            <div style={{ display: 'flex', marginLeft: 8, background: darkMode ? '#484848' : '#e5e7eb', borderRadius: 6, padding: 2, alignItems: 'center' }}>
-              {[
-                { type: 'scene', label: 'Scène' },
-                { type: 'action', label: 'Action' },
-                { type: 'character', label: 'Perso' },
-                { type: 'dialogue', label: 'Dial.' },
-                { type: 'parenthetical', label: 'Paren.' },
-                { type: 'transition', label: 'Trans.' },
-              ].map(({ type, label }) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); changeType(activeIndex, type); }}
-                  style={{
-                    padding: '4px 8px',
-                    border: 'none',
-                    borderRadius: 4,
-                    background: elements[activeIndex].type === type ? (darkMode ? '#2563eb' : '#2563eb') : 'transparent',
-                    color: elements[activeIndex].type === type ? 'white' : (darkMode ? '#aaa' : '#6b7280'),
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontWeight: elements[activeIndex].type === type ? 600 : 400,
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+            <div style={{ position: 'relative', marginLeft: 8 }}>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowTypeMenu(!showTypeMenu); }}
+                style={{
+                  padding: '5px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: darkMode ? '#484848' : '#e5e7eb',
+                  color: darkMode ? 'white' : '#333',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                {{ scene: 'Scène', action: 'Action', character: 'Personnage', dialogue: 'Dialogue', parenthetical: 'Parenthèse', transition: 'Transition' }[elements[activeIndex].type] || elements[activeIndex].type}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              {showTypeMenu && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setShowTypeMenu(false)} />
+                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: darkMode ? '#1e1e1e' : 'white', border: `1px solid ${darkMode ? '#555' : '#ddd'}`, borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.3)', zIndex: 1000, minWidth: 150, overflow: 'hidden' }}>
+                    {[
+                      { type: 'scene', label: 'Scène' },
+                      { type: 'action', label: 'Action' },
+                      { type: 'character', label: 'Personnage' },
+                      { type: 'dialogue', label: 'Dialogue' },
+                      { type: 'parenthetical', label: 'Parenthèse' },
+                      { type: 'transition', label: 'Transition' },
+                    ].map(({ type, label }) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); changeType(activeIndex, type); setShowTypeMenu(false); }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 14px',
+                          border: 'none',
+                          background: elements[activeIndex].type === type ? (darkMode ? '#2563eb' : '#2563eb') : 'transparent',
+                          color: elements[activeIndex].type === type ? 'white' : (darkMode ? '#e0e0e0' : '#333'),
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          fontWeight: elements[activeIndex].type === type ? 600 : 400,
+                          textAlign: 'left',
+                          display: 'block',
+                        }}
+                        onMouseOver={(e) => { if (elements[activeIndex].type !== type) e.target.style.background = darkMode ? '#333' : '#f3f4f6'; }}
+                        onMouseOut={(e) => { if (elements[activeIndex].type !== type) e.target.style.background = 'transparent'; }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
