@@ -3083,16 +3083,16 @@ const getElementStyle = (type) => {
   switch (type) {
     case 'scene': return { ...base, textTransform: 'uppercase', fontWeight: 'bold', marginTop: '2.5em', marginBottom: '0.5em' };
     case 'action': return { ...base, marginTop: '1em', marginBottom: 0, lineHeight: '1.1' };
-    case 'character': return { ...base, textTransform: 'uppercase', fontWeight: 'bold', marginLeft: '37%', width: '30%', marginTop: '1em', marginBottom: 0 };
-    case 'dialogue': return { ...base, marginLeft: '17%', width: '42%', marginTop: 0, marginBottom: 0, lineHeight: '1.1' };
-    case 'parenthetical': return { ...base, marginLeft: '27%', width: '25%', fontStyle: 'italic', marginTop: 0, marginBottom: 0 };
+    case 'character': return { ...base, textTransform: 'uppercase', fontWeight: 'normal', marginLeft: '37%', width: '30%', marginTop: '1em', marginBottom: '0', lineHeight: '1' };
+    case 'dialogue': return { ...base, marginLeft: '17%', width: '42%', marginTop: '0', marginBottom: '0', lineHeight: '1.1' };
+    case 'parenthetical': return { ...base, marginLeft: '27%', width: '25%', fontStyle: 'italic', marginTop: '0', marginBottom: '0' };
     case 'transition': return { ...base, textTransform: 'uppercase', textAlign: 'right', marginTop: '1em' };
     default: return base;
   }
 };
 
 const getPlaceholder = (type) => ({ scene: 'INT./EXT. LIEU - JOUR/NUIT', action: "Description de l'action...", character: 'NOM DU PERSONNAGE', dialogue: 'Réplique du personnage...', parenthetical: '(indication de jeu)', transition: 'CUT TO:' }[type] || '');
-const getNextType = (t) => ({ scene: 'action', action: 'action', character: 'dialogue', dialogue: 'character', parenthetical: 'dialogue', transition: 'scene' }[t] || 'action');
+const getNextType = (t) => ({ scene: 'action', action: 'action', character: 'dialogue', dialogue: 'action', parenthetical: 'dialogue', transition: 'scene' }[t] || 'action');
 
 // ============ REMOTE CURSOR ============
 const RemoteCursor = ({ user }) => (
