@@ -3607,10 +3607,10 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         >📝</div>
       )}
       
-      {/* Element type label when active */}
-      {isActive && (
-        <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: isLocked ? '#f59e0b' : '#888', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-          {isLocked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>}{t(element.type)}
+      {/* Lock icon when active and locked (type label removed — shown elsewhere) */}
+      {isActive && isLocked && (
+        <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: '#f59e0b', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         </span>
       )}
       
@@ -3619,27 +3619,27 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       
       {/* Character autocomplete dropdown */}
       {autoType === 'character' && showAuto && (
-        <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200 }}>
+        <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#1e1e1e', border: '1px solid #555', borderRadius: 6, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200, boxShadow: '0 4px 16px rgba(0,0,0,0.6)' }}>
           {filtered.map((s, i) => (
-            <div 
-              key={s} 
-              onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }} 
-              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
+            <div
+              key={s}
+              onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }}
+              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#3a3a3a' : '#1e1e1e', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
             >
               {s}
             </div>
           ))}
         </div>
       )}
-      
+
       {/* Location autocomplete dropdown */}
       {autoType === 'location' && showAuto && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, background: '#2d2d2d', border: '1px solid #444', borderRadius: 4, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 250 }}>
+        <div style={{ position: 'absolute', top: '100%', left: 0, background: '#1e1e1e', border: '1px solid #555', borderRadius: 6, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 250, boxShadow: '0 4px 16px rgba(0,0,0,0.6)' }}>
           {filtered.map((s, i) => (
-            <div 
-              key={s} 
-              onClick={() => { onSelectLocation(index, s); setShowAuto(false); }} 
-              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#4a4a4a' : 'transparent', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
+            <div
+              key={s}
+              onClick={() => { onSelectLocation(index, s); setShowAuto(false); }}
+              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#3a3a3a' : '#1e1e1e', color: '#e0e0e0', fontFamily: 'Courier Prime, monospace', fontSize: '12pt' }}
             >
               {s}
             </div>
