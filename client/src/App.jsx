@@ -8611,7 +8611,9 @@ export default function ScreenplayEditor() {
     a.click();
   };
 
-  const copyLink = () => { navigator.clipboard.writeText(window.location.origin + '/#' + docId); alert('Lien copié !'); };
+  const [showShareModal, setShowShareModal] = useState(false);
+  const shareLink = window.location.origin + '/#' + docId;
+  const copyLink = () => { setShowShareModal(true); };
 
   // Show landing page if not logged in (no token)
   if (!token && (!docId || docId === '' || docId === 'local')) {
@@ -9501,18 +9503,89 @@ export default function ScreenplayEditor() {
               {t('conflictMessage')}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <button onClick={() => pushOfflineChanges(true)} style={{
-                padding: '10px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: '#ef4444', color: 'white', fontSize: 13, fontWeight: 600,
-              }}>{t('conflictOverwrite')}</button>
+              {/* Only show overwrite if doc is NOT shared with others */}
+              {collaborators.length <= 1 && (
+                <button onClick={() => pushOfflineChanges(true)} style={{
+                  padding: '10px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  background: '#ef4444', color: 'white', fontSize: 13, fontWeight: 600,
+                }}>{t('conflictOverwrite')}</button>
+              )}
               <button onClick={discardOfflineCopy} style={{
                 padding: '10px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
                 background: darkMode ? '#484848' : '#f3f4f6', color: darkMode ? 'white' : '#1a1a1a', fontSize: 13, fontWeight: 600,
               }}>{t('conflictKeepOnline')}</button>
               <button onClick={() => { window.open(window.location.href, '_blank'); setShowConflictModal(false); }} style={{
                 padding: '10px 16px', borderRadius: 8, border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, cursor: 'pointer',
-                background: 'transparent', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: 13,
+                background: darkMode ? '#3b82f6' : '#2563eb', color: 'white', fontSize: 13, fontWeight: 600,
               }}>{t('conflictCompare')}</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* SHARE LINK MODAL */}
+      {showShareModal && (
+        <>
+          <div onClick={() => setShowShareModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 9999 }} />
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: darkMode ? '#2b2b2b' : 'white',
+            borderRadius: 12,
+            padding: 24,
+            width: 440,
+            maxWidth: '90vw',
+            zIndex: 10000,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: darkMode ? 'white' : '#1a1a1a' }}>{t('invite')}</span>
+              <button onClick={() => setShowShareModal(false)} style={{ background: 'none', border: 'none', color: darkMode ? '#9ca3af' : '#6b7280', cursor: 'pointer', fontSize: 18 }}>&times;</button>
+            </div>
+            <p style={{ fontSize: 12, color: darkMode ? '#9ca3af' : '#6b7280', marginBottom: 12 }}>
+              {language === 'fr' ? 'Partagez ce lien pour inviter des collaborateurs :' : 'Share this link to invite collaborators:'}
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                readOnly
+                value={shareLink}
+                onClick={e => e.target.select()}
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
+                  background: darkMode ? '#1a1a1a' : '#f9fafb',
+                  color: darkMode ? '#e0e0e0' : '#1a1a1a',
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(shareLink);
+                  const btn = document.getElementById('share-copy-btn');
+                  if (btn) { btn.textContent = language === 'fr' ? 'Copié !' : 'Copied!'; setTimeout(() => { btn.textContent = language === 'fr' ? 'Copier' : 'Copy'; }, 2000); }
+                }}
+                id="share-copy-btn"
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: '#3b82f6',
+                  color: 'white',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {language === 'fr' ? 'Copier' : 'Copy'}
+              </button>
             </div>
           </div>
         </>
