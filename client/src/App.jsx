@@ -607,7 +607,7 @@ const ELEMENT_TYPES = [
 
 const TYPE_TO_FDX = { scene: 'Scene Heading', action: 'Action', character: 'Character', dialogue: 'Dialogue', parenthetical: 'Parenthetical', transition: 'Transition' };
 const FDX_TO_TYPE = { 'Scene Heading': 'scene', 'Action': 'action', 'Character': 'character', 'Dialogue': 'dialogue', 'Parenthetical': 'parenthetical', 'Transition': 'transition', 'General': 'action' };
-const LINES_PER_PAGE = 55;
+const LINES_PER_PAGE = 57;
 
 // ============ AUTH MODAL ============
 const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
@@ -6783,10 +6783,10 @@ export default function ScreenplayEditor() {
     const result = [];
     let currentPage = { number: 1, elements: [] };
     let h = 0;
-    const getLines = el => { 
-      const l = el.content ? Math.ceil(el.content.length / 60) : 1; 
-      const e = { scene: 2, action: 1, character: 2, dialogue: 0.5, parenthetical: 1, transition: 2 }; 
-      return l + (e[el.type] || 0); 
+    const getLines = el => {
+      const l = el.content ? Math.ceil(el.content.length / 60) : 1;
+      const e = { scene: 1.5, action: 1, character: 1, dialogue: 0, parenthetical: 0, transition: 1.5 };
+      return l + (e[el.type] || 0);
     };
     
     elements.forEach((el, idx) => {
