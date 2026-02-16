@@ -6788,22 +6788,44 @@ export default function ScreenplayEditor() {
       const e = { scene: 1.5, action: 1, character: 1, dialogue: 0, parenthetical: 0, transition: 1.5 };
       return l + (e[el.type] || 0);
     };
-    
+
     elements.forEach((el, idx) => {
       const lines = getLines(el);
       if (h + lines > LINES_PER_PAGE && currentPage.elements.length > 0) {
+        // Before breaking, check if the last element(s) on this page are orphans
+        // Rule 1: scene heading alone at bottom → push to next page
+        // Rule 2: character (+ optional parenthetical) without dialogue → push to next page
+        let orphanCount = 0;
+        const items = currentPage.elements;
+        const last = items[items.length - 1]?.element;
+        if (last && last.type === 'scene') {
+          orphanCount = 1;
+        } else if (last && last.type === 'character') {
+          orphanCount = 1;
+        } else if (last && last.type === 'parenthetical' && items.length >= 2 && items[items.length - 2]?.element.type === 'character') {
+          orphanCount = 2; // character + parenthetical without dialogue
+        }
+
+        const orphans = orphanCount > 0 ? items.splice(items.length - orphanCount, orphanCount) : [];
+        // Recalc height after removing orphans
+        if (orphanCount > 0) {
+          h = 0;
+          items.forEach(it => { h += getLines(it.element); });
+        }
+
         result.push(currentPage);
-        currentPage = { number: currentPage.number + 1, elements: [] };
+        currentPage = { number: currentPage.number + 1, elements: [...orphans] };
         h = 0;
+        orphans.forEach(o => { h += getLines(o.element); });
       }
       currentPage.elements.push({ element: el, index: idx });
       h += lines;
     });
-    
+
     if (currentPage.elements.length > 0) {
       result.push(currentPage);
     }
-    
+
     return result;
   }, [elements]);
 
