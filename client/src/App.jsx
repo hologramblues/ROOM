@@ -5845,6 +5845,7 @@ export default function ScreenplayEditor() {
   const [pendingSuggestion, setPendingSuggestion] = useState(null); // { elementId, elementIndex, originalText, startOffset, endOffset }
   const [scriptHasFocus, setScriptHasFocus] = useState(false); // Track if script area has focus
   const [contextMenuTop, setContextMenuTop] = useState(null); // Fixed Y position for context menu
+  const [selectedRange, setSelectedRange] = useState(null); // { start: number, end: number } for multi-block selection
   const [connected, setConnected] = useState(false);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [offlineDocId, setOfflineDocId] = useState(null); // null = not in offline mode
@@ -8100,14 +8101,21 @@ export default function ScreenplayEditor() {
   };
 
   // Handle focus with optional cursor offset for click-to-cursor
-  const handleFocus = useCallback((index, offset = null) => {
+  const handleFocus = useCallback((index, offset = null, shiftKey = false) => {
+    // Shift+Click: extend/create block selection
+    if (shiftKey && activeIndex !== null && activeIndex !== index) {
+      const start = Math.min(activeIndex, index);
+      const end = Math.max(activeIndex, index);
+      setSelectedRange({ start, end });
+      return; // Don't change activeIndex or cursor
+    }
+    // Normal click: clear block selection
+    setSelectedRange(null);
     setActiveIndex(index);
     setCursorOffset(offset);
     setScriptHasFocus(true);
-    // Deselect any selected comment/suggestion when clicking in script
     setSelectedCommentId(null);
     setSelectedSuggestionId(null);
-    // Calculate menu position based on element
     setTimeout(() => {
       const el = document.querySelector(`[data-element-index="${index}"]`);
       if (el) {
@@ -8115,11 +8123,10 @@ export default function ScreenplayEditor() {
         setContextMenuTop(rect.top + rect.height / 2);
       }
     }, 10);
-    // Reset cursor offset after it's been applied
     if (offset !== null) {
       setTimeout(() => setCursorOffset(null), 100);
     }
-  }, []);
+  }, [activeIndex]);
 
   // Memoized callbacks for SceneLine to prevent re-renders
   const handleNoteClick = useCallback((id) => setShowNoteFor(id), []);
@@ -8281,7 +8288,162 @@ export default function ScreenplayEditor() {
     if (e.key === 'ArrowUp' && e.metaKey) { e.preventDefault(); handleFocus(Math.max(0, index - 1), 0); }
     if (e.key === 'ArrowDown' && e.metaKey) { e.preventDefault(); handleFocus(Math.min(elements.length - 1, index + 1), 0); }
     if ((e.metaKey || e.ctrlKey) && ['1','2','3','4','5','6'].includes(e.key)) { e.preventDefault(); changeType(index, ELEMENT_TYPES[parseInt(e.key) - 1].id); }
+
+    // Cmd+A: select all blocks
+    if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+      e.preventDefault();
+      setSelectedRange({ start: 0, end: elements.length - 1 });
+    }
+
+    // Shift+ArrowDown/Up: extend block selection
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedRange(prev => {
+        if (!prev) return { start: index, end: Math.min(elements.length - 1, index + 1) };
+        return { start: prev.start, end: Math.min(elements.length - 1, prev.end + 1) };
+      });
+    }
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedRange(prev => {
+        if (!prev) return { start: Math.max(0, index - 1), end: index };
+        return { start: Math.max(0, prev.start - 1), end: prev.end };
+      });
+    }
   }, [elements, insertElement, changeType, deleteElement, updateElement, canEdit, handleFocus]);
+
+  // ============ MULTI-BLOCK CLIPBOARD (global handler) ============
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (!selectedRange) return;
+      const { start, end } = selectedRange;
+      const isMeta = e.metaKey || e.ctrlKey;
+
+      // Escape: clear selection
+      if (e.key === 'Escape') {
+        setSelectedRange(null);
+        return;
+      }
+
+      // Cmd+C or Cmd+X: copy selected blocks to clipboard
+      if (isMeta && (e.key === 'c' || e.key === 'x')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const selected = elementsRef.current.slice(start, end + 1);
+        // Store as JSON for internal paste (preserves types), and plain text for external paste
+        const jsonStr = JSON.stringify(selected);
+        const plainText = selected.map(el => el.content).join('\n');
+        try {
+          navigator.clipboard.write([
+            new ClipboardItem({
+              'text/plain': new Blob([plainText], { type: 'text/plain' }),
+              'text/html': new Blob([`<div data-rooms-blocks="${encodeURIComponent(jsonStr)}">${plainText}</div>`], { type: 'text/html' }),
+            })
+          ]);
+        } catch (err) {
+          // Fallback for browsers that don't support ClipboardItem
+          navigator.clipboard.writeText(plainText);
+        }
+
+        // If cut, also delete the selected elements
+        if (e.key === 'x' && canEditNow) {
+          pushToUndo();
+          setElements(prev => {
+            const newEls = prev.filter((_, i) => i < start || i > end);
+            return newEls.length === 0 ? [{ id: generateId(), type: 'action', content: '' }] : newEls;
+          });
+          if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+            setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+          }
+          setActiveIndex(Math.min(start, elementsRef.current.length - 1));
+          setSelectedRange(null);
+        }
+        return;
+      }
+
+      // Cmd+V: paste blocks
+      if (isMeta && e.key === 'v' && canEditNow) {
+        e.preventDefault();
+        e.stopPropagation();
+        navigator.clipboard.read().then(items => {
+          for (const item of items) {
+            // Try to read HTML first (contains our JSON data)
+            if (item.types.includes('text/html')) {
+              item.getType('text/html').then(blob => blob.text()).then(html => {
+                const match = html.match(/data-rooms-blocks="([^"]+)"/);
+                if (match) {
+                  try {
+                    const blocks = JSON.parse(decodeURIComponent(match[1]));
+                    const newBlocks = blocks.map(b => ({ ...b, id: generateId() }));
+                    pushToUndo();
+                    setElements(prev => {
+                      const insertAt = end + 1;
+                      const newEls = [...prev];
+                      newEls.splice(insertAt, 0, ...newBlocks);
+                      return newEls;
+                    });
+                    setSelectedRange(null);
+                    setActiveIndex(end + 1);
+                    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+                      setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+                    }
+                    return;
+                  } catch (err) { /* fall through to plain text */ }
+                }
+                // No rooms data, fall through
+                pasteAsPlainText();
+              });
+              return;
+            }
+          }
+          pasteAsPlainText();
+        }).catch(() => { pasteAsPlainText(); });
+
+        const pasteAsPlainText = () => {
+          navigator.clipboard.readText().then(text => {
+            if (!text) return;
+            const lines = text.split('\n').filter(l => l.trim());
+            const newBlocks = lines.map(line => ({ id: generateId(), type: 'action', content: line }));
+            if (newBlocks.length === 0) return;
+            pushToUndo();
+            setElements(prev => {
+              const insertAt = end + 1;
+              const newEls = [...prev];
+              newEls.splice(insertAt, 0, ...newBlocks);
+              return newEls;
+            });
+            setSelectedRange(null);
+            setActiveIndex(end + 1);
+          });
+        };
+        return;
+      }
+
+      // Backspace/Delete: delete selected blocks
+      if ((e.key === 'Backspace' || e.key === 'Delete') && canEditNow) {
+        e.preventDefault();
+        e.stopPropagation();
+        pushToUndo();
+        setElements(prev => {
+          const newEls = prev.filter((_, i) => i < start || i > end);
+          return newEls.length === 0 ? [{ id: generateId(), type: 'action', content: '' }] : newEls;
+        });
+        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+        }
+        setActiveIndex(Math.min(start, elementsRef.current.length - 1));
+        setSelectedRange(null);
+        return;
+      }
+    };
+
+    if (selectedRange) {
+      window.addEventListener('keydown', handleGlobalKeyDown, true); // capture phase
+    }
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown, true);
+    };
+  }, [selectedRange, canEdit, canEditNow, connected, pushToUndo]);
 
   // ============ IMPORT FDX - Creates new document ============
   const importFDX = () => {
@@ -10221,7 +10383,18 @@ export default function ScreenplayEditor() {
                   </div>
                   
                   {page.elements.map(({ element, index }) => (
-                    <div key={element.id} data-element-index={index} style={activeIndex === index ? { position: 'relative', zIndex: 10 } : undefined}>
+                    <div
+                      key={element.id}
+                      data-element-index={index}
+                      onMouseDown={(e) => { if (e.shiftKey) { e.preventDefault(); handleFocus(index, null, true); } }}
+                      style={{
+                        ...(activeIndex === index ? { position: 'relative', zIndex: 10 } : {}),
+                        ...(selectedRange && index >= selectedRange.start && index <= selectedRange.end ? {
+                          background: darkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)',
+                          borderRadius: 2,
+                        } : {}),
+                      }}
+                    >
                       <SceneLine 
                       element={element} 
                       index={index} 
