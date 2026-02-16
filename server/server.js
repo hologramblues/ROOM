@@ -464,6 +464,15 @@ app.get('/api/documents', authMiddleware, async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
+// Lightweight meta endpoint for conflict detection (offline mode)
+app.get('/api/documents/:shortId/meta', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId }).select('updatedAt title');
+    if (!doc) return res.status(404).json({ error: 'Document non trouve' });
+    res.json({ updatedAt: doc.updatedAt, title: doc.title });
+  } catch (error) { res.status(500).json({ error: 'Erreur' }); }
+});
+
 app.get('/api/documents/:shortId', optionalAuthMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
@@ -977,6 +986,23 @@ io.on('connection', (socket) => {
         console.log('Suggestion rejected:', suggestionId);
       }
     } catch (error) { console.error('Suggestion reject error:', error); }
+  });
+
+  // ============ FULL SYNC (undo/redo/drag/offline push) ============
+
+  socket.on('full-sync', async ({ elements }) => {
+    if (!currentDocId || !elements || !Array.isArray(elements)) return;
+    try {
+      const doc = await Document.findOne({ shortId: currentDocId });
+      if (!doc) return;
+      doc.elements = elements;
+      doc.markModified('elements');
+      await doc.save();
+      socket.to(currentDocId).emit('full-sync-applied', { elements });
+      console.log('[FULL-SYNC] Applied', elements.length, 'elements to', currentDocId);
+    } catch (err) {
+      console.error('[FULL-SYNC] Error:', err);
+    }
   });
 
   // ============ CURSOR & DISCONNECT ============

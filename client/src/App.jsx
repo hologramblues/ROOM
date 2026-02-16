@@ -254,6 +254,22 @@ const translations = {
     dragToTimeline: "Glissez des cartes ici pour construire votre timeline",
     allInTimeline: "Toutes vos scènes sont dans la timeline",
     addIdeas: "Cliquez sur \"Nouvelle carte\" pour ajouter des idées",
+    // Offline mode
+    offlineBanner: "Vous \u00eates hors-ligne \u2014 le document est en lecture seule",
+    offlineWorkCopy: "Travailler sur une copie offline",
+    offlineMode: "Mode offline \u2014 vos modifications sont enregistr\u00e9es localement",
+    offlineSavedLocally: "Sauvegard\u00e9 localement",
+    offlineCopyBadge: "(Copie offline)",
+    connectionRestored: "Connexion r\u00e9tablie",
+    pushChanges: "Pousser les modifications",
+    discardOffline: "Abandonner",
+    conflictTitle: "Conflit d\u00e9tect\u00e9",
+    conflictMessage: "Le document a \u00e9t\u00e9 modifi\u00e9 par d'autres collaborateurs pendant votre absence.",
+    conflictOverwrite: "\u00c9craser avec ma version",
+    conflictKeepOnline: "Garder la version en ligne",
+    conflictCompare: "Voir les deux versions",
+    pushSuccess: "Modifications pouss\u00e9es avec succ\u00e8s",
+    pushError: "Erreur lors de la synchronisation",
   },
   
   en: {
@@ -492,6 +508,22 @@ const translations = {
     dragToTimeline: "Drag cards here to build your timeline",
     allInTimeline: "All your scenes are in the timeline",
     addIdeas: "Click \"New card\" to add ideas",
+    // Offline mode
+    offlineBanner: "You are offline \u2014 document is read-only",
+    offlineWorkCopy: "Work on an offline copy",
+    offlineMode: "Offline mode \u2014 changes saved locally",
+    offlineSavedLocally: "Saved locally",
+    offlineCopyBadge: "(Offline copy)",
+    connectionRestored: "Connection restored",
+    pushChanges: "Push changes",
+    discardOffline: "Discard",
+    conflictTitle: "Conflict detected",
+    conflictMessage: "The document was modified by other collaborators while you were offline.",
+    conflictOverwrite: "Overwrite with my version",
+    conflictKeepOnline: "Keep online version",
+    conflictCompare: "View both versions",
+    pushSuccess: "Changes pushed successfully",
+    pushError: "Sync error",
   }
 };
 
@@ -5814,6 +5846,12 @@ export default function ScreenplayEditor() {
   const [scriptHasFocus, setScriptHasFocus] = useState(false); // Track if script area has focus
   const [contextMenuTop, setContextMenuTop] = useState(null); // Fixed Y position for context menu
   const [connected, setConnected] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [offlineDocId, setOfflineDocId] = useState(null); // null = not in offline mode
+  const [offlineSnapshot, setOfflineSnapshot] = useState(null); // {elements, title, timestamp, serverUpdatedAt}
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [conflictServerUpdatedAt, setConflictServerUpdatedAt] = useState(null);
   const [users, setUsers] = useState([]);
   const [myId, setMyId] = useState(null);
   const [myRole, setMyRole] = useState('editor');
@@ -5927,6 +5965,7 @@ export default function ScreenplayEditor() {
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const socketRef = useRef(null);
   const loadedDocRef = useRef(null);
+  const offlineDocIdRef = useRef(null);
   const scriptContainerRef = useRef(null);
   const outlineSidebarRef = useRef(null);
   const commentsSidebarRef = useRef(null);
@@ -6272,11 +6311,130 @@ export default function ScreenplayEditor() {
   useEffect(() => {
     notesRef.current = notes;
   }, [notes]);
-  
-  // Auto-save to cloud every 10 seconds (only if changes detected)
+
   useEffect(() => {
-    if (!docId || !token) return;
-    
+    offlineDocIdRef.current = offlineDocId;
+  }, [offlineDocId]);
+
+  // Derived: fully connected = browser online + socket connected
+  const isFullyConnected = isOnline && connected;
+
+  // Browser online/offline detection
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+  }, []);
+
+  // Restore offline session from localStorage on mount
+  useEffect(() => {
+    if (!docId) return;
+    const saved = localStorage.getItem(`rooms-offline-${docId}`);
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data.docId === docId && data.elements) {
+          setOfflineDocId(docId);
+          setOfflineSnapshot(data);
+          setElements(data.elements);
+          setTitle(data.title || 'SANS TITRE');
+        }
+      } catch (e) { console.error('[OFFLINE] Error restoring offline session:', e); }
+    }
+  }, [docId]);
+
+  // Save offline copy to localStorage every 5 seconds when in offline mode
+  useEffect(() => {
+    if (!offlineDocId) return;
+    const interval = setInterval(() => {
+      const data = {
+        docId: offlineDocId,
+        title: titleRef.current,
+        elements: elementsRef.current,
+        timestamp: new Date().toISOString(),
+        serverUpdatedAt: offlineSnapshot?.serverUpdatedAt || null,
+      };
+      localStorage.setItem(`rooms-offline-${offlineDocId}`, JSON.stringify(data));
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [offlineDocId, offlineSnapshot]);
+
+  // Activate offline mode
+  const activateOfflineMode = useCallback(() => {
+    const snapshot = {
+      docId, title: titleRef.current, elements: elementsRef.current,
+      timestamp: new Date().toISOString(),
+      serverUpdatedAt: lastSaved ? lastSaved.toISOString() : new Date().toISOString(),
+    };
+    localStorage.setItem(`rooms-offline-${docId}`, JSON.stringify(snapshot));
+    setOfflineSnapshot(snapshot);
+    setOfflineDocId(docId);
+  }, [docId, lastSaved]);
+
+  // Push offline changes to server
+  const pushOfflineChanges = useCallback(async (force = false) => {
+    if (!offlineDocId || !token) return;
+    try {
+      // Check server state first
+      const metaRes = await fetch(SERVER_URL + '/api/documents/' + offlineDocId + '/meta', {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!metaRes.ok) throw new Error('Failed to fetch document meta');
+      const meta = await metaRes.json();
+
+      // Compare timestamps to detect conflict
+      const snapshotTime = offlineSnapshot?.serverUpdatedAt ? new Date(offlineSnapshot.serverUpdatedAt).getTime() : 0;
+      const serverTime = new Date(meta.updatedAt).getTime();
+      const hasConflict = serverTime > snapshotTime + 5000; // 5s tolerance
+
+      if (hasConflict && !force) {
+        setConflictServerUpdatedAt(meta.updatedAt);
+        setShowConflictModal(true);
+        return;
+      }
+
+      // Push changes via autosave endpoint
+      const res = await fetch(SERVER_URL + '/api/documents/' + offlineDocId + '/autosave', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ title: titleRef.current, elements: elementsRef.current }),
+      });
+      if (!res.ok) throw new Error('Push failed');
+
+      // Notify other connected users via full-sync
+      if (socketRef.current && connected) {
+        socketRef.current.emit('full-sync', { elements: elementsRef.current });
+      }
+
+      // Cleanup offline state
+      localStorage.removeItem(`rooms-offline-${offlineDocId}`);
+      setOfflineDocId(null);
+      setOfflineSnapshot(null);
+      setShowConflictModal(false);
+      setLastSaved(new Date());
+      console.log('[OFFLINE] Changes pushed successfully');
+    } catch (err) {
+      console.error('[OFFLINE] Push error:', err);
+    }
+  }, [offlineDocId, offlineSnapshot, token, connected]);
+
+  // Discard offline copy
+  const discardOfflineCopy = useCallback(() => {
+    if (!offlineDocId) return;
+    localStorage.removeItem(`rooms-offline-${offlineDocId}`);
+    setOfflineDocId(null);
+    setOfflineSnapshot(null);
+    setShowConflictModal(false);
+    // Force reload document from server
+    loadedDocRef.current = null;
+  }, [offlineDocId]);
+
+  // Auto-save to cloud every 10 seconds (only if changes detected, skip in offline mode)
+  useEffect(() => {
+    if (!docId || !token || offlineDocId) return;
+
     const autoSaveInterval = setInterval(async () => {
       const currentElements = elementsRef.current;
       const currentTitle = titleRef.current;
@@ -6334,7 +6492,7 @@ export default function ScreenplayEditor() {
     }, 10000); // Every 10 seconds
     
     return () => clearInterval(autoSaveInterval);
-  }, [docId, token]); // Only recreate when docId or token changes
+  }, [docId, token, offlineDocId]); // Recreate when docId, token, or offline mode changes
 
   // Helper to format snapshot name: "Title - MMDDYY HH:MM"
   const formatSnapshotName = (docTitle, isAuto = false) => {
@@ -6544,6 +6702,20 @@ export default function ScreenplayEditor() {
       if (data.suggestions) setSuggestions(data.suggestions);
       if (data.collaborators && data.collaborators.length > 0) {
         setCollaborators(data.collaborators);
+      }
+      // Re-sync document content on reconnect (only if NOT in offline mode)
+      if (!offlineDocIdRef.current && data.elements) {
+        setElements(data.elements);
+        if (data.title) setTitle(data.title);
+        if (data.comments) setComments(data.comments);
+        console.log('[SYNC] Document re-synced from server on reconnect');
+      }
+    });
+    // Listen for full-sync from other clients (undo/redo/drag)
+    socket.on('full-sync-applied', ({ elements: newElements }) => {
+      if (!isStale && !offlineDocIdRef.current) {
+        setElements(newElements);
+        console.log('[SYNC] Full sync received from another client');
       }
     });
     socket.on('title-updated', ({ title }) => { if (!isStale) setTitle(title); });
@@ -6832,6 +7004,7 @@ export default function ScreenplayEditor() {
   const extractedCharacters = useMemo(() => { const c = new Set(characters); elements.forEach(el => { if (el.type === 'character' && el.content.trim()) c.add(el.content.trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); }, [elements, characters]);
   const remoteCursors = useMemo(() => users.filter(u => u.id !== myId), [users, myId]);
   const canEdit = myRole === 'editor';
+  const canEditNow = (isFullyConnected || !!offlineDocId) && canEdit;
   const canComment = myRole === 'editor' || myRole === 'commenter';
 
   // Check if an element is in a locked scene
@@ -7803,29 +7976,32 @@ export default function ScreenplayEditor() {
   }, [typewriterSound, playTypewriterSound]);
 
   const updateElement = useCallback((i, el, skipUndo = false) => {
+    if (!canEditNow) return;
     if (!skipUndo) pushToUndo();
     setElements(p => { const u = [...p]; u[i] = el; return u; });
-    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-change', { index: i, element: el });
+    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-change', { index: i, element: el });
     setLastSaved(new Date());
     setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
-  }, [connected, canEdit, pushToUndo, currentUser]);
+  }, [connected, canEdit, canEditNow, pushToUndo, currentUser]);
   const insertElement = useCallback((after, type) => {
+    if (!canEditNow) return;
     pushToUndo();
     const el = { id: generateId(), type, content: '' };
     setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; });
     setActiveIndex(after + 1);
-    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-insert', { afterIndex: after, element: el });
+    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-insert', { afterIndex: after, element: el });
     setLastSaved(new Date());
-  }, [connected, canEdit, pushToUndo]);
+  }, [connected, canEdit, canEditNow, pushToUndo]);
   const deleteElement = useCallback(i => {
+    if (!canEditNow) return;
     if (elementsRef.current.length === 1) return;
     pushToUndo();
     setElements(p => p.filter((_, idx) => idx !== i));
     setActiveIndex(Math.max(0, i - 1));
-    if (socketRef.current && connected && canEdit) socketRef.current.emit('element-delete', { index: i });
+    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-delete', { index: i });
     setLastSaved(new Date());
-  }, [connected, canEdit, pushToUndo]);
-  const changeType = useCallback((i, t) => { setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit) socketRef.current.emit('element-type-change', { index: i, type: t }); }, [connected, canEdit]);
+  }, [connected, canEdit, canEditNow, pushToUndo]);
+  const changeType = useCallback((i, t) => { if (!canEditNow) return; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t }); }, [connected, canEdit, canEditNow]);
   const handleCursor = useCallback((i, pos) => { if (socketRef.current && connected) socketRef.current.emit('cursor-move', { index: i, position: pos }); }, [connected]);
   const handleSelectChar = useCallback((i, name) => { updateElement(i, { ...elements[i], content: name }); setTimeout(() => insertElement(i, 'dialogue'), 50); }, [elements, updateElement, insertElement]);
   
@@ -8978,7 +9154,9 @@ export default function ScreenplayEditor() {
               }} 
             />
           </div>
-          {docId && lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
+          {docId && offlineDocId && <span style={{ fontSize: 10, color: '#f59e0b', whiteSpace: 'nowrap' }}>{t('offlineCopyBadge')}</span>}
+          {docId && !offlineDocId && lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
+          {docId && !isFullyConnected && !offlineDocId && <span style={{ fontSize: 10, color: '#f59e0b', whiteSpace: 'nowrap' }}>⚠ Offline</span>}
           {docId && !canEdit && <span style={{ fontSize: 10, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>{t('reading')}</span>}
           {loading && <span style={{ fontSize: 11, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ display: 'inline-block', width: 8, height: 8, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> {t('loading')}</span>}
           {importing && <span style={{ fontSize: 11, color: '#f59e0b' }}>Import en cours...</span>}
@@ -9192,6 +9370,154 @@ export default function ScreenplayEditor() {
         </div>
       </div>
       
+      {/* OFFLINE BANNER */}
+      {docId && docId !== 'local' && !isFullyConnected && !offlineDocId && (
+        <div style={{
+          background: darkMode ? '#92400e' : '#fef3c7',
+          color: darkMode ? '#fef3c7' : '#92400e',
+          padding: '8px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+          fontSize: 13,
+          fontWeight: 500,
+          borderBottom: `1px solid ${darkMode ? '#78350f' : '#fde68a'}`,
+          flexShrink: 0,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>{t('offlineBanner')}</span>
+          <button
+            onClick={activateOfflineMode}
+            style={{
+              padding: '4px 12px',
+              borderRadius: 6,
+              border: 'none',
+              background: darkMode ? '#f59e0b' : '#92400e',
+              color: darkMode ? '#1a1a1a' : 'white',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {t('offlineWorkCopy')}
+          </button>
+        </div>
+      )}
+
+      {/* OFFLINE MODE BANNER */}
+      {offlineDocId && !isFullyConnected && (
+        <div style={{
+          background: darkMode ? '#1e3a5f' : '#dbeafe',
+          color: darkMode ? '#93c5fd' : '#1e40af',
+          padding: '8px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          fontSize: 13,
+          fontWeight: 500,
+          borderBottom: `1px solid ${darkMode ? '#1e3a5f' : '#93c5fd'}`,
+          flexShrink: 0,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
+          <span>{t('offlineMode')}</span>
+        </div>
+      )}
+
+      {/* CONNECTION RESTORED BANNER (offline mode + back online) */}
+      {offlineDocId && isFullyConnected && (
+        <div style={{
+          background: darkMode ? '#064e3b' : '#d1fae5',
+          color: darkMode ? '#6ee7b7' : '#065f46',
+          padding: '8px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+          fontSize: 13,
+          fontWeight: 500,
+          borderBottom: `1px solid ${darkMode ? '#065f46' : '#6ee7b7'}`,
+          flexShrink: 0,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span>{t('connectionRestored')}</span>
+          <button
+            onClick={() => pushOfflineChanges(false)}
+            style={{
+              padding: '4px 12px',
+              borderRadius: 6,
+              border: 'none',
+              background: darkMode ? '#10b981' : '#065f46',
+              color: 'white',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {t('pushChanges')}
+          </button>
+          <button
+            onClick={discardOfflineCopy}
+            style={{
+              padding: '4px 12px',
+              borderRadius: 6,
+              border: `1px solid ${darkMode ? '#6ee7b7' : '#065f46'}`,
+              background: 'transparent',
+              color: darkMode ? '#6ee7b7' : '#065f46',
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            {t('discardOffline')}
+          </button>
+        </div>
+      )}
+
+      {/* CONFLICT MODAL */}
+      {showConflictModal && (
+        <>
+          <div onClick={() => setShowConflictModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999 }} />
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: darkMode ? '#2b2b2b' : 'white',
+            borderRadius: 12,
+            padding: 24,
+            width: 420,
+            maxWidth: '90vw',
+            zIndex: 10000,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span style={{ fontSize: 16, fontWeight: 700, color: darkMode ? 'white' : '#1a1a1a' }}>{t('conflictTitle')}</span>
+            </div>
+            <p style={{ fontSize: 13, color: darkMode ? '#9ca3af' : '#6b7280', marginBottom: 20, lineHeight: 1.5 }}>
+              {t('conflictMessage')}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button onClick={() => pushOfflineChanges(true)} style={{
+                padding: '10px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: '#ef4444', color: 'white', fontSize: 13, fontWeight: 600,
+              }}>{t('conflictOverwrite')}</button>
+              <button onClick={discardOfflineCopy} style={{
+                padding: '10px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: darkMode ? '#484848' : '#f3f4f6', color: darkMode ? 'white' : '#1a1a1a', fontSize: 13, fontWeight: 600,
+              }}>{t('conflictKeepOnline')}</button>
+              <button onClick={() => { window.open(window.location.href, '_blank'); setShowConflictModal(false); }} style={{
+                padding: '10px 16px', borderRadius: 8, border: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, cursor: 'pointer',
+                background: 'transparent', color: darkMode ? '#9ca3af' : '#6b7280', fontSize: 13,
+              }}>{t('conflictCompare')}</button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* MAIN CONTENT AREA - Flex layout with sidebars */}
       <div style={{ 
         flex: 1,
