@@ -5845,7 +5845,10 @@ export default function ScreenplayEditor() {
   const [pendingSuggestion, setPendingSuggestion] = useState(null); // { elementId, elementIndex, originalText, startOffset, endOffset }
   const [scriptHasFocus, setScriptHasFocus] = useState(false); // Track if script area has focus
   const [contextMenuTop, setContextMenuTop] = useState(null); // Fixed Y position for context menu
-  const [selectedRange, setSelectedRange] = useState(null); // { start: number, end: number } for multi-block selection
+  const [selectedRange, setSelectedRange] = useState(null); // { start: number, end: number }
+  const copiedBlocksRef = useRef(null); // stores blocks from multi-block copy for reliable internal paste
+  const [isDragSelecting, setIsDragSelecting] = useState(false); // mouse drag selection in progress
+  const dragStartIndexRef = useRef(null); // starting block index for drag selection for multi-block selection
   const [connected, setConnected] = useState(false);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [offlineDocId, setOfflineDocId] = useState(null); // null = not in offline mode
@@ -8330,19 +8333,24 @@ export default function ScreenplayEditor() {
         e.preventDefault();
         e.stopPropagation();
         const selected = elementsRef.current.slice(start, end + 1);
-        // Store as JSON for internal paste (preserves types), and plain text for external paste
-        const jsonStr = JSON.stringify(selected);
-        const plainText = selected.map(el => el.content).join('\n');
+        // Store blocks internally for reliable paste (avoids clipboard.read() permission issues)
+        copiedBlocksRef.current = JSON.parse(JSON.stringify(selected));
+        // Build formatted plain text for external paste (other apps)
+        const plainText = selected.map(el => {
+          const text = el.content || '';
+          switch (el.type) {
+            case 'scene': return '\n' + text.toUpperCase() + '\n';
+            case 'character': return '\n                         ' + text.toUpperCase();
+            case 'parenthetical': return '                    ' + text;
+            case 'dialogue': return '               ' + text;
+            case 'transition': return '\n' + text.toUpperCase() + '\n';
+            default: return '\n' + text;
+          }
+        }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
         try {
-          navigator.clipboard.write([
-            new ClipboardItem({
-              'text/plain': new Blob([plainText], { type: 'text/plain' }),
-              'text/html': new Blob([`<div data-rooms-blocks="${encodeURIComponent(jsonStr)}">${plainText}</div>`], { type: 'text/html' }),
-            })
-          ]);
-        } catch (err) {
-          // Fallback for browsers that don't support ClipboardItem
           navigator.clipboard.writeText(plainText);
+        } catch (err) {
+          // silent fail
         }
 
         // If cut, also delete the selected elements
@@ -8365,57 +8373,37 @@ export default function ScreenplayEditor() {
       if (isMeta && e.key === 'v' && canEditNow) {
         e.preventDefault();
         e.stopPropagation();
-        navigator.clipboard.read().then(items => {
-          for (const item of items) {
-            // Try to read HTML first (contains our JSON data)
-            if (item.types.includes('text/html')) {
-              item.getType('text/html').then(blob => blob.text()).then(html => {
-                const match = html.match(/data-rooms-blocks="([^"]+)"/);
-                if (match) {
-                  try {
-                    const blocks = JSON.parse(decodeURIComponent(match[1]));
-                    const newBlocks = blocks.map(b => ({ ...b, id: generateId() }));
-                    pushToUndo();
-                    setElements(prev => {
-                      const insertAt = end + 1;
-                      const newEls = [...prev];
-                      newEls.splice(insertAt, 0, ...newBlocks);
-                      return newEls;
-                    });
-                    setSelectedRange(null);
-                    setActiveIndex(end + 1);
-                    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-                      setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
-                    }
-                    return;
-                  } catch (err) { /* fall through to plain text */ }
-                }
-                // No rooms data, fall through
-                pasteAsPlainText();
-              });
-              return;
-            }
-          }
-          pasteAsPlainText();
-        }).catch(() => { pasteAsPlainText(); });
 
-        const pasteAsPlainText = () => {
-          navigator.clipboard.readText().then(text => {
-            if (!text) return;
-            const lines = text.split('\n').filter(l => l.trim());
-            const newBlocks = lines.map(line => ({ id: generateId(), type: 'action', content: line }));
-            if (newBlocks.length === 0) return;
-            pushToUndo();
-            setElements(prev => {
-              const insertAt = end + 1;
-              const newEls = [...prev];
-              newEls.splice(insertAt, 0, ...newBlocks);
-              return newEls;
-            });
-            setSelectedRange(null);
-            setActiveIndex(end + 1);
+        const doInsert = (newBlocks) => {
+          if (!newBlocks || newBlocks.length === 0) return;
+          pushToUndo();
+          setElements(prev => {
+            const insertAt = end + 1;
+            const newEls = [...prev];
+            newEls.splice(insertAt, 0, ...newBlocks);
+            return newEls;
           });
+          setSelectedRange(null);
+          setActiveIndex(end + 1);
+          if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+            setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+          }
         };
+
+        // Priority 1: use internally copied blocks (preserves types perfectly)
+        if (copiedBlocksRef.current) {
+          const newBlocks = copiedBlocksRef.current.map(b => ({ ...b, id: generateId() }));
+          doInsert(newBlocks);
+          return;
+        }
+
+        // Priority 2: read plain text from clipboard (external paste)
+        navigator.clipboard.readText().then(text => {
+          if (!text) return;
+          const lines = text.split('\n').filter(l => l.trim());
+          const newBlocks = lines.map(line => ({ id: generateId(), type: 'action', content: line }));
+          doInsert(newBlocks);
+        }).catch(() => {});
         return;
       }
 
@@ -8444,6 +8432,62 @@ export default function ScreenplayEditor() {
       window.removeEventListener('keydown', handleGlobalKeyDown, true);
     };
   }, [selectedRange, canEdit, canEditNow, connected, pushToUndo]);
+
+  // ============ DRAG-SELECT across blocks ============
+  useEffect(() => {
+    const getElementIndexFromPoint = (x, y) => {
+      // Walk up from elementFromPoint to find [data-element-index]
+      const els = document.elementsFromPoint(x, y);
+      for (const el of els) {
+        const wrapper = el.closest('[data-element-index]');
+        if (wrapper) return parseInt(wrapper.getAttribute('data-element-index'), 10);
+      }
+      return null;
+    };
+
+    const handleMouseMove = (e) => {
+      if (dragStartIndexRef.current === null) return;
+      // Only start drag-select if mouse has moved enough (prevent accidental drags on normal clicks)
+      if (!isDragSelecting) {
+        // We need at least to move to a different block to start selection
+        const hoverIdx = getElementIndexFromPoint(e.clientX, e.clientY);
+        if (hoverIdx === null || hoverIdx === dragStartIndexRef.current) return;
+        // Start drag selection
+        setIsDragSelecting(true);
+      }
+      const hoverIdx = getElementIndexFromPoint(e.clientX, e.clientY);
+      if (hoverIdx !== null && hoverIdx !== dragStartIndexRef.current) {
+        const start = Math.min(dragStartIndexRef.current, hoverIdx);
+        const end = Math.max(dragStartIndexRef.current, hoverIdx);
+        setSelectedRange({ start, end });
+        // Prevent text selection in individual editors while dragging
+        e.preventDefault();
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isDragSelecting) {
+        setIsDragSelecting(false);
+      }
+      dragStartIndexRef.current = null;
+    };
+
+    // Clear copiedBlocksRef when user does a normal copy (not multi-block)
+    const handleNativeCopy = () => {
+      if (!selectedRange) {
+        copiedBlocksRef.current = null;
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('copy', handleNativeCopy);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('copy', handleNativeCopy);
+    };
+  }, [isDragSelecting, selectedRange]);
 
   // ============ IMPORT FDX - Creates new document ============
   const importFDX = () => {
@@ -10341,15 +10385,16 @@ export default function ScreenplayEditor() {
         <div 
           ref={scriptContainerRef}
           className="script-container"
-          style={{ 
+          style={{
             flex: 1,
             minWidth: 'fit-content',
             overflowY: 'auto',
             overflowX: 'hidden',
-            display: 'flex', 
-            justifyContent: 'center', 
+            display: 'flex',
+            justifyContent: 'center',
             padding: 32,
-            gap: 20
+            gap: 20,
+            ...(isDragSelecting ? { userSelect: 'none', WebkitUserSelect: 'none', cursor: 'default' } : {}),
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -10386,7 +10431,15 @@ export default function ScreenplayEditor() {
                     <div
                       key={element.id}
                       data-element-index={index}
-                      onMouseDown={(e) => { if (e.shiftKey) { e.preventDefault(); handleFocus(index, null, true); } }}
+                      onMouseDown={(e) => {
+                        if (e.shiftKey) { e.preventDefault(); handleFocus(index, null, true); return; }
+                        // Start potential drag-select (only left click)
+                        if (e.button === 0 && !e.metaKey && !e.ctrlKey) {
+                          dragStartIndexRef.current = index;
+                          // Don't prevent default here — let TipTap handle normal clicks
+                          // We'll detect drag in mousemove
+                        }
+                      }}
                       style={{
                         ...(activeIndex === index ? { position: 'relative', zIndex: 10 } : {}),
                         ...(selectedRange && index >= selectedRange.start && index <= selectedRange.end ? {
