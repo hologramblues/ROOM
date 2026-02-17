@@ -616,6 +616,30 @@ const escapeHtml = (text) => {
     .replace(/'/g, '&#39;');
 };
 
+// Strip HTML tags to get plain text (for word count, autocomplete, exports, etc.)
+const stripHtml = (html) => {
+  if (!html) return '';
+  return String(html)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+};
+
+// Extract HTML content from TipTap's getHTML() — strips outer <p> wrapper
+const extractTipTapContent = (html) => {
+  if (!html) return '';
+  // Remove outer <p>...</p> wrapper that TipTap always adds
+  let content = html.replace(/^<p>/, '').replace(/<\/p>$/, '');
+  // Normalize empty content
+  if (content === '<br>' || content === '<br/>' || content === '<br class="ProseMirror-trailingBreak">') return '';
+  return content;
+};
+
 // UUID fallback for browsers that don't support crypto.randomUUID
 const generateId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -2744,8 +2768,9 @@ const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
   const characters = useMemo(() => {
     const counts = {};
     elements.forEach(el => {
-      if (el.type === 'character' && el.content.trim()) {
-        const name = el.content.trim().replace(/\s*\(.*?\)\s*/g, '').toUpperCase();
+      const t = stripHtml(el.content).trim();
+      if (el.type === 'character' && t) {
+        const name = t.replace(/\s*\(.*?\)\s*/g, '').toUpperCase();
         counts[name] = (counts[name] || 0) + 1;
       }
     });
@@ -2755,9 +2780,10 @@ const StatsPanel = ({ stats, elements, onClose, darkMode }) => {
   const locations = useMemo(() => {
     const counts = { INT: 0, EXT: 0 };
     elements.forEach(el => {
-      if (el.type === 'scene' && el.content) {
-        if (el.content.match(/^INT[.\s]/i)) counts.INT++;
-        else if (el.content.match(/^EXT[.\s]/i)) counts.EXT++;
+      const t = stripHtml(el.content);
+      if (el.type === 'scene' && t) {
+        if (t.match(/^INT[.\s]/i)) counts.INT++;
+        else if (t.match(/^EXT[.\s]/i)) counts.EXT++;
       }
     });
     return counts;
@@ -3249,48 +3275,59 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   // Build HTML content with comment and suggestion marks applied
   const buildContentWithMarks = useCallback((content, highlightsList) => {
     if (!content) return '<p></p>';
-    
-    const allHighlights = (highlightsList || []).filter(h => 
+
+    const allHighlights = (highlightsList || []).filter(h =>
       h.type === 'comment' || h.type === 'suggestion'
     );
-    
-    if (allHighlights.length === 0) return `<p>${escapeHtml(content)}</p>`;
-    
+
+    // Content may already contain HTML formatting (bold, italic, etc.)
+    // If no highlights, just wrap in <p> and pass through
+    if (allHighlights.length === 0) {
+      // Check if content already has HTML tags — if so, pass through as-is
+      const hasHtml = /<[^>]+>/.test(content);
+      return hasHtml ? `<p>${content}</p>` : `<p>${escapeHtml(content)}</p>`;
+    }
+
+    // For highlights, we need to work with plain text offsets
+    // but preserve inline formatting. Strategy: strip HTML to get plain text,
+    // apply highlights on plain text, then re-wrap in <p>.
+    // This means highlights lose inline formatting inside them — acceptable trade-off.
+    const plainText = stripHtml(content);
+
     // Sort by startOffset
     const sorted = [...allHighlights].sort((a, b) => a.startOffset - b.startOffset);
-    
+
     let html = '';
     let lastEnd = 0;
-    
+
     for (const h of sorted) {
-      if (h.startOffset < 0 || h.endOffset > content.length || h.startOffset >= h.endOffset) continue;
-      
+      if (h.startOffset < 0 || h.endOffset > plainText.length || h.startOffset >= h.endOffset) continue;
+
       // Skip if overlapping with previous (simple approach)
       if (h.startOffset < lastEnd) continue;
-      
+
       // Text before this highlight
       if (h.startOffset > lastEnd) {
-        html += escapeHtml(content.slice(lastEnd, h.startOffset));
+        html += escapeHtml(plainText.slice(lastEnd, h.startOffset));
       }
-      
+
       if (h.type === 'comment') {
-        const markedText = escapeHtml(content.slice(h.startOffset, h.endOffset));
+        const markedText = escapeHtml(plainText.slice(h.startOffset, h.endOffset));
         html += `<span data-comment-id="${h.id || h._id}">${markedText}</span>`;
       } else if (h.type === 'suggestion') {
-        // Use stored originalText for suggestions (more reliable after reload)
-        const markedText = escapeHtml(h.originalText || content.slice(h.startOffset, h.endOffset));
+        const markedText = escapeHtml(h.originalText || plainText.slice(h.startOffset, h.endOffset));
         const suggestedText = escapeHtml(h.suggestedText || '');
         html += `<span data-suggestion-id="${h.id || h._id}" data-suggested-text="${suggestedText}">${markedText}</span>`;
       }
-      
+
       lastEnd = h.endOffset;
     }
-    
+
     // Remaining text
-    if (lastEnd < content.length) {
-      html += escapeHtml(content.slice(lastEnd));
+    if (lastEnd < plainText.length) {
+      html += escapeHtml(plainText.slice(lastEnd));
     }
-    
+
     return `<p>${html}</p>`;
   }, []);
   
@@ -3451,15 +3488,16 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     onUpdate: ({ editor }) => {
       if (!editor || !editor.view) return;
       try {
-        const text = editor.getText();
-        if (text !== lastContentRef.current) {
-          lastContentRef.current = text;
+        // Use getHTML() to preserve inline formatting (bold, italic, underline)
+        const html = extractTipTapContent(editor.getHTML());
+        if (html !== lastContentRef.current) {
+          lastContentRef.current = html;
           // Debounce the parent update to avoid re-rendering the entire app on each keystroke
           if (updateTimeoutRef.current) {
             clearTimeout(updateTimeoutRef.current);
           }
           updateTimeoutRef.current = setTimeout(() => {
-            onUpdate(index, { ...element, content: text });
+            onUpdate(index, { ...element, content: html });
           }, 150); // 150ms debounce
         }
       } catch (e) {
@@ -3511,9 +3549,9 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         if (updateTimeoutRef.current) {
           clearTimeout(updateTimeoutRef.current);
           updateTimeoutRef.current = null;
-          const text = editor.getText();
-          if (text !== element.content) {
-            onUpdate(index, { ...element, content: text });
+          const html = extractTipTapContent(editor.getHTML());
+          if (html !== element.content) {
+            onUpdate(index, { ...element, content: html });
           }
         }
       } catch (e) {
@@ -3528,8 +3566,8 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     if (!editorReady || !editor) return;
     if (editor.isFocused) return; // Don't reset content while user is actively typing
     try {
-      const editorText = editor.getText();
-      if (element.content !== editorText && element.content !== lastContentRef.current) {
+      const editorHtml = extractTipTapContent(editor.getHTML());
+      if (element.content !== editorHtml && element.content !== lastContentRef.current) {
         lastContentRef.current = element.content;
         editor.commands.setContent(buildContentWithMarks(element.content, highlights), false);
       }
@@ -3586,21 +3624,22 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   
   // Autocomplete for characters and locations
   useEffect(() => {
-    if (!element.content) {
+    const plainContent = stripHtml(element.content);
+    if (!plainContent) {
       setShowAuto(false);
       setFiltered([]);
       return;
     }
-    
-    if (element.type === 'character' && isActive && element.content.length > 0) {
-      const q = element.content.toUpperCase();
+
+    if (element.type === 'character' && isActive && plainContent.length > 0) {
+      const q = plainContent.toUpperCase();
       const f = characters.filter(c => c.toUpperCase().startsWith(q) && c.toUpperCase() !== q);
       setFiltered(f);
       setShowAuto(f.length > 0);
       setAutoIdx(0);
       setAutoType('character');
-    } else if (element.type === 'scene' && isActive && element.content.length > 4) {
-      const match = element.content.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*(.*)$/i);
+    } else if (element.type === 'scene' && isActive && plainContent.length > 4) {
+      const match = plainContent.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*(.*)$/i);
       if (match && match[2] && match[2].length > 0) {
         const q = match[2].toUpperCase();
         const f = locations.filter(l => l.startsWith(q) && l !== q);
@@ -3789,13 +3828,13 @@ const BeatBoard = React.memo(({
       const sceneCards = scenes.map((scene, sceneIdx) => {
         const existingCard = prev.find(c => c.linkedSceneId === scene.id);
         if (existingCard) {
-          return { ...existingCard, title: scene.content || 'Nouvelle scène', synopsis: sceneSynopsis[scene.id] || existingCard.synopsis || '', status: sceneStatus[scene.id] || existingCard.status, linkedSceneIndex: scene.index };
+          return { ...existingCard, title: stripHtml(scene.content) || 'Nouvelle scène', synopsis: sceneSynopsis[scene.id] || existingCard.synopsis || '', status: sceneStatus[scene.id] || existingCard.status, linkedSceneIndex: scene.index };
         }
         return {
           id: 'beat_' + scene.id,
           linkedSceneId: scene.id,
           linkedSceneIndex: scene.index,
-          title: scene.content || 'Nouvelle scène',
+          title: stripHtml(scene.content) || 'Nouvelle scène',
           synopsis: sceneSynopsis[scene.id] || '',
           color: defaultCardColor,
           position: { x: 50 + (sceneIdx % 5) * 220, y: 180 + Math.floor(sceneIdx / 5) * 160 },
@@ -6454,7 +6493,7 @@ export default function ScreenplayEditor() {
       // Don't autosave if document appears empty (only 1 element with no content)
       // This prevents overwriting real content after a failed load
       const hasRealContent = currentElements.length > 1 ||
-        currentElements.some(el => el.content && el.content.trim().length > 0);
+        currentElements.some(el => el.content && stripHtml(el.content).trim().length > 0);
       if (!hasRealContent) return;
 
       // Build beat data object for comparison
@@ -6527,7 +6566,7 @@ export default function ScreenplayEditor() {
       if (!currentElements || currentElements.length === 0) return;
 
       // Only create snapshot if document has meaningful content
-      const hasContent = currentElements.some(el => el.content && el.content.trim().length > 0);
+      const hasContent = currentElements.some(el => el.content && stripHtml(el.content).trim().length > 0);
       if (!hasContent) return;
 
       try {
@@ -6575,19 +6614,19 @@ export default function ScreenplayEditor() {
 
   // Stats calculation - MUST be before useEffects that use it
   const stats = useMemo(() => {
-    const allText = elements.map(el => el.content).join(' ');
+    const allText = elements.map(el => stripHtml(el.content)).join(' ');
     const words = allText.trim() ? allText.trim().split(/\s+/).length : 0;
     const chars = allText.length;
     const scenes = elements.filter(el => el.type === 'scene').length;
-    
+
     // Advanced stats
     const dialogueWords = elements
       .filter(el => el.type === 'dialogue')
-      .map(el => el.content.trim().split(/\s+/).length)
+      .map(el => stripHtml(el.content).trim().split(/\s+/).length)
       .reduce((a, b) => a + b, 0);
     const actionWords = elements
       .filter(el => el.type === 'action')
-      .map(el => el.content.trim().split(/\s+/).length)
+      .map(el => stripHtml(el.content).trim().split(/\s+/).length)
       .reduce((a, b) => a + b, 0);
     
     const dialogueRatio = words > 0 ? Math.round((dialogueWords / words) * 100) : 0;
@@ -7021,7 +7060,7 @@ export default function ScreenplayEditor() {
     let currentPage = { number: 1, elements: [] };
     let h = 0;
     const getLines = el => {
-      const l = el.content ? Math.ceil(el.content.length / 60) : 1;
+      const l = el.content ? Math.ceil(stripHtml(el.content).length / 60) : 1;
       const e = { scene: 1.5, action: 1, character: 1, dialogue: 0, parenthetical: 0, transition: 1.5 };
       return l + (e[el.type] || 0);
     };
@@ -7066,7 +7105,7 @@ export default function ScreenplayEditor() {
     return result;
   }, [elements]);
 
-  const extractedCharacters = useMemo(() => { const c = new Set(characters); elements.forEach(el => { if (el.type === 'character' && el.content.trim()) c.add(el.content.trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); }, [elements, characters]);
+  const extractedCharacters = useMemo(() => { const c = new Set(characters); elements.forEach(el => { const t = stripHtml(el.content).trim(); if (el.type === 'character' && t) c.add(t.replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); }, [elements, characters]);
   const remoteCursors = useMemo(() => users.filter(u => u.id !== myId), [users, myId]);
   const canEdit = myRole === 'editor';
   const canEditNow = (isFullyConnected || !!offlineDocId) && canEdit;
@@ -7126,7 +7165,7 @@ export default function ScreenplayEditor() {
         let wordCount = 0;
         const sceneCharacters = new Set();
         for (let i = idx; i < nextSceneIdx; i++) {
-          const content = elements[i]?.content || '';
+          const content = stripHtml(elements[i]?.content) || '';
           wordCount += content.trim().split(/\s+/).filter(w => w).length;
           if (elements[i]?.type === 'character') {
             sceneCharacters.add(content.toUpperCase());
@@ -7136,7 +7175,7 @@ export default function ScreenplayEditor() {
         scenes.push({
           index: idx,
           number: sceneNumber,
-          content: el.content || '(sans titre)',
+          content: stripHtml(el.content) || '(sans titre)',
           id: el.id,
           wordCount,
           characters: [...sceneCharacters]
@@ -7186,9 +7225,10 @@ export default function ScreenplayEditor() {
   const extractedLocations = useMemo(() => {
     const locs = new Set();
     elements.forEach(el => {
-      if (el.type === 'scene' && el.content) {
+      const t = stripHtml(el.content);
+      if (el.type === 'scene' && t) {
         // Extract location: "INT. MAISON - JOUR" -> "MAISON"
-        const match = el.content.match(/(?:INT\.|EXT\.|INT\/EXT\.?)\s*(.+?)(?:\s*-\s*(?:JOUR|NUIT|MATIN|SOIR|AUBE|CRÉPUSCULE|CONTINUOUS|LATER|SAME))?$/i);
+        const match = t.match(/(?:INT\.|EXT\.|INT\/EXT\.?)\s*(.+?)(?:\s*-\s*(?:JOUR|NUIT|MATIN|SOIR|AUBE|CRÉPUSCULE|CONTINUOUS|LATER|SAME))?$/i);
         if (match && match[1]) {
           locs.add(match[1].trim().toUpperCase());
         }
@@ -7206,8 +7246,8 @@ export default function ScreenplayEditor() {
       if (el.type === 'scene') {
         currentScene++;
       }
-      if (el.type === 'character' && el.content.trim()) {
-        const name = el.content.trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase();
+      if (el.type === 'character' && stripHtml(el.content).trim()) {
+        const name = stripHtml(el.content).trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase();
         if (!stats[name]) {
           stats[name] = { 
             name, 
@@ -7240,7 +7280,7 @@ export default function ScreenplayEditor() {
     const results = [];
     const query = searchQuery.toLowerCase();
     elements.forEach((el, idx) => {
-      if (el.content.toLowerCase().includes(query)) {
+      if (stripHtml(el.content).toLowerCase().includes(query)) {
         results.push({ index: idx, element: el });
       }
     });
@@ -7266,7 +7306,9 @@ export default function ScreenplayEditor() {
     if (searchResults.length === 0 || !replaceQuery) return;
     const result = searchResults[currentSearchIndex];
     const el = elements[result.index];
-    const newContent = el.content.replace(new RegExp(searchQuery, 'i'), replaceQuery);
+    // Replace in the plain text, then set as new content (formatting may be lost for replaced text)
+    const plain = stripHtml(el.content);
+    const newContent = plain.replace(new RegExp(searchQuery, 'i'), replaceQuery);
     updateElement(result.index, { ...el, content: newContent });
   };
 
@@ -7274,8 +7316,9 @@ export default function ScreenplayEditor() {
     if (searchResults.length === 0 || !replaceQuery) return;
     const regex = new RegExp(searchQuery, 'gi');
     elements.forEach((el, idx) => {
-      if (el.content.toLowerCase().includes(searchQuery.toLowerCase())) {
-        const newContent = el.content.replace(regex, replaceQuery);
+      const plain = stripHtml(el.content);
+      if (plain.toLowerCase().includes(searchQuery.toLowerCase())) {
+        const newContent = plain.replace(regex, replaceQuery);
         updateElement(idx, { ...el, content: newContent });
       }
     });
@@ -8089,7 +8132,8 @@ export default function ScreenplayEditor() {
   
   const handleSelectLocation = useCallback((i, location) => {
     const el = elements[i];
-    const match = el.content.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*/i);
+    const plain = stripHtml(el.content);
+    const match = plain.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*/i);
     const prefix = match ? match[1] + ' ' : '';
     updateElement(i, { ...el, content: prefix + location + ' - ' });
   }, [elements, updateElement]);
@@ -8097,9 +8141,9 @@ export default function ScreenplayEditor() {
   // Rename character globally
   const renameCharacter = useCallback((fromName, toName) => {
     if (!fromName || !toName || fromName === toName) return;
-    
+
     const newElements = elements.map(el => {
-      if (el.type === 'character' && el.content.trim().toUpperCase() === fromName.toUpperCase()) {
+      if (el.type === 'character' && stripHtml(el.content).trim().toUpperCase() === fromName.toUpperCase()) {
         return { ...el, content: toName };
       }
       return el;
@@ -8321,10 +8365,11 @@ export default function ScreenplayEditor() {
       const cursor = getCursorPosition();
       
       // If at end of text (or empty), create new element
-      if (cursor.atEnd || el.content.trim() === '') {
+      const plainEl = stripHtml(el.content);
+      if (cursor.atEnd || plainEl.trim() === '') {
         e.preventDefault();
-        if (el.type === 'parenthetical' && el.content.trim()) {
-          let c = el.content.trim();
+        if (el.type === 'parenthetical' && plainEl.trim()) {
+          let c = plainEl.trim();
           if (!c.startsWith('(')) c = '(' + c;
           if (!c.endsWith(')')) c = c + ')';
           updateElement(index, { ...el, content: c });
@@ -8341,9 +8386,9 @@ export default function ScreenplayEditor() {
       else if (el.type === 'character') changeType(index, e.shiftKey ? 'action' : 'scene');
       else if (el.type === 'scene') changeType(index, e.shiftKey ? 'character' : 'action');
       else if (el.type === 'dialogue' && !e.shiftKey) changeType(index, 'parenthetical');
-      else if (el.type === 'parenthetical' && !e.shiftKey) { if (el.content.trim()) { let c = el.content.trim(); if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } changeType(index, 'dialogue'); }
+      else if (el.type === 'parenthetical' && !e.shiftKey) { const pc = stripHtml(el.content).trim(); if (pc) { let c = pc; if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } changeType(index, 'dialogue'); }
     }
-    if (e.key === 'Backspace' && el.content === '' && elements.length > 1) { e.preventDefault(); deleteElement(index); }
+    if (e.key === 'Backspace' && stripHtml(el.content) === '' && elements.length > 1) { e.preventDefault(); deleteElement(index); }
     
     // Arrow navigation: let browser handle normal cursor movement within element
     // Only intercept at element boundaries
@@ -8360,7 +8405,7 @@ export default function ScreenplayEditor() {
       // Only move to prev element if truly at the start
       if (isCursorAtStart() && index > 0) {
         e.preventDefault();
-        handleFocus(index - 1, elements[index - 1].content.length);
+        handleFocus(index - 1, stripHtml(elements[index - 1].content).length);
       }
       // Otherwise, let browser handle normal line navigation
     }
@@ -8415,7 +8460,7 @@ export default function ScreenplayEditor() {
         copiedBlocksRef.current = JSON.parse(JSON.stringify(selected));
         // Build formatted plain text for external paste (other apps)
         const plainText = selected.map(el => {
-          const text = el.content || '';
+          const text = stripHtml(el.content) || '';
           switch (el.type) {
             case 'scene': return '\n' + text.toUpperCase() + '\n';
             case 'character': return '\n                         ' + text.toUpperCase();
@@ -8758,8 +8803,9 @@ export default function ScreenplayEditor() {
     if (!element) return;
     
     // Replace the selected portion with the AI result
-    const before = element.content.substring(0, startOffset);
-    const after = element.content.substring(endOffset);
+    const plain = stripHtml(element.content);
+    const before = plain.substring(0, startOffset);
+    const after = plain.substring(endOffset);
     const newContent = before + aiRewriteResult + after;
     
     updateElement(elementIndex, newContent);
@@ -8774,7 +8820,7 @@ export default function ScreenplayEditor() {
   const exportFDX = () => {
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<FinalDraft DocumentType="Script" Version="3">\n<Content>\n';
-    elements.forEach(el => { xml += '<Paragraph Type="' + (TYPE_TO_FDX[el.type] || 'Action') + '"><Text>' + esc(el.content) + '</Text></Paragraph>\n'; });
+    elements.forEach(el => { xml += '<Paragraph Type="' + (TYPE_TO_FDX[el.type] || 'Action') + '"><Text>' + esc(stripHtml(el.content)) + '</Text></Paragraph>\n'; });
     xml += '</Content>\n</FinalDraft>';
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([xml], { type: 'application/xml' })); a.download = title.toLowerCase().replace(/\s+/g, '-') + '.fdx'; a.click();
   };
@@ -8783,7 +8829,7 @@ export default function ScreenplayEditor() {
     const printWindow = window.open('', '_blank');
     const styles = `body { font-family: 'Courier Prime', 'Courier New', monospace; font-size: 12pt; line-height: 1; margin: 1in; } .scene { text-transform: uppercase; font-weight: bold; margin-top: 2em; } .action { margin-top: 1em; } .character { text-transform: uppercase; font-weight: bold; margin-left: 37%; margin-top: 1em; } .dialogue { margin-left: 17%; width: 42%; } .parenthetical { margin-left: 27%; font-style: italic; } .transition { text-transform: uppercase; text-align: right; margin-top: 1em; } @media print { @page { margin: 1in; } }`;
     let html = `<!DOCTYPE html><html><head><title>${title}</title><style>${styles}</style></head><body>`;
-    elements.forEach(el => { html += `<p class="${el.type}">${el.content || '&nbsp;'}</p>`; });
+    elements.forEach(el => { html += `<p class="${el.type}">${el.content || '&nbsp;'}</p>`; }); // HTML content preserved for PDF
     html += '</body></html>';
     printWindow.document.write(html);
     printWindow.document.close();
@@ -8794,27 +8840,28 @@ export default function ScreenplayEditor() {
     let fountain = `Title: ${title}\nCredit: written by\nAuthor: \nDraft date: ${new Date().toLocaleDateString('fr-FR')}\n\n`;
     
     elements.forEach(el => {
+      const t = stripHtml(el.content);
       switch (el.type) {
         case 'scene':
-          fountain += `\n${el.content.toUpperCase()}\n\n`;
+          fountain += `\n${t.toUpperCase()}\n\n`;
           break;
         case 'action':
-          fountain += `${el.content}\n\n`;
+          fountain += `${t}\n\n`;
           break;
         case 'character':
-          fountain += `${el.content.toUpperCase()}\n`;
+          fountain += `${t.toUpperCase()}\n`;
           break;
         case 'dialogue':
-          fountain += `${el.content}\n\n`;
+          fountain += `${t}\n\n`;
           break;
         case 'parenthetical':
-          fountain += `${el.content.startsWith('(') ? el.content : '(' + el.content + ')'}\n`;
+          fountain += `${t.startsWith('(') ? t : '(' + t + ')'}\n`;
           break;
         case 'transition':
-          fountain += `\n> ${el.content.toUpperCase()}\n\n`;
+          fountain += `\n> ${t.toUpperCase()}\n\n`;
           break;
         default:
-          fountain += `${el.content}\n\n`;
+          fountain += `${t}\n\n`;
       }
     });
     
@@ -8828,27 +8875,28 @@ export default function ScreenplayEditor() {
     let txt = `${title.toUpperCase()}\n${'='.repeat(title.length)}\n\n`;
     
     elements.forEach(el => {
+      const t = stripHtml(el.content);
       switch (el.type) {
         case 'scene':
-          txt += `\n${el.content.toUpperCase()}\n\n`;
+          txt += `\n${t.toUpperCase()}\n\n`;
           break;
         case 'action':
-          txt += `${el.content}\n\n`;
+          txt += `${t}\n\n`;
           break;
         case 'character':
-          txt += `\t\t\t${el.content.toUpperCase()}\n`;
+          txt += `\t\t\t${t.toUpperCase()}\n`;
           break;
         case 'dialogue':
-          txt += `\t\t${el.content}\n\n`;
+          txt += `\t\t${t}\n\n`;
           break;
         case 'parenthetical':
-          txt += `\t\t${el.content.startsWith('(') ? el.content : '(' + el.content + ')'}\n`;
+          txt += `\t\t${t.startsWith('(') ? t : '(' + t + ')'}\n`;
           break;
         case 'transition':
-          txt += `\n\t\t\t\t\t${el.content.toUpperCase()}\n\n`;
+          txt += `\n\t\t\t\t\t${t.toUpperCase()}\n\n`;
           break;
         default:
-          txt += `${el.content}\n\n`;
+          txt += `${t}\n\n`;
       }
     });
     
@@ -8864,28 +8912,29 @@ export default function ScreenplayEditor() {
     
     let currentScene = 0;
     elements.forEach(el => {
+      const t = stripHtml(el.content);
       switch (el.type) {
         case 'scene':
           currentScene++;
-          md += `## Scène ${currentScene}: ${el.content}\n\n`;
+          md += `## Scène ${currentScene}: ${t}\n\n`;
           break;
         case 'action':
-          md += `*${el.content}*\n\n`;
+          md += `*${t}*\n\n`;
           break;
         case 'character':
-          md += `**${el.content.toUpperCase()}**\n`;
+          md += `**${t.toUpperCase()}**\n`;
           break;
         case 'dialogue':
-          md += `> ${el.content}\n\n`;
+          md += `> ${t}\n\n`;
           break;
         case 'parenthetical':
-          md += `*(${el.content.replace(/[()]/g, '')})*\n`;
+          md += `*(${t.replace(/[()]/g, '')})*\n`;
           break;
         case 'transition':
-          md += `\n**${el.content.toUpperCase()}**\n\n---\n\n`;
+          md += `\n**${t.toUpperCase()}**\n\n---\n\n`;
           break;
         default:
-          md += `${el.content}\n\n`;
+          md += `${t}\n\n`;
       }
     });
     
@@ -9126,7 +9175,7 @@ export default function ScreenplayEditor() {
                     <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.4 }}>{template.description}</div>
                     {key !== 'empty' && (
                       <div style={{ marginTop: 12, fontSize: 11, color: '#9ca3af' }}>
-                        {template.elements.filter(e => e.type === 'scene' && e.content.startsWith('===')).length} sections
+                        {template.elements.filter(e => e.type === 'scene' && stripHtml(e.content).startsWith('===')).length} sections
                       </div>
                     )}
                   </button>
@@ -10426,7 +10475,7 @@ export default function ScreenplayEditor() {
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis'
-                      }}>{scene.content || 'Scène vide'}</div>
+                      }}>{stripHtml(scene.content) || 'Scène vide'}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                       <button
@@ -10749,10 +10798,11 @@ export default function ScreenplayEditor() {
               const elementIndex = elements.findIndex(el => el.id === suggestion.elementId);
               if (elementIndex !== -1) {
                 const element = elements[elementIndex];
-                const newContent = 
-                  element.content.substring(0, suggestion.startOffset) + 
-                  suggestion.suggestedText + 
-                  element.content.substring(suggestion.endOffset);
+                const plain = stripHtml(element.content);
+                const newContent =
+                  plain.substring(0, suggestion.startOffset) +
+                  suggestion.suggestedText +
+                  plain.substring(suggestion.endOffset);
                 updateElement(elementIndex, { ...element, content: newContent });
               }
               // Remove the suggestion
@@ -11057,9 +11107,9 @@ export default function ScreenplayEditor() {
                 setPendingSuggestion({
                   elementId: currentElement?.id,
                   elementIndex: activeIndex,
-                  originalText: currentElement?.content || '',
+                  originalText: stripHtml(currentElement?.content) || '',
                   startOffset: 0,
-                  endOffset: currentElement?.content?.length || 0
+                  endOffset: stripHtml(currentElement?.content).length || 0
                 });
               }
               setShowComments(true);
@@ -11104,9 +11154,9 @@ export default function ScreenplayEditor() {
                 setPendingInlineComment({
                   elementId: currentElement?.id,
                   elementIndex: activeIndex,
-                  text: currentElement?.content || '',
+                  text: stripHtml(currentElement?.content) || '',
                   startOffset: 0,
-                  endOffset: currentElement?.content?.length || 0
+                  endOffset: stripHtml(currentElement?.content).length || 0
                 });
               }
               setShowComments(true);
@@ -11152,9 +11202,9 @@ export default function ScreenplayEditor() {
                 setAiRewriteSelection({
                   elementId: currentElement?.id,
                   elementIndex: activeIndex,
-                  text: currentElement?.content || '',
+                  text: stripHtml(currentElement?.content) || '',
                   startOffset: 0,
-                  endOffset: currentElement?.content?.length || 0
+                  endOffset: stripHtml(currentElement?.content).length || 0
                 });
               }
               setShowAIRewrite(true);
