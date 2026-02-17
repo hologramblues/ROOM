@@ -748,7 +748,11 @@ io.on('connection', (socket) => {
       if (!checkDocumentAccess(doc, socket.user, 'viewer')) return socket.emit('error', { message: 'Acces refuse' });
       let role = 'viewer';
       if (socket.user) { if (doc.ownerId.equals(socket.user._id)) role = 'editor'; else { const c = doc.collaborators.find(c => c.userId.equals(socket.user._id)); if (c) role = c.role; } }
-      if (doc.publicAccess.enabled && doc.publicAccess.role === 'editor') role = 'editor';
+      // Apply public access role (use the highest between current role and public role)
+      if (doc.publicAccess.enabled) {
+        const h = { viewer: 0, commenter: 1, editor: 2 };
+        if (h[doc.publicAccess.role] > h[role]) role = doc.publicAccess.role;
+      }
       currentDocId = docId; socket.join(docId);
       if (!activeRooms.has(docId)) activeRooms.set(docId, new Map());
       const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: socket.user?.color || getRandomColor(), role, cursor: null };
@@ -1017,6 +1021,14 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('[FULL-SYNC] Error:', err);
     }
+  });
+
+  // ============ CHAT ============
+
+  socket.on('chat-message', ({ docId, message }) => {
+    if (!currentDocId || currentDocId !== docId) return;
+    // Broadcast to everyone else in the room
+    socket.to(currentDocId).emit('chat-message', message);
   });
 
   // ============ CURSOR & DISCONNECT ============

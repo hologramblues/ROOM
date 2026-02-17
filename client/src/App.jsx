@@ -894,7 +894,8 @@ const HistoryPanel = ({ docId, token, currentTitle, onRestore, onClose, t = (k) 
                 if (entry.action === 'snapshot') {
                   const d = new Date(entry.createdAt);
                   const pad = n => n.toString().padStart(2, '0');
-                  return `SNAPSHOT_${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()}_${pad(d.getHours())}h${pad(d.getMinutes())}`;
+                  const title = entry.data?.title || currentTitle || 'SANS TITRE';
+                  return `${title} - ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${String(d.getFullYear()).slice(-2)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
                 }
                 return actionLabels[entry.action] || entry.action;
               };
@@ -6451,7 +6452,12 @@ export default function ScreenplayEditor() {
       const currentWhiteboardElements = whiteboardElementsRef.current;
       
       if (!currentElements || currentElements.length === 0) return;
-      
+      // Don't autosave if document appears empty (only 1 element with no content)
+      // This prevents overwriting real content after a failed load
+      const hasRealContent = currentElements.length > 1 ||
+        currentElements.some(el => el.content && el.content.trim().length > 0);
+      if (!hasRealContent) return;
+
       // Build beat data object for comparison
       const currentBeatData = {
         beatCards: currentBeatCards,
@@ -6500,16 +6506,16 @@ export default function ScreenplayEditor() {
     return () => clearInterval(autoSaveInterval);
   }, [docId, token, offlineDocId]); // Recreate when docId, token, or offline mode changes
 
-  // Helper to format snapshot name: "Title - MMDDYY HH:MM"
+  // Helper to format snapshot name: "TITLE - DD/MM/YY HH:MM" or "TITLE - DD/MM/YY HH:MM - AS" for autosave
   const formatSnapshotName = (docTitle, isAuto = false) => {
     const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yy = String(now.getFullYear()).slice(-2);
     const hh = String(now.getHours()).padStart(2, '0');
     const min = String(now.getMinutes()).padStart(2, '0');
-    const prefix = isAuto ? '[Auto] ' : '';
-    return `${prefix}${docTitle} - ${mm}${dd}${yy} ${hh}:${min}`;
+    const suffix = isAuto ? ' - AS' : '';
+    return `${docTitle || 'SANS TITRE'} - ${dd}/${mm}/${yy} ${hh}:${min}${suffix}`;
   };
 
   // Auto-snapshot every 15 minutes (only when document is open and has content)
