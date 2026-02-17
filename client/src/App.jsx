@@ -3312,8 +3312,8 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
         blockquote: false,
         codeBlock: false,
         horizontalRule: false,
-        // Disable TipTap's built-in history - we use our own global undo system
-        history: false,
+        // Enable TipTap's built-in history for inline text undo/redo (Cmd+Z within a line)
+        history: true,
         // Keep hardBreak for line breaks within elements
         hardBreak: true,
         // Keep paragraph but style it
@@ -3339,11 +3339,8 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
       handleKeyDown: (view, event) => {
         if (!view) return false;
         try {
-        // Let Cmd+Z / Ctrl+Z bubble up to global handler (don't block it)
-        if ((event.metaKey || event.ctrlKey) && event.key === 'z') {
-          // Don't handle here - let it bubble to global handler
-          return false;
-        }
+        // Cmd+Z / Ctrl+Z: let TipTap's history extension handle undo/redo inline
+        // (global undo only fires when NOT inside an editor)
         
         // Autocomplete navigation
         if (showAuto && filtered.length > 0) {
@@ -7888,6 +7885,21 @@ export default function ScreenplayEditor() {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
+      // Check if focus is inside a TipTap/contenteditable editor
+      const activeEl = document.activeElement;
+      const isInEditor = activeEl && (
+        activeEl.isContentEditable ||
+        activeEl.closest('[contenteditable="true"]') ||
+        activeEl.closest('.ProseMirror')
+      );
+
+      // When inside an editor, let standard text editing shortcuts pass through to TipTap
+      if (isInEditor && (e.metaKey || e.ctrlKey)) {
+        const k = e.key.toLowerCase();
+        // Bold, Italic, Underline, Undo, Redo — let TipTap handle these
+        if (k === 'b' || k === 'i' || k === 'u' || k === 'z') return;
+      }
+
       // Cmd+S = Snapshot
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
