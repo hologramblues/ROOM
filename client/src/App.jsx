@@ -7928,13 +7928,23 @@ export default function ScreenplayEditor() {
   // Global keyboard shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
-      // Check if focus is inside a TipTap/contenteditable editor
+      // Check if focus is inside a text input (editor, textarea, input)
       const activeEl = document.activeElement;
       const isInEditor = activeEl && (
         activeEl.isContentEditable ||
         activeEl.closest('[contenteditable="true"]') ||
         activeEl.closest('.ProseMirror')
       );
+      const isInTextInput = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA'
+      );
+
+      // When inside any text input (comment, search, etc.), let ALL keys pass through natively
+      if (isInTextInput) {
+        // Only intercept Cmd+S (snapshot) — everything else goes to the input
+        if (!((e.metaKey || e.ctrlKey) && e.key === 's')) return;
+      }
 
       // When inside an editor, let standard text editing shortcuts pass through to TipTap
       if (isInEditor && (e.metaKey || e.ctrlKey)) {
@@ -8448,6 +8458,12 @@ export default function ScreenplayEditor() {
       // Escape: clear selection
       if (e.key === 'Escape') {
         setSelectedRange(null);
+        return;
+      }
+
+      // Don't intercept keys when focus is in an input/textarea (comment, search, etc.)
+      const focusedEl = document.activeElement;
+      if (focusedEl && (focusedEl.tagName === 'INPUT' || focusedEl.tagName === 'TEXTAREA' || (focusedEl.isContentEditable && !focusedEl.closest('.script-editor-container')))) {
         return;
       }
 
