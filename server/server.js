@@ -640,16 +640,17 @@ app.post('/api/documents/:shortId/comments', authMiddleware, async (req, res) =>
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc || !checkDocumentAccess(doc, req.user, 'commenter')) return res.status(403).json({ error: 'Acces refuse' });
-    const comment = { 
-      id: uuidv4(), 
-      elementId: req.body.elementId, 
+    const comment = {
+      id: uuidv4(),
+      elementId: req.body.elementId,
       elementIndex: req.body.elementIndex,
       highlight: req.body.highlight || null,
-      userId: req.user._id, 
-      userName: req.user.name, 
-      userColor: req.user.color, 
-      content: req.body.content, 
-      createdAt: new Date(), 
+      spans: req.body.spans || null,
+      userId: req.user._id,
+      userName: req.user.name,
+      userColor: req.user.color,
+      content: req.body.content,
+      createdAt: new Date(),
       replies: [],
       resolved: false
     };
@@ -902,6 +903,7 @@ io.on('connection', (socket) => {
         elementId: comment.elementId,
         elementIndex: comment.elementIndex,
         highlight: comment.highlight || null,
+        spans: comment.spans || null,
         userId: socket.user?._id,
         userName: comment.userName || socket.user?.name || 'Anonyme',
         userColor: comment.userColor || socket.user?.color || '#6b7280',

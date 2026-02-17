@@ -7511,15 +7511,31 @@ export default function ScreenplayEditor() {
   const highlightsByElement = useMemo(() => {
     const map = {};
     
-    // Process comments
+    // Process comments (supports multi-element spans)
     comments.forEach(c => {
-      if (c.elementId && c.highlight && !c.resolved) {
+      if (c.resolved) return;
+      const commentId = String(c.id || c._id);
+      if (c.spans && c.spans.length > 0) {
+        // Multi-element comment: add a highlight entry for each spanned element
+        c.spans.forEach(span => {
+          if (!span.elementId) return;
+          if (!map[span.elementId]) map[span.elementId] = [];
+          map[span.elementId].push({
+            startOffset: span.startOffset,
+            endOffset: span.endOffset,
+            type: 'comment',
+            id: commentId,
+            userColor: c.userColor
+          });
+        });
+      } else if (c.elementId && c.highlight) {
+        // Single-element comment (backward compat)
         if (!map[c.elementId]) map[c.elementId] = [];
         map[c.elementId].push({
           startOffset: c.highlight.startOffset,
           endOffset: c.highlight.endOffset,
           type: 'comment',
-          id: String(c.id || c._id),
+          id: commentId,
           userColor: c.userColor
         });
       }
@@ -10760,6 +10776,7 @@ export default function ScreenplayEditor() {
                   startOffset: pendingInlineComment.startOffset,
                   endOffset: pendingInlineComment.endOffset
                 },
+                spans: pendingInlineComment.spans || null,
                 content: commentText.trim(),
                 userName: currentUser?.name || 'Anonyme',
                 userColor: currentUser?.color || '#6b7280',
@@ -11071,7 +11088,7 @@ export default function ScreenplayEditor() {
       
       {/* Context Action Menu - Google Docs style */}
       {/* Shows when script has focus OR when there's a text selection */}
-      {canComment && (scriptHasFocus || textSelection) && contextMenuTop !== null && (() => {
+      {canComment && (scriptHasFocus || textSelection || selectedRange) && contextMenuTop !== null && (() => {
         const hasSelection = textSelection && textSelection.text;
         const currentElement = elements[activeIndex];
         
@@ -11155,9 +11172,36 @@ export default function ScreenplayEditor() {
           </button>
           
           {/* Comment button */}
-          <button 
+          <button
             onClick={() => {
-              if (hasSelection) {
+              if (selectedRange) {
+                // Multi-block comment: build spans for all selected elements
+                const { start, end } = selectedRange;
+                const spans = [];
+                let fullText = '';
+                for (let i = start; i <= end; i++) {
+                  const el = elements[i];
+                  if (!el) continue;
+                  const plain = stripHtml(el.content);
+                  spans.push({
+                    elementId: el.id,
+                    elementIndex: i,
+                    startOffset: 0,
+                    endOffset: plain.length
+                  });
+                  if (fullText) fullText += '\n';
+                  fullText += plain;
+                }
+                setPendingInlineComment({
+                  elementId: elements[start]?.id,
+                  elementIndex: start,
+                  text: fullText,
+                  startOffset: 0,
+                  endOffset: stripHtml(elements[start]?.content).length || 0,
+                  spans
+                });
+                setSelectedRange(null);
+              } else if (hasSelection) {
                 setPendingInlineComment({
                   elementId: textSelection.elementId,
                   elementIndex: textSelection.elementIndex,
