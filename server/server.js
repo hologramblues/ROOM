@@ -213,25 +213,25 @@ app.delete('/api/waitlist/:email', async (req, res) => {
 });
 
 function checkDocumentAccess(doc, user, requiredRole) {
-  // REQUIRE authentication - no access without a logged-in user
-  if (!user) return false;
-  
-  // Owner always has full access
-  if (doc.ownerId.equals(user._id)) return true;
-  
-  // Check collaborator role
-  const collab = doc.collaborators.find(c => c.userId.equals(user._id));
-  if (collab) { 
-    const h = { viewer: 0, commenter: 1, editor: 2 }; 
-    return h[collab.role] >= h[requiredRole]; 
-  }
-  
-  // Check public access (only for authenticated users)
-  if (doc.publicAccess.enabled) {
+  // Check public access first (works even without authentication)
+  if (doc.publicAccess && doc.publicAccess.enabled) {
     const h = { viewer: 0, commenter: 1, editor: 2 };
     if (h[doc.publicAccess.role] >= h[requiredRole]) return true;
   }
-  
+
+  // All other checks require authentication
+  if (!user) return false;
+
+  // Owner always has full access
+  if (doc.ownerId.equals(user._id)) return true;
+
+  // Check collaborator role
+  const collab = doc.collaborators.find(c => c.userId.equals(user._id));
+  if (collab) {
+    const h = { viewer: 0, commenter: 1, editor: 2 };
+    return h[collab.role] >= h[requiredRole];
+  }
+
   return false;
 }
 
@@ -495,6 +495,20 @@ app.get('/api/documents/:shortId', optionalAuthMiddleware, async (req, res) => {
       isOwner: req.user && doc.ownerId.equals(req.user._id), 
       publicAccess: doc.publicAccess 
     });
+  } catch (error) { res.status(500).json({ error: 'Erreur' }); }
+});
+
+// Update public access settings (owner only)
+app.put('/api/documents/:shortId/public-access', authMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findOne({ shortId: req.params.shortId });
+    if (!doc) return res.status(404).json({ error: 'Document non trouve' });
+    if (!doc.ownerId.equals(req.user._id)) return res.status(403).json({ error: 'Seul le proprietaire peut modifier l\'acces public' });
+    const { enabled, role } = req.body;
+    if (typeof enabled === 'boolean') doc.publicAccess.enabled = enabled;
+    if (role && ['viewer', 'commenter', 'editor'].includes(role)) doc.publicAccess.role = role;
+    await doc.save();
+    res.json({ publicAccess: doc.publicAccess });
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
