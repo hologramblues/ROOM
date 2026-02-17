@@ -6750,16 +6750,36 @@ export default function ScreenplayEditor() {
         return u;
       });
     });
-    socket.on('element-type-updated', ({ index, type }) => {
+    socket.on('element-type-updated', ({ index, type, elementId }) => {
       if (isStale) return;
       setElements(p => {
         const u = [...p];
-        if (index >= 0 && index < u.length) u[index] = { ...u[index], type };
+        // ID-based matching first, fallback to index
+        const matchIdx = elementId ? u.findIndex(el => el.id === elementId) : -1;
+        const targetIdx = matchIdx >= 0 ? matchIdx : index;
+        if (targetIdx >= 0 && targetIdx < u.length) u[targetIdx] = { ...u[targetIdx], type };
         return u;
       });
     });
-    socket.on('element-inserted', ({ afterIndex, element }) => { if (!isStale) setElements(p => { const u = [...p]; u.splice(afterIndex + 1, 0, element); return u; }); });
-    socket.on('element-deleted', ({ index }) => { if (!isStale) setElements(p => p.filter((_, i) => i !== index)); });
+    socket.on('element-inserted', ({ afterIndex, afterElementId, element }) => {
+      if (isStale) return;
+      setElements(p => {
+        const u = [...p];
+        // ID-based positioning first, fallback to index
+        const matchIdx = afterElementId ? u.findIndex(el => el.id === afterElementId) : -1;
+        const insertAfter = matchIdx >= 0 ? matchIdx : afterIndex;
+        u.splice(insertAfter + 1, 0, element);
+        return u;
+      });
+    });
+    socket.on('element-deleted', ({ index, elementId }) => {
+      if (isStale) return;
+      setElements(p => {
+        // ID-based delete first, fallback to index
+        if (elementId) return p.filter(el => el.id !== elementId);
+        return p.filter((_, i) => i !== index);
+      });
+    });
     socket.on('user-joined', ({ users }) => { if (!isStale) setUsers(users); });
     socket.on('user-left', ({ users }) => { if (!isStale) setUsers(users); });
     socket.on('cursor-updated', ({ userId, cursor }) => { if (!isStale) setUsers(p => p.map(u => u.id === userId ? { ...u, cursor } : u)); });
@@ -6902,7 +6922,7 @@ export default function ScreenplayEditor() {
           if (idx === 0) {
             socketRef.current.emit('element-change', { index: 0, element: el });
           } else {
-            socketRef.current.emit('element-insert', { afterIndex: idx - 1, element: el });
+            socketRef.current.emit('element-insert', { afterIndex: idx - 1, afterElementId: templateElements[idx - 1]?.id, element: el });
           }
         });
         
@@ -8037,19 +8057,21 @@ export default function ScreenplayEditor() {
     const el = { id: generateId(), type, content: '' };
     setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; });
     setActiveIndex(after + 1);
-    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-insert', { afterIndex: after, element: el });
+    const afterElementId = elementsRef.current[after]?.id;
+    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-insert', { afterIndex: after, afterElementId, element: el });
     setLastSaved(new Date());
   }, [connected, canEdit, canEditNow, pushToUndo]);
   const deleteElement = useCallback(i => {
     if (!canEditNow) return;
     if (elementsRef.current.length === 1) return;
     pushToUndo();
+    const elementId = elementsRef.current[i]?.id;
     setElements(p => p.filter((_, idx) => idx !== i));
     setActiveIndex(Math.max(0, i - 1));
-    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-delete', { index: i });
+    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-delete', { index: i, elementId });
     setLastSaved(new Date());
   }, [connected, canEdit, canEditNow, pushToUndo]);
-  const changeType = useCallback((i, t) => { if (!canEditNow) return; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t }); }, [connected, canEdit, canEditNow]);
+  const changeType = useCallback((i, t) => { if (!canEditNow) return; const elementId = elementsRef.current[i]?.id; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t, elementId }); }, [connected, canEdit, canEditNow]);
   const handleCursor = useCallback((i, pos) => { if (socketRef.current && connected) socketRef.current.emit('cursor-move', { index: i, position: pos }); }, [connected]);
   const handleSelectChar = useCallback((i, name) => { updateElement(i, { ...elements[i], content: name }); setTimeout(() => insertElement(i, 'dialogue'), 50); }, [elements, updateElement, insertElement]);
   
