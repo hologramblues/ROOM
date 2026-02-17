@@ -3526,8 +3526,10 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   });
   
   // Sync content from parent when it changes externally
+  // IMPORTANT: skip if editor is focused (user is typing) to avoid cursor reset
   useEffect(() => {
     if (!editorReady || !editor) return;
+    if (editor.isFocused) return; // Don't reset content while user is actively typing
     try {
       const editorText = editor.getText();
       if (element.content !== editorText && element.content !== lastContentRef.current) {
@@ -6720,11 +6722,12 @@ export default function ScreenplayEditor() {
       if (data.collaborators && data.collaborators.length > 0) {
         setCollaborators(data.collaborators);
       }
+      // Always sync comments and suggestions regardless of offline mode
+      if (data.comments) setComments(data.comments);
       // Re-sync document content on reconnect (only if NOT in offline mode)
       if (!offlineDocIdRef.current && data.elements) {
         setElements(data.elements);
         if (data.title) setTitle(data.title);
-        if (data.comments) setComments(data.comments);
         console.log('[SYNC] Document re-synced from server on reconnect');
       }
     });
@@ -6736,8 +6739,25 @@ export default function ScreenplayEditor() {
       }
     });
     socket.on('title-updated', ({ title }) => { if (!isStale) setTitle(title); });
-    socket.on('element-updated', ({ index, element }) => { if (!isStale) setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = element; return u; }); });
-    socket.on('element-type-updated', ({ index, type }) => { if (!isStale) setElements(p => { const u = [...p]; if (index >= 0 && index < u.length) u[index] = { ...u[index], type }; return u; }); });
+    socket.on('element-updated', ({ index, element }) => {
+      if (isStale) return;
+      setElements(p => {
+        const u = [...p];
+        // Match by element ID first (reliable), fallback to index
+        const matchIdx = element?.id ? u.findIndex(el => el.id === element.id) : -1;
+        const targetIdx = matchIdx >= 0 ? matchIdx : index;
+        if (targetIdx >= 0 && targetIdx < u.length) u[targetIdx] = element;
+        return u;
+      });
+    });
+    socket.on('element-type-updated', ({ index, type }) => {
+      if (isStale) return;
+      setElements(p => {
+        const u = [...p];
+        if (index >= 0 && index < u.length) u[index] = { ...u[index], type };
+        return u;
+      });
+    });
     socket.on('element-inserted', ({ afterIndex, element }) => { if (!isStale) setElements(p => { const u = [...p]; u.splice(afterIndex + 1, 0, element); return u; }); });
     socket.on('element-deleted', ({ index }) => { if (!isStale) setElements(p => p.filter((_, i) => i !== index)); });
     socket.on('user-joined', ({ users }) => { if (!isStale) setUsers(users); });
