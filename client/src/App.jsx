@@ -6242,6 +6242,8 @@ export default function ScreenplayEditor() {
     if (docId && docId !== 'local' && !token) {
       pendingDocIdRef.current = docId;
       setShowAuthModal(true);
+      // Don't let loadDocument run without auth — it would fail with 403
+      // and potentially set stale state. The loadDocument effect checks token too.
     }
   }, [docId, token]);
 
@@ -6611,10 +6613,13 @@ export default function ScreenplayEditor() {
         return;
       }
       if (loadedDocRef.current === docId) return;
-      
+      // Skip loading if no token — wait for user to login first
+      // (the effect will re-trigger when token changes)
+      if (!token) return;
+
       setLoading(true);
       try {
-        const headers = token ? { Authorization: 'Bearer ' + token } : {};
+        const headers = { Authorization: 'Bearer ' + token };
         const res = await fetch(SERVER_URL + '/api/documents/' + docId, { headers });
         if (res.ok) {
           const data = await res.json();
@@ -6767,13 +6772,15 @@ export default function ScreenplayEditor() {
     setCurrentUser(user);
     setToken(newToken);
     setShowAuthModal(false);
+    // Always force document reload after login (new auth may grant different access)
+    loadedDocRef.current = null;
     // Restore pending document if user opened a shared link before logging in
     if (pendingDocIdRef.current) {
       const pending = pendingDocIdRef.current;
       pendingDocIdRef.current = null;
-      // Force reload of the document with new auth
-      loadedDocRef.current = null;
-      setDocId(pending);
+      if (pending !== docId) {
+        setDocId(pending);
+      }
       window.location.hash = pending;
     }
   };
