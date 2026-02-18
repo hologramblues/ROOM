@@ -917,7 +917,9 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               const div = document.createElement('div');
               div.className = 'page-break-decoration';
               div.setAttribute('contenteditable', 'false');
-              div.innerHTML = '<div class="page-edge-bottom"></div><div class="page-gap"><span class="page-break-number">' + (pageNumbers[nodeIndex] || '') + '.</span></div><div class="page-edge-top"></div>';
+              const gapBg = darkMode ? '#2b2b2b' : '#e5e7eb';
+              const pageBg = darkMode ? '#3a3a3a' : 'white';
+              div.innerHTML = '<div class="page-edge-bottom" style="background:' + pageBg + '"></div><div class="page-gap" style="background:' + gapBg + '"><span class="page-break-number">' + (pageNumbers[nodeIndex] || '') + '.</span></div><div class="page-edge-top" style="background:' + pageBg + '"></div>';
               return div;
             }, { side: -1, key: 'pb-' + nodeIndex }));
           }
@@ -7714,23 +7716,29 @@ export default function ScreenplayEditor() {
       clearTimeout(highlightsTimeoutRef.current);
     }
     
-    highlightsTimeoutRef.current = setTimeout(() => {
+    const applyHighlights = () => {
       // Clear all existing highlights
       CSS.highlights.delete('comment-highlight');
       CSS.highlights.delete('suggestion-highlight');
-      
+
       const commentRanges = [];
       const suggestionRanges = [];
-      
+
+      // Check if ProseMirror DOM is ready
+      const proseMirror = document.querySelector('.ProseMirror');
+      if (!proseMirror || !proseMirror.querySelector('[data-element-id]')) {
+        return false; // DOM not ready
+      }
+
       // Find all elements with highlights
       elements.forEach(element => {
         const highlights = getElementHighlights(element.id);
         if (highlights.length === 0) return;
-        
+
         // Find the DOM element
-        const domEl = document.querySelector(`[data-element-id="${element.id}"]`);
+        const domEl = proseMirror.querySelector(`[data-element-id="${element.id}"]`);
         if (!domEl) return;
-        
+
         highlights.forEach(h => {
           try {
             // Find the correct text node and offsets using TreeWalker
@@ -7738,34 +7746,34 @@ export default function ScreenplayEditor() {
             let currentOffset = 0;
             let startNode = null, startOffset = 0;
             let endNode = null, endOffset = 0;
-            
+
             let node = walker.nextNode();
-            
+
             while (node) {
               const nodeLength = node.textContent.length;
-              
+
               // Check if start is in this node
               if (!startNode && currentOffset + nodeLength > h.startOffset) {
                 startNode = node;
                 startOffset = h.startOffset - currentOffset;
               }
-              
+
               // Check if end is in this node
               if (!endNode && currentOffset + nodeLength >= h.endOffset) {
                 endNode = node;
                 endOffset = h.endOffset - currentOffset;
                 break;
               }
-              
+
               currentOffset += nodeLength;
               node = walker.nextNode();
             }
-            
+
             if (startNode && endNode) {
               const range = new Range();
               range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
               range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
-              
+
               if (h.type === 'comment') {
                 commentRanges.push(range);
               } else if (h.type === 'suggestion') {
@@ -7777,7 +7785,7 @@ export default function ScreenplayEditor() {
           }
         });
       });
-      
+
       // Create and register the highlights
       if (commentRanges.length > 0) {
         // eslint-disable-next-line no-undef
@@ -7789,7 +7797,18 @@ export default function ScreenplayEditor() {
         const suggestionHighlight = new Highlight(...suggestionRanges);
         CSS.highlights.set('suggestion-highlight', suggestionHighlight);
       }
-    }, isSafari ? 300 : 100); // Longer throttle on Safari
+      return true;
+    };
+
+    // Try immediately after short delay, retry if DOM not ready
+    highlightsTimeoutRef.current = setTimeout(() => {
+      if (!applyHighlights()) {
+        // DOM not ready, retry after longer delay
+        highlightsTimeoutRef.current = setTimeout(() => {
+          applyHighlights();
+        }, 500);
+      }
+    }, 150);
     
     // Cleanup function
     return () => {
@@ -12092,11 +12111,6 @@ export default function ScreenplayEditor() {
         ::highlight(suggestion-highlight) {
           background-color: rgba(34, 197, 94, 0.3);
           text-decoration: underline wavy #16a34a;
-        }
-        
-        /* Safari performance optimizations */
-        [data-screenplay-element] {
-          contain: layout;
         }
         
         /* Reduce paint complexity on Safari */

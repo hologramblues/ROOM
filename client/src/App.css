@@ -113,14 +113,12 @@
 
 .page-edge-bottom {
   height: 25mm;
-  background: inherit;
   border-radius: 0 0 2px 2px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .page-gap {
   height: 20px;
-  background: transparent;
   position: relative;
   display: flex;
   align-items: center;
@@ -131,13 +129,11 @@
 .page-break-number {
   font-family: 'Courier Prime', 'Courier New', monospace;
   font-size: 12pt;
-  color: inherit;
   opacity: 0.5;
 }
 
 .page-edge-top {
   height: 20mm;
-  background: inherit;
   border-radius: 2px 2px 0 0;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
 }
