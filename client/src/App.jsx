@@ -3264,6 +3264,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   const usersOnLine = useMemo(() => remoteCursors.filter(u => u.cursor?.index === index), [remoteCursors, index]);
   const lastContentRef = useRef(element.content);
   const lastHighlightsRef = useRef(null);
+  const isUpdatingHighlightsRef = useRef(false);
   
   // Cleanup debounce timeout on unmount
   useEffect(() => {
@@ -3489,6 +3490,7 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     // Sync content changes back to parent - DEBOUNCED for performance
     onUpdate: ({ editor }) => {
       if (!editor || !editor.view) return;
+      if (isUpdatingHighlightsRef.current) return; // Skip updates triggered by highlight sync
       try {
         // Use getHTML() to preserve inline formatting (bold, italic, underline)
         const html = extractTipTapContent(editor.getHTML());
@@ -3587,17 +3589,31 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     if (highlightsJson === lastHighlightsRef.current) return;
 
     try {
+      // Save cursor state
+      const savedFrom = editor.isFocused ? editor.state.selection.from : null;
+      const savedTo = editor.isFocused ? editor.state.selection.to : null;
+
+      // Rebuild entire content with new marks via setContent
+      // Use the content from element.content (source of truth) + highlights
       const newContent = buildContentWithMarks(element.content, highlights);
-      if (editor.isFocused) {
-        // Editor is focused — save cursor, clear then re-set to force DOM update
-        const { from, to } = editor.state.selection;
-        editor.commands.clearContent(false);
-        editor.commands.setContent(newContent, false);
-        try { editor.commands.setTextSelection({ from: Math.min(from, editor.state.doc.content.size - 1), to: Math.min(to, editor.state.doc.content.size - 1) }); } catch (_) {}
-      } else {
-        editor.commands.clearContent(false);
-        editor.commands.setContent(newContent, false);
+
+      // Force full DOM replacement by setting empty then real content
+      isUpdatingHighlightsRef.current = true;
+      editor.commands.setContent('<p></p>', false);
+      editor.commands.setContent(newContent, false);
+      isUpdatingHighlightsRef.current = false;
+
+      // Restore cursor
+      if (savedFrom !== null) {
+        try {
+          const maxPos = editor.state.doc.content.size - 1;
+          editor.commands.setTextSelection({
+            from: Math.min(savedFrom, maxPos),
+            to: Math.min(savedTo, maxPos)
+          });
+        } catch (_) {}
       }
+
       lastHighlightsRef.current = highlightsJson;
     } catch (e) {
       // Editor not ready yet
@@ -7108,13 +7124,8 @@ export default function ScreenplayEditor() {
     });
     return { pageBreaks, pageNumbers, totalPages: currentPage };
   };
-  const [pageInfo, setPageInfo] = useState(() => computePageInfo(elements));
-  const pageInfoTimerRef = useRef(null);
-  useEffect(() => {
-    if (pageInfoTimerRef.current) clearTimeout(pageInfoTimerRef.current);
-    pageInfoTimerRef.current = setTimeout(() => { setPageInfo(computePageInfo(elementsRef.current)); }, 200);
-    return () => { if (pageInfoTimerRef.current) clearTimeout(pageInfoTimerRef.current); };
-  }, [elements]);
+  // Page info computed synchronously — O(n) with simple arithmetic, sub-ms for 500+ elements
+  const pageInfo = useMemo(() => computePageInfo(elements), [elements]);
 
   // Deferred: only used for autocomplete dropdown, not rendering
   const [extractedCharacters, setExtractedCharacters] = useState(() => { const c = new Set(characters); elements.forEach(el => { const t = stripHtml(el.content).trim(); if (el.type === 'character' && t) c.add(t.replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); });
@@ -8415,23 +8426,34 @@ export default function ScreenplayEditor() {
       else if (el.type === 'parenthetical' && !e.shiftKey) { const pc = stripHtml(el.content).trim(); if (pc) { let c = pc; if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } changeType(index, 'dialogue'); }
     }
     if (e.key === 'Backspace' && index > 0) {
+      e.preventDefault();
       const plainContent = stripHtml(el.content).trim();
       if (plainContent === '' && elementsRef.current.length > 1) {
         // Empty line: delete it and focus previous block at end
-        e.preventDefault();
         deleteElement(index);
-        handleFocus(index - 1, stripHtml(elementsRef.current[index - 1]?.content).length);
+        handleFocus(Math.max(0, index - 1), stripHtml(elementsRef.current[Math.max(0, index - 1)]?.content).length);
       } else {
         // Non-empty line, cursor at start: merge content into previous block
-        e.preventDefault();
         const prevEl = elementsRef.current[index - 1];
         if (prevEl) {
-          const prevPlain = stripHtml(prevEl.content);
-          const curPlain = stripHtml(el.content);
+          const prevContent = prevEl.content || '';
+          const curContent = el.content || '';
+          const prevPlainLen = stripHtml(prevContent).length;
+          // Merge as single atomic operation
           pushToUndo();
-          updateElement(index - 1, { ...prevEl, content: prevPlain + curPlain });
-          deleteElement(index);
-          handleFocus(index - 1, prevPlain.length);
+          const mergedContent = stripHtml(prevContent) + stripHtml(curContent);
+          setElements(prev => {
+            const updated = [...prev];
+            updated[index - 1] = { ...updated[index - 1], content: mergedContent };
+            updated.splice(index, 1);
+            return updated;
+          });
+          setActiveIndex(index - 1);
+          // Emit to socket as full-sync to avoid race conditions
+          if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+            setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+          }
+          handleFocus(index - 1, prevPlainLen);
         }
       }
     }
@@ -10676,7 +10698,7 @@ export default function ScreenplayEditor() {
               pageGroups.push({ ...currentGroup, endIdx: elements.length - 1 });
 
               return pageGroups.map((pg) => (
-                <div key={pg.number} style={{
+                <div key={`page-${pg.startIdx}`} style={{
                   position: 'relative',
                   contentVisibility: 'auto',
                   containIntrinsicSize: '210mm 297mm'
