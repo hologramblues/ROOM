@@ -102,31 +102,44 @@
   margin-top: 1em;
 }
 
-/* Page break decoration */
+/* Page break visual — simulates gap between A4 pages */
 .page-break-decoration {
   position: relative;
-  height: 60px;
-  margin: 0;
+  margin-left: -38mm;
+  margin-right: -25mm;
   user-select: none;
   pointer-events: none;
 }
 
-.page-break-line {
-  position: absolute;
-  top: 30px;
-  left: -38mm;
-  right: -25mm;
-  border-top: 1px dashed rgba(128, 128, 128, 0.3);
+.page-edge-bottom {
+  height: 25mm;
+  background: inherit;
+  border-radius: 0 0 2px 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.page-gap {
+  height: 20px;
+  background: transparent;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 5mm;
 }
 
 .page-break-number {
-  position: absolute;
-  top: 4px;
-  right: -20mm;
   font-family: 'Courier Prime', 'Courier New', monospace;
   font-size: 12pt;
   color: inherit;
   opacity: 0.5;
+}
+
+.page-edge-top {
+  height: 20mm;
+  background: inherit;
+  border-radius: 2px 2px 0 0;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
 }
 
 /* Editor focus styles */

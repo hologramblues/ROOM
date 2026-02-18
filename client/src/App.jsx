@@ -917,7 +917,7 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               const div = document.createElement('div');
               div.className = 'page-break-decoration';
               div.setAttribute('contenteditable', 'false');
-              div.innerHTML = '<div class="page-break-line"></div><span class="page-break-number">' + (pageNumbers[nodeIndex] || '') + '.</span>';
+              div.innerHTML = '<div class="page-edge-bottom"></div><div class="page-gap"><span class="page-break-number">' + (pageNumbers[nodeIndex] || '') + '.</span></div><div class="page-edge-top"></div>';
               return div;
             }, { side: -1, key: 'pb-' + nodeIndex }));
           }
@@ -12096,7 +12096,7 @@ export default function ScreenplayEditor() {
         
         /* Safari performance optimizations */
         [data-screenplay-element] {
-          contain: layout style;
+          contain: layout;
         }
         
         /* Reduce paint complexity on Safari */
