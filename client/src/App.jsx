@@ -2123,10 +2123,12 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                       
                       if (e.key === 'Enter' && !e.shiftKey && inlineCommentText.trim() && !showMentions) {
                         e.preventDefault();
+                        e.stopPropagation();
                         onSubmitInlineComment(inlineCommentText);
                         setInlineCommentText('');
                       }
                       if (e.key === 'Escape' && !showMentions) {
+                        e.stopPropagation();
                         onCancelInlineComment();
                         setInlineCommentText('');
                       }
@@ -3585,13 +3587,16 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
     if (highlightsJson === lastHighlightsRef.current) return;
 
     try {
+      const newContent = buildContentWithMarks(element.content, highlights);
       if (editor.isFocused) {
-        // Editor is focused — save cursor, update content, restore cursor
+        // Editor is focused — save cursor, clear then re-set to force DOM update
         const { from, to } = editor.state.selection;
-        editor.commands.setContent(buildContentWithMarks(element.content, highlights), false);
-        try { editor.commands.setTextSelection({ from, to }); } catch (_) {}
+        editor.commands.clearContent(false);
+        editor.commands.setContent(newContent, false);
+        try { editor.commands.setTextSelection({ from: Math.min(from, editor.state.doc.content.size - 1), to: Math.min(to, editor.state.doc.content.size - 1) }); } catch (_) {}
       } else {
-        editor.commands.setContent(buildContentWithMarks(element.content, highlights), false);
+        editor.commands.clearContent(false);
+        editor.commands.setContent(newContent, false);
       }
       lastHighlightsRef.current = highlightsJson;
     } catch (e) {
@@ -8409,7 +8414,27 @@ export default function ScreenplayEditor() {
       else if (el.type === 'dialogue' && !e.shiftKey) changeType(index, 'parenthetical');
       else if (el.type === 'parenthetical' && !e.shiftKey) { const pc = stripHtml(el.content).trim(); if (pc) { let c = pc; if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } changeType(index, 'dialogue'); }
     }
-    if (e.key === 'Backspace' && stripHtml(el.content) === '' && elementsRef.current.length > 1) { e.preventDefault(); deleteElement(index); }
+    if (e.key === 'Backspace' && index > 0) {
+      const plainContent = stripHtml(el.content).trim();
+      if (plainContent === '' && elementsRef.current.length > 1) {
+        // Empty line: delete it and focus previous block at end
+        e.preventDefault();
+        deleteElement(index);
+        handleFocus(index - 1, stripHtml(elementsRef.current[index - 1]?.content).length);
+      } else {
+        // Non-empty line, cursor at start: merge content into previous block
+        e.preventDefault();
+        const prevEl = elementsRef.current[index - 1];
+        if (prevEl) {
+          const prevPlain = stripHtml(prevEl.content);
+          const curPlain = stripHtml(el.content);
+          pushToUndo();
+          updateElement(index - 1, { ...prevEl, content: prevPlain + curPlain });
+          deleteElement(index);
+          handleFocus(index - 1, prevPlain.length);
+        }
+      }
+    }
 
     // Arrow navigation: let browser handle normal cursor movement within element
     // Only intercept at element boundaries
@@ -10637,44 +10662,51 @@ export default function ScreenplayEditor() {
             ...(isDragSelecting ? { userSelect: 'none', WebkitUserSelect: 'none', cursor: 'default' } : {}),
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div className="script-page" style={{
-                  background: darkMode ? '#3a3a3a' : 'white',
-                  color: darkMode ? '#e0e0e0' : '#111',
-                  width: '210mm',
-                  minHeight: '297mm',
-                  padding: '20mm 25mm 25mm 38mm',
-                  boxSizing: 'border-box',
-                  boxShadow: darkMode ? '0 4px 20px rgba(0,0,0,0.6)' : '0 4px 20px rgba(0,0,0,0.4)',
-                  position: 'relative'
-                }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {(() => {
+              // Group elements into pages using deferred pageInfo
+              const pageGroups = [];
+              let currentGroup = { number: 1, startIdx: 0 };
+              elements.forEach((_, idx) => {
+                if (pageInfo.pageBreaks.has(idx) && idx > 0) {
+                  pageGroups.push({ ...currentGroup, endIdx: idx - 1 });
+                  currentGroup = { number: pageInfo.pageNumbers[idx] || currentGroup.number + 1, startIdx: idx };
+                }
+              });
+              pageGroups.push({ ...currentGroup, endIdx: elements.length - 1 });
 
-                  {elements.map((element, index) => (
-                    <React.Fragment key={element.id}>
-                      {/* Page break marker (decorative) */}
-                      {pageInfo.pageBreaks.has(index) && (
-                        <div style={{
-                          borderTop: `1px dashed ${darkMode ? '#555' : '#ccc'}`,
-                          margin: '12px -25mm 12px -38mm',
-                          paddingRight: '25mm',
-                          textAlign: 'right',
-                          position: 'relative'
-                        }}>
-                          <span style={{
-                            position: 'absolute',
-                            right: 0,
-                            top: -10,
-                            fontSize: '10pt',
-                            fontFamily: 'Courier Prime, Courier New, monospace',
-                            color: darkMode ? '#888' : '#999',
-                            background: darkMode ? '#3a3a3a' : 'white',
-                            padding: '0 8px'
-                          }}>
-                            — {pageInfo.pageNumbers[index] || ''} —
-                          </span>
-                        </div>
-                      )}
+              return pageGroups.map((pg) => (
+                <div key={pg.number} style={{
+                  position: 'relative',
+                  contentVisibility: 'auto',
+                  containIntrinsicSize: '210mm 297mm'
+                }}>
+                  <div className="script-page" style={{
+                    background: darkMode ? '#3a3a3a' : 'white',
+                    color: darkMode ? '#e0e0e0' : '#111',
+                    width: '210mm',
+                    minHeight: '297mm',
+                    padding: '20mm 25mm 25mm 38mm',
+                    boxSizing: 'border-box',
+                    boxShadow: darkMode ? '0 4px 20px rgba(0,0,0,0.6)' : '0 4px 20px rgba(0,0,0,0.4)',
+                    position: 'relative'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: '12mm',
+                      right: '25mm',
+                      fontSize: '12pt',
+                      fontFamily: 'Courier Prime, Courier New, monospace',
+                      color: darkMode ? '#e0e0e0' : '#111'
+                    }}>
+                      {pg.number}.
+                    </div>
+
+                    {elements.slice(pg.startIdx, pg.endIdx + 1).map((element, i) => {
+                      const index = pg.startIdx + i;
+                      return (
                     <div
+                      key={element.id}
                       data-element-index={index}
                       onMouseDown={(e) => {
                         if (e.shiftKey) { e.preventDefault(); handleFocus(index, null, true); return; }
@@ -10718,9 +10750,12 @@ export default function ScreenplayEditor() {
                       t={t}
                     />
                   </div>
-                  </React.Fragment>
-                ))}
-              </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ));
+            })()}
         </div>
       </div>
       
