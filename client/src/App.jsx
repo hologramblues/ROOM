@@ -3569,6 +3569,7 @@ const SingleEditor = React.memo(({
   onTextSelect,
   onHighlightClick,
   onSuggestionClick,
+  onEditorFocus,
   remoteCursors,
   computePageInfoFn,
   t = (k) => k,
@@ -3668,9 +3669,16 @@ const SingleEditor = React.memo(({
           if (selectedText.trim()) {
             const nodeStart = $from.before();
             const coords = editor.view.coordsAtPos(from);
+            // Compute element index by walking the doc
+            let elemIdx = 0;
+            editor.state.doc.forEach((child, offset, index) => {
+              if (offset <= $from.pos && offset + child.nodeSize > $from.pos) {
+                elemIdx = index;
+              }
+            });
             onTextSelect({
               elementId: node.attrs.elementId,
-              elementIndex: null, // No longer used by index
+              elementIndex: elemIdx,
               text: selectedText,
               startOffset: from - nodeStart - 1,
               endOffset: to - nodeStart - 1,
@@ -3710,6 +3718,15 @@ const SingleEditor = React.memo(({
           setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
         }
       } catch (_) {}
+    },
+
+    onFocus: () => {
+      if (onEditorFocus) onEditorFocus();
+    },
+
+    onBlur: () => {
+      // Clear autocomplete on blur
+      setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
     },
   });
 
@@ -6208,11 +6225,12 @@ export default function ScreenplayEditor() {
 
     const findTopSceneInScript = () => {
       const scriptRect = script.getBoundingClientRect();
-      const sceneElements = script.querySelectorAll('[data-element-index]');
+      const sceneElements = script.querySelectorAll('[data-element-id]');
 
       for (const el of sceneElements) {
-        const idx = parseInt(el.getAttribute('data-element-index'), 10);
-        if (isNaN(idx) || elementsRef.current[idx]?.type !== 'scene') continue;
+        const elId = el.getAttribute('data-element-id');
+        const idx = elementsRef.current.findIndex(e => e.id === elId);
+        if (idx === -1 || elementsRef.current[idx]?.type !== 'scene') continue;
 
         const rect = el.getBoundingClientRect();
         if (rect.top >= scriptRect.top - 50 && rect.top <= scriptRect.top + 150) {
@@ -6256,7 +6274,8 @@ export default function ScreenplayEditor() {
     };
 
     const scrollScriptToScene = (sceneIndex) => {
-      const sceneEl = script.querySelector(`[data-element-index="${sceneIndex}"]`);
+      const sceneId = elementsRef.current[sceneIndex]?.id;
+      const sceneEl = sceneId ? script.querySelector(`[data-element-id="${sceneId}"]`) : null;
       if (sceneEl) {
         const scriptRect = script.getBoundingClientRect();
         const sceneRect = sceneEl.getBoundingClientRect();
@@ -7400,7 +7419,8 @@ export default function ScreenplayEditor() {
     const result = searchResults[newIndex];
     setActiveIndex(result.index);
     setTimeout(() => {
-      const el = document.querySelector(`[data-element-index="${result.index}"]`);
+      const elId = elementsRef.current[result.index]?.id;
+      const el = elId ? document.querySelector(`[data-element-id="${elId}"]`) : null;
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 50);
   };
@@ -7433,7 +7453,8 @@ export default function ScreenplayEditor() {
   const navigateToScene = (index) => {
     setActiveIndex(index);
     setTimeout(() => {
-      const el = document.querySelector(`[data-element-index="${index}"]`);
+      const elId = elementsRef.current[index]?.id;
+      const el = elId ? document.querySelector(`[data-element-id="${elId}"]`) : null;
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 50);
   };
@@ -7567,10 +7588,11 @@ export default function ScreenplayEditor() {
         positionsUpdateTimeoutRef.current = null;
         requestAnimationFrame(() => {
           const positions = {};
-          const elementDivs = document.querySelectorAll('[data-element-index]');
+          const elementDivs = document.querySelectorAll('[data-element-id]');
           elementDivs.forEach(div => {
-            const index = parseInt(div.getAttribute('data-element-index'), 10);
-            if (!isNaN(index)) {
+            const elId = div.getAttribute('data-element-id');
+            const index = elementsRef.current.findIndex(e => e.id === elId);
+            if (index !== -1) {
               const rect = div.getBoundingClientRect();
               const containerRect = scriptContainerRef.current?.getBoundingClientRect();
               const containerScrollTop = scriptContainerRef.current?.scrollTop || 0;
@@ -8538,11 +8560,14 @@ export default function ScreenplayEditor() {
   // ============ DRAG-SELECT across blocks ============
   useEffect(() => {
     const getElementIndexFromPoint = (x, y) => {
-      // Walk up from elementFromPoint to find [data-element-index]
+      // Walk up from elementFromPoint to find [data-element-id]
       const els = document.elementsFromPoint(x, y);
       for (const el of els) {
-        const wrapper = el.closest('[data-element-index]');
-        if (wrapper) return parseInt(wrapper.getAttribute('data-element-index'), 10);
+        const wrapper = el.closest('[data-element-id]');
+        if (wrapper) {
+          const elId = wrapper.getAttribute('data-element-id');
+          return elementsRef.current.findIndex(e => e.id === elId);
+        }
       }
       return null;
     };
@@ -10397,7 +10422,7 @@ export default function ScreenplayEditor() {
                       // Scroll the script container to this scene
                       setTimeout(() => {
                         const script = scriptContainerRef.current;
-                        const el = document.querySelector(`[data-element-index="${scene.index}"]`);
+                        const el = document.querySelector(`[data-element-id="${scene.id}"]`);
                         if (script && el) {
                           const scriptRect = script.getBoundingClientRect();
                           const elRect = el.getBoundingClientRect();
@@ -10643,6 +10668,7 @@ export default function ScreenplayEditor() {
               onTextSelect={handleTextSelectCb}
               onHighlightClick={handleHighlightClick}
               onSuggestionClick={handleSuggestionClickCb}
+              onEditorFocus={() => setScriptHasFocus(true)}
               remoteCursors={remoteCursors}
               computePageInfoFn={computePageInfo}
               t={t}
@@ -10683,7 +10709,8 @@ export default function ScreenplayEditor() {
               setActiveIndex(idx);
               setSelectedCommentIndex(idx);
               setTimeout(() => {
-                const el = document.querySelector(`[data-element-index="${idx}"]`);
+                const elId = elementsRef.current[idx]?.id;
+                const el = elId ? document.querySelector(`[data-element-id="${elId}"]`) : null;
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }, 50);
             }}
@@ -10814,7 +10841,8 @@ export default function ScreenplayEditor() {
           onNavigate={(idx) => {
             setActiveIndex(idx);
             setTimeout(() => {
-              const el = document.querySelector(`[data-element-index="${idx}"]`);
+              const elId = elementsRef.current[idx]?.id;
+              const el = elId ? document.querySelector(`[data-element-id="${elId}"]`) : null;
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 50);
           }}
@@ -12067,7 +12095,7 @@ export default function ScreenplayEditor() {
         }
         
         /* Safari performance optimizations */
-        [data-element-index] {
+        [data-screenplay-element] {
           contain: layout style;
         }
         
@@ -12227,11 +12255,11 @@ export default function ScreenplayEditor() {
       {/* Focus Mode Overlay - dims everything except current element */}
       {focusMode && (
         <style>{`
-          .focus-mode-active [data-element-index]:not([data-element-index="${activeIndex}"]) {
+          .focus-mode-active [data-element-id]:not([data-element-id="${elements[activeIndex]?.id}"]) {
             opacity: 0.3 !important;
             transition: opacity 0.3s ease;
           }
-          .focus-mode-active [data-element-index="${activeIndex}"] {
+          .focus-mode-active [data-element-id="${elements[activeIndex]?.id}"] {
             opacity: 1 !important;
           }
         `}</style>
