@@ -14,7 +14,9 @@ const Excalidraw = lazy(() =>
   import('@excalidraw/excalidraw').then(module => ({ default: module.Excalidraw }))
 );
 
-const SERVER_URL = 'https://room-production-19a5.up.railway.app';
+// ============ DESKTOP DETECTION ============
+const IS_DESKTOP = !!(window.electronAPI?.isDesktop);
+let SERVER_URL = 'https://room-production-19a5.up.railway.app';
 
 // ============ TRANSLATIONS ============
 const translations = {
@@ -3147,21 +3149,31 @@ const FONT_OPTIONS = {
 const getFontFamily = (key) => FONT_OPTIONS[key]?.family || FONT_OPTIONS['courier-prime'].family;
 
 // ============ ELEMENT STYLES ============
+// CSS margins matching Final Draft proportions (based on 6" text width on US Letter)
+// Scene Heading: full width, 2-line gap before
+// Action: full width, 1-line gap before
+// Character: centered-left offset ~33% (FD: 3.5" from 1.5" left margin = 2"/6" = 33%)
+// Dialogue: indented ~17% (FD: 2.5" - 1.5" = 1"/6" = 17%), width ~58% (3.5"/6")
+// Parenthetical: indented ~25% (FD: 3.0" - 1.5" = 1.5"/6" = 25%), width ~42% (2.5"/6")
+// Transition: right-aligned, full width
 const getElementStyle = (type, fontKey) => {
   const base = { fontFamily: getFontFamily(fontKey), fontSize: '12pt', lineHeight: '1', outline: 'none', border: 'none', width: '100%', background: 'transparent', resize: 'none', padding: 0, margin: 0, display: 'block', minHeight: '1em' };
   switch (type) {
-    case 'scene': return { ...base, textTransform: 'uppercase', fontWeight: 'bold', marginTop: '2.5em', marginBottom: '0.5em' };
+    case 'scene': return { ...base, textTransform: 'uppercase', fontWeight: 'bold', marginTop: '2em', marginBottom: '0.5em' };
     case 'action': return { ...base, marginTop: '1em', marginBottom: 0, lineHeight: '1.1' };
-    case 'character': return { ...base, textTransform: 'uppercase', fontWeight: 'normal', marginLeft: '37%', width: '30%', marginTop: '1em', marginBottom: '0', lineHeight: '1' };
-    case 'dialogue': return { ...base, marginLeft: '17%', width: '42%', marginTop: '0', marginBottom: '0', lineHeight: '1.1' };
-    case 'parenthetical': return { ...base, marginLeft: '27%', width: '25%', fontStyle: 'italic', marginTop: '0', marginBottom: '0' };
+    case 'character': return { ...base, textTransform: 'uppercase', fontWeight: 'normal', marginLeft: '33%', width: '35%', marginTop: '1em', marginBottom: '0', lineHeight: '1' };
+    case 'dialogue': return { ...base, marginLeft: '17%', width: '58%', marginTop: '0', marginBottom: '0', lineHeight: '1.1' };
+    case 'parenthetical': return { ...base, marginLeft: '25%', width: '42%', fontStyle: 'italic', marginTop: '0', marginBottom: '0' };
     case 'transition': return { ...base, textTransform: 'uppercase', textAlign: 'right', marginTop: '1em' };
     default: return base;
   }
 };
 
 const getPlaceholder = (type) => ({ scene: 'INT./EXT. LIEU - JOUR/NUIT', action: "Description de l'action...", character: 'NOM DU PERSONNAGE', dialogue: 'Réplique du personnage...', parenthetical: '(indication de jeu)', transition: 'CUT TO:' }[type] || '');
-const getNextType = (t) => ({ scene: 'action', action: 'action', character: 'dialogue', dialogue: 'action', parenthetical: 'dialogue', transition: 'scene' }[t] || 'action');
+// Final Draft Enter transitions: what pressing Enter at end of a block creates
+const getNextType = (t) => ({ scene: 'action', action: 'action', character: 'dialogue', dialogue: 'character', parenthetical: 'dialogue', transition: 'scene' }[t] || 'action');
+// Final Draft empty-block Enter: pressing Enter on an empty block converts it to Action
+const getEmptyEnterType = (t) => (t === 'action' ? null : 'action'); // null = no change (delete block instead)
 
 // ============ REMOTE CURSOR ============
 const RemoteCursor = ({ user }) => (
@@ -5950,6 +5962,35 @@ export default function ScreenplayEditor() {
   useEffect(() => {
     localStorage.setItem('rooms-language', language);
   }, [language]);
+
+  // ============ DESKTOP MODE: auto-login + dynamic SERVER_URL ============
+  const [desktopReady, setDesktopReady] = useState(!IS_DESKTOP); // web = ready immediately
+  useEffect(() => {
+    if (!IS_DESKTOP) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const port = await window.electronAPI.getServerPort();
+        SERVER_URL = `http://127.0.0.1:${port}`;
+        const localUser = await window.electronAPI.getLocalUser();
+        if (!cancelled) {
+          setToken('local');
+          setCurrentUser({ id: localUser._id, name: localUser.name, email: localUser.email, color: localUser.color });
+          setMyRole('editor');
+          setIsOwner(true);
+          setDesktopReady(true);
+          console.log('[DESKTOP] Ready — server at', SERVER_URL);
+        }
+      } catch (err) {
+        console.error('[DESKTOP] Init failed:', err);
+        if (!cancelled) setDesktopReady(true); // fallback: show UI anyway
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Desktop menu actions — ref populated later (after function definitions)
+  const desktopMenuRef = useRef({});
   
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -8397,78 +8438,123 @@ export default function ScreenplayEditor() {
       };
     };
     
-    // Enter key handling - allow line breaks in middle, create new element at end
+    // Enter key handling — Final Draft behavior
     if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
       const cursor = getCursorPosition();
-      
-      // If at end of text (or empty), create new element
-      const plainEl = stripHtml(el.content);
-      if (cursor.atEnd || plainEl.trim() === '') {
-        e.preventDefault();
-        if (el.type === 'parenthetical' && plainEl.trim()) {
-          let c = plainEl.trim();
-          if (!c.startsWith('(')) c = '(' + c;
-          if (!c.endsWith(')')) c = c + ')';
-          updateElement(index, { ...el, content: c });
-        }
-        insertElement(index, getNextType(el.type));
+      const plainEl = stripHtml(el.content).trim();
+
+      // Auto-close parenthetical parentheses
+      if (el.type === 'parenthetical' && plainEl) {
+        let c = plainEl;
+        if (!c.startsWith('(')) c = '(' + c;
+        if (!c.endsWith(')')) c = c + ')';
+        if (c !== plainEl) updateElement(index, { ...el, content: c });
       }
-      // Otherwise, allow default behavior (line break in contenteditable)
-    }
-    
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      // Tab cycle: action -> character -> scene (Tab), reverse with Shift+Tab
-      if (el.type === 'action') changeType(index, e.shiftKey ? 'scene' : 'character');
-      else if (el.type === 'character') changeType(index, e.shiftKey ? 'action' : 'scene');
-      else if (el.type === 'scene') changeType(index, e.shiftKey ? 'character' : 'action');
-      else if (el.type === 'dialogue' && !e.shiftKey) changeType(index, 'parenthetical');
-      else if (el.type === 'parenthetical' && !e.shiftKey) { const pc = stripHtml(el.content).trim(); if (pc) { let c = pc; if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } changeType(index, 'dialogue'); }
-    }
-    if (e.key === 'Backspace' && index > 0) {
-      e.preventDefault();
-      const plainContent = stripHtml(el.content).trim();
-      if (plainContent === '' && elementsRef.current.length > 1) {
-        // Empty line: delete it and focus previous block at end
-        deleteElement(index);
-        handleFocus(Math.max(0, index - 1), stripHtml(elementsRef.current[Math.max(0, index - 1)]?.content).length);
-      } else {
-        // Non-empty line, cursor at start:
-        // Only merge if same type (like Final Draft) — otherwise just move focus up
-        const prevEl = elementsRef.current[index - 1];
-        if (prevEl) {
-          if (prevEl.type === el.type) {
-            // Same type: merge content into previous block
-            const prevContent = prevEl.content || '';
-            const curContent = el.content || '';
-            const prevPlainLen = stripHtml(prevContent).length;
-            pushToUndo();
-            const mergedContent = stripHtml(prevContent) + stripHtml(curContent);
-            setElements(prev => {
-              const updated = [...prev];
-              updated[index - 1] = { ...updated[index - 1], content: mergedContent };
-              updated.splice(index, 1);
-              return updated;
-            });
-            setActiveIndex(index - 1);
-            if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-              setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
-            }
-            handleFocus(index - 1, prevPlainLen);
-          } else if (stripHtml(prevEl.content).trim() === '') {
-            // Previous block is empty: delete it, keep current block
-            pushToUndo();
-            setElements(prev => prev.filter((_, i) => i !== index - 1));
-            setActiveIndex(Math.max(0, index - 1));
-            if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-              setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
-            }
-            handleFocus(Math.max(0, index - 1), 0);
-          } else {
-            // Different types, both have content: just move focus to end of previous
-            handleFocus(index - 1, stripHtml(prevEl.content).length);
+
+      if (plainEl === '') {
+        // Empty block + Enter → convert to Action (or delete if already Action)
+        const target = getEmptyEnterType(el.type);
+        if (target) {
+          changeType(index, target);
+        } else {
+          // Already Action and empty → delete block, focus previous
+          if (index > 0 && elementsRef.current.length > 1) {
+            deleteElement(index);
+            handleFocus(index - 1, stripHtml(elementsRef.current[Math.max(0, index - 1)]?.content).length);
           }
         }
+      } else if (cursor.atEnd) {
+        // Cursor at end → create next element per Final Draft table
+        insertElement(index, getNextType(el.type));
+      } else if (cursor.atStart) {
+        // Cursor at start → insert empty element of SAME type BEFORE, push content down
+        pushToUndo();
+        const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+        setElements(prev => {
+          const updated = [...prev];
+          updated.splice(index, 0, { id: newId, type: el.type, content: '' });
+          return updated;
+        });
+        setActiveIndex(index + 1);
+        handleFocus(index + 1, 0);
+        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+        }
+      } else {
+        // Cursor mid-block → split: keep text before in current, text after in new block
+        pushToUndo();
+        const before = cursor.textBefore;
+        const after = cursor.textAfter;
+        const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+        const nextType = getNextType(el.type);
+        setElements(prev => {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], content: before };
+          updated.splice(index + 1, 0, { id: newId, type: nextType, content: after });
+          return updated;
+        });
+        setActiveIndex(index + 1);
+        handleFocus(index + 1, 0);
+        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+        }
+      }
+    }
+    
+    // Tab — Final Draft type cycling (Tab = forward, Shift+Tab = reverse)
+    // Forward:  Scene → Action → Character → Parenthetical → Dialogue → Transition → Scene
+    // Reverse:  Scene → Transition → Dialogue → Parenthetical → Character → Action → Scene
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const tabForward = { scene: 'action', action: 'character', character: 'parenthetical', parenthetical: 'dialogue', dialogue: 'transition', transition: 'scene' };
+      const tabReverse = { scene: 'transition', transition: 'dialogue', dialogue: 'parenthetical', parenthetical: 'character', character: 'action', action: 'scene' };
+      const cycle = e.shiftKey ? tabReverse : tabForward;
+      const newType = cycle[el.type] || 'action';
+      // Auto-close parenthetical if leaving it
+      if (el.type === 'parenthetical') {
+        const pc = stripHtml(el.content).trim();
+        if (pc) { let c = pc; if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; if (c !== pc) updateElement(index, { ...el, content: c }); }
+      }
+      changeType(index, newType);
+    }
+    // Backspace — only intercept at element boundary (cursor at position 0)
+    if (e.key === 'Backspace' && index > 0 && isCursorAtStart()) {
+      e.preventDefault();
+      const plainContent = stripHtml(el.content).trim();
+      const prevEl = elementsRef.current[index - 1];
+
+      if (plainContent === '' && elementsRef.current.length > 1) {
+        // Current block is empty → delete it, focus end of previous
+        deleteElement(index);
+        handleFocus(Math.max(0, index - 1), stripHtml(elementsRef.current[Math.max(0, index - 1)]?.content).length);
+      } else if (prevEl && stripHtml(prevEl.content).trim() === '') {
+        // Previous block is empty → delete previous block, keep current
+        pushToUndo();
+        setElements(prev => prev.filter((_, i) => i !== index - 1));
+        setActiveIndex(Math.max(0, index - 1));
+        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+        }
+        handleFocus(Math.max(0, index - 1), 0);
+      } else if (prevEl) {
+        // Both blocks have content → merge: result takes PREVIOUS block's type (Final Draft / Trelby rule)
+        const prevContent = prevEl.content || '';
+        const curContent = el.content || '';
+        const prevPlainLen = stripHtml(prevContent).length;
+        pushToUndo();
+        const mergedContent = stripHtml(prevContent) + stripHtml(curContent);
+        setElements(prev => {
+          const updated = [...prev];
+          updated[index - 1] = { ...updated[index - 1], content: mergedContent };
+          updated.splice(index, 1);
+          return updated;
+        });
+        setActiveIndex(index - 1);
+        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+        }
+        handleFocus(index - 1, prevPlainLen);
       }
     }
 
@@ -9084,6 +9170,34 @@ export default function ScreenplayEditor() {
   };
 
   const copyLink = () => { openShareModal(); };
+
+  // ============ DESKTOP: bind menu handlers + sync title ============
+  desktopMenuRef.current = { createNewDocument, createSnapshot, exportPDF, exportFDX, exportFountain, setShowDocsList };
+  useEffect(() => {
+    if (!IS_DESKTOP) return;
+    const cleanup = window.electronAPI.onMenuAction((action) => {
+      const h = desktopMenuRef.current;
+      switch (action) {
+        case 'new-document': h.createNewDocument?.(); break;
+        case 'open-documents': h.setShowDocsList?.(true); break;
+        case 'save-snapshot': h.createSnapshot?.(); break;
+        case 'export-pdf': h.exportPDF?.(); break;
+        case 'export-fdx': h.exportFDX?.(); break;
+        case 'export-fountain': h.exportFountain?.(); break;
+        default: break;
+      }
+    });
+    return cleanup;
+  }); // intentionally no deps — ref always has latest handlers
+  // Sync window title
+  useEffect(() => {
+    if (IS_DESKTOP && title) window.electronAPI.setTitle(title);
+  }, [title]);
+
+  // Desktop: wait until port/user are ready before showing UI
+  if (IS_DESKTOP && !desktopReady) {
+    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111827', color: 'white', fontSize: 18 }}>Chargement...</div>;
+  }
 
   // Show landing page if not logged in (no token)
   if (!token && (!docId || docId === '' || docId === 'local')) {
