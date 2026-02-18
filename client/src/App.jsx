@@ -3729,11 +3729,12 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   );
 }, (prevProps, nextProps) => {
   // Custom comparison for React.memo - only re-render when these important props change
+  // NOTE: index is deliberately EXCLUDED — index shifts on every insert/delete but
+  // doesn't affect rendering. SceneLine uses index for callbacks only.
   return (
     prevProps.element.id === nextProps.element.id &&
     prevProps.element.content === nextProps.element.content &&
     prevProps.element.type === nextProps.element.type &&
-    prevProps.index === nextProps.index &&
     prevProps.isActive === nextProps.isActive &&
     prevProps.canEdit === nextProps.canEdit &&
     prevProps.isLocked === nextProps.isLocked &&
@@ -6612,28 +6613,30 @@ export default function ScreenplayEditor() {
     localStorage.setItem('rooms-writing-goal', JSON.stringify(writingGoal));
   }, [writingGoal]);
 
-  // Stats calculation - MUST be before useEffects that use it
-  const stats = useMemo(() => {
-    const allText = elements.map(el => stripHtml(el.content)).join(' ');
-    const words = allText.trim() ? allText.trim().split(/\s+/).length : 0;
-    const chars = allText.length;
-    const scenes = elements.filter(el => el.type === 'scene').length;
-
-    // Advanced stats
-    const dialogueWords = elements
-      .filter(el => el.type === 'dialogue')
-      .map(el => stripHtml(el.content).trim().split(/\s+/).length)
-      .reduce((a, b) => a + b, 0);
-    const actionWords = elements
-      .filter(el => el.type === 'action')
-      .map(el => stripHtml(el.content).trim().split(/\s+/).length)
-      .reduce((a, b) => a + b, 0);
-    
-    const dialogueRatio = words > 0 ? Math.round((dialogueWords / words) * 100) : 0;
-    const readingTimeMin = Math.ceil(words / 200); // ~200 words/min for screenplay
-    const screenTimeMin = Math.round(words / 150); // ~1 page/min, ~150 words/page
-    
-    return { words, chars, scenes, dialogueWords, actionWords, dialogueRatio, readingTimeMin, screenTimeMin };
+  // Stats calculation - deferred to avoid blocking Enter key
+  const [stats, setStats] = useState({ words: 0, chars: 0, scenes: 0, dialogueWords: 0, actionWords: 0, dialogueRatio: 0, readingTimeMin: 0, screenTimeMin: 0 });
+  const statsTimerRef = useRef(null);
+  useEffect(() => {
+    if (statsTimerRef.current) clearTimeout(statsTimerRef.current);
+    statsTimerRef.current = setTimeout(() => {
+      const allText = elementsRef.current.map(el => stripHtml(el.content)).join(' ');
+      const words = allText.trim() ? allText.trim().split(/\s+/).length : 0;
+      const chars = allText.length;
+      const scenes = elementsRef.current.filter(el => el.type === 'scene').length;
+      const dialogueWords = elementsRef.current
+        .filter(el => el.type === 'dialogue')
+        .map(el => stripHtml(el.content).trim().split(/\s+/).length)
+        .reduce((a, b) => a + b, 0);
+      const actionWords = elementsRef.current
+        .filter(el => el.type === 'action')
+        .map(el => stripHtml(el.content).trim().split(/\s+/).length)
+        .reduce((a, b) => a + b, 0);
+      const dialogueRatio = words > 0 ? Math.round((dialogueWords / words) * 100) : 0;
+      const readingTimeMin = Math.ceil(words / 200);
+      const screenTimeMin = Math.round(words / 150);
+      setStats({ words, chars, scenes, dialogueWords, actionWords, dialogueRatio, readingTimeMin, screenTimeMin });
+    }, 300);
+    return () => { if (statsTimerRef.current) clearTimeout(statsTimerRef.current); };
   }, [elements]);
 
   // Track word count changes for writing goals
@@ -7054,8 +7057,8 @@ export default function ScreenplayEditor() {
 
   const selectDocument = (id) => { loadedDocRef.current = null; window.location.hash = id; setShowDocsList(false); };
 
-  // Group elements into pages
-  const pages = useMemo(() => {
+  // Group elements into pages - deferred to avoid blocking Enter key
+  const computePages = (els) => {
     const result = [];
     let currentPage = { number: 1, elements: [] };
     let h = 0;
@@ -7064,31 +7067,17 @@ export default function ScreenplayEditor() {
       const e = { scene: 1.5, action: 1, character: 1, dialogue: 0, parenthetical: 0, transition: 1.5 };
       return l + (e[el.type] || 0);
     };
-
-    elements.forEach((el, idx) => {
+    els.forEach((el, idx) => {
       const lines = getLines(el);
       if (h + lines > LINES_PER_PAGE && currentPage.elements.length > 0) {
-        // Before breaking, check if the last element(s) on this page are orphans
-        // Rule 1: scene heading alone at bottom → push to next page
-        // Rule 2: character (+ optional parenthetical) without dialogue → push to next page
         let orphanCount = 0;
         const items = currentPage.elements;
         const last = items[items.length - 1]?.element;
-        if (last && last.type === 'scene') {
-          orphanCount = 1;
-        } else if (last && last.type === 'character') {
-          orphanCount = 1;
-        } else if (last && last.type === 'parenthetical' && items.length >= 2 && items[items.length - 2]?.element.type === 'character') {
-          orphanCount = 2; // character + parenthetical without dialogue
-        }
-
+        if (last && last.type === 'scene') orphanCount = 1;
+        else if (last && last.type === 'character') orphanCount = 1;
+        else if (last && last.type === 'parenthetical' && items.length >= 2 && items[items.length - 2]?.element.type === 'character') orphanCount = 2;
         const orphans = orphanCount > 0 ? items.splice(items.length - orphanCount, orphanCount) : [];
-        // Recalc height after removing orphans
-        if (orphanCount > 0) {
-          h = 0;
-          items.forEach(it => { h += getLines(it.element); });
-        }
-
+        if (orphanCount > 0) { h = 0; items.forEach(it => { h += getLines(it.element); }); }
         result.push(currentPage);
         currentPage = { number: currentPage.number + 1, elements: [...orphans] };
         h = 0;
@@ -7097,12 +7086,15 @@ export default function ScreenplayEditor() {
       currentPage.elements.push({ element: el, index: idx });
       h += lines;
     });
-
-    if (currentPage.elements.length > 0) {
-      result.push(currentPage);
-    }
-
+    if (currentPage.elements.length > 0) result.push(currentPage);
     return result;
+  };
+  const [pages, setPages] = useState(() => computePages(elements));
+  const pagesTimerRef = useRef(null);
+  useEffect(() => {
+    if (pagesTimerRef.current) clearTimeout(pagesTimerRef.current);
+    pagesTimerRef.current = setTimeout(() => { setPages(computePages(elementsRef.current)); }, 200);
+    return () => { if (pagesTimerRef.current) clearTimeout(pagesTimerRef.current); };
   }, [elements]);
 
   const extractedCharacters = useMemo(() => { const c = new Set(characters); elements.forEach(el => { const t = stripHtml(el.content).trim(); if (el.type === 'character' && t) c.add(t.replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); }, [elements, characters]);
@@ -7111,78 +7103,62 @@ export default function ScreenplayEditor() {
   const canEditNow = (isFullyConnected || !!offlineDocId) && canEdit;
   const canComment = myRole === 'editor' || myRole === 'commenter';
 
-  // Check if an element is in a locked scene
-  const isElementLocked = useCallback((elementIndex) => {
-    // Find which scene this element belongs to
+  // Pre-compute locked status for all elements (O(n) single pass, replaces O(n²) inline calls)
+  const lockedElementsMap = useMemo(() => {
+    const map = {};
     let currentSceneId = null;
-    for (let i = elementIndex; i >= 0; i--) {
+    let currentSceneLocked = false;
+    for (let i = 0; i < elements.length; i++) {
       if (elements[i]?.type === 'scene') {
         currentSceneId = elements[i].id;
-        break;
+        currentSceneLocked = false;
+        if (currentSceneId && lockedScenes.has(currentSceneId)) {
+          currentSceneLocked = true;
+        } else if (currentSceneId && sceneAssignments[currentSceneId]) {
+          const assignment = sceneAssignments[currentSceneId];
+          if (assignment.userId && assignment.userId !== myId) {
+            currentSceneLocked = true;
+          }
+        }
+      }
+      if (currentSceneLocked) {
+        map[elements[i].id] = true;
       }
     }
-    
-    // Check if globally locked
-    if (currentSceneId && lockedScenes.has(currentSceneId)) {
-      return true;
-    }
-    
-    // Check if assigned to another user (user-specific lock)
-    if (currentSceneId && sceneAssignments[currentSceneId]) {
-      const assignment = sceneAssignments[currentSceneId];
-      // If assigned to someone else, it's locked for current user
-      if (assignment.userId && assignment.userId !== myId) {
-        return true;
-      }
-    }
-    
-    return false;
+    return map;
   }, [elements, lockedScenes, sceneAssignments, myId]);
 
   const totalComments = comments.filter(c => !c.resolved).length;
 
-  // Outline - list of scenes with their index
-  const outline = useMemo(() => {
-    const scenes = [];
-    let sceneNumber = 0;
-    
-    // First pass: collect scene indices
-    const sceneIndices = [];
-    elements.forEach((el, idx) => {
-      if (el.type === 'scene') {
-        sceneIndices.push(idx);
-      }
-    });
-    
-    // Second pass: calculate word count and characters for each scene
-    elements.forEach((el, idx) => {
-      if (el.type === 'scene') {
-        sceneNumber++;
-        const sceneIdx = sceneIndices.indexOf(idx);
-        const nextSceneIdx = sceneIndices[sceneIdx + 1] || elements.length;
-        
-        // Count words and collect characters in this scene
-        let wordCount = 0;
-        const sceneCharacters = new Set();
-        for (let i = idx; i < nextSceneIdx; i++) {
-          const content = stripHtml(elements[i]?.content) || '';
-          wordCount += content.trim().split(/\s+/).filter(w => w).length;
-          if (elements[i]?.type === 'character') {
-            sceneCharacters.add(content.toUpperCase());
+  // Outline - deferred to avoid blocking Enter key
+  const [outline, setOutline] = useState([]);
+  const outlineTimerRef = useRef(null);
+  useEffect(() => {
+    if (outlineTimerRef.current) clearTimeout(outlineTimerRef.current);
+    outlineTimerRef.current = setTimeout(() => {
+      const els = elementsRef.current;
+      const scenes = [];
+      let sceneNumber = 0;
+      const sceneIndices = [];
+      els.forEach((el, idx) => { if (el.type === 'scene') sceneIndices.push(idx); });
+      els.forEach((el, idx) => {
+        if (el.type === 'scene') {
+          sceneNumber++;
+          const sceneIdx = sceneIndices.indexOf(idx);
+          const nextSceneIdx = sceneIndices[sceneIdx + 1] || els.length;
+          let wordCount = 0;
+          const sceneCharacters = new Set();
+          for (let i = idx; i < nextSceneIdx; i++) {
+            const content = stripHtml(els[i]?.content) || '';
+            wordCount += content.trim().split(/\s+/).filter(w => w).length;
+            if (els[i]?.type === 'character') sceneCharacters.add(content.toUpperCase());
           }
+          scenes.push({ index: idx, number: sceneNumber, content: stripHtml(el.content) || '(sans titre)', id: el.id, wordCount, characters: [...sceneCharacters] });
         }
-        
-        scenes.push({
-          index: idx,
-          number: sceneNumber,
-          content: stripHtml(el.content) || '(sans titre)',
-          id: el.id,
-          wordCount,
-          characters: [...sceneCharacters]
-        });
-      }
-    });
-    return scenes;
+      });
+      setOutline(scenes);
+    }, 300);
+    return () => { if (outlineTimerRef.current) clearTimeout(outlineTimerRef.current); };
   }, [elements]);
 
   // Filtered outline based on filters
@@ -7222,53 +7198,40 @@ export default function ScreenplayEditor() {
   }, [elements]);
 
   // Extract locations from scene headings
-  const extractedLocations = useMemo(() => {
-    const locs = new Set();
-    elements.forEach(el => {
-      const t = stripHtml(el.content);
-      if (el.type === 'scene' && t) {
-        // Extract location: "INT. MAISON - JOUR" -> "MAISON"
-        const match = t.match(/(?:INT\.|EXT\.|INT\/EXT\.?)\s*(.+?)(?:\s*-\s*(?:JOUR|NUIT|MATIN|SOIR|AUBE|CRÉPUSCULE|CONTINUOUS|LATER|SAME))?$/i);
-        if (match && match[1]) {
-          locs.add(match[1].trim().toUpperCase());
+  // Locations and character stats - deferred to avoid blocking Enter key
+  const [extractedLocations, setExtractedLocations] = useState([]);
+  const [characterStats, setCharacterStats] = useState([]);
+  const locsStatsTimerRef = useRef(null);
+  useEffect(() => {
+    if (locsStatsTimerRef.current) clearTimeout(locsStatsTimerRef.current);
+    locsStatsTimerRef.current = setTimeout(() => {
+      const els = elementsRef.current;
+      // Locations
+      const locs = new Set();
+      els.forEach(el => {
+        const t = stripHtml(el.content);
+        if (el.type === 'scene' && t) {
+          const match = t.match(/(?:INT\.|EXT\.|INT\/EXT\.?)\s*(.+?)(?:\s*-\s*(?:JOUR|NUIT|MATIN|SOIR|AUBE|CRÉPUSCULE|CONTINUOUS|LATER|SAME))?$/i);
+          if (match && match[1]) locs.add(match[1].trim().toUpperCase());
         }
-      }
-    });
-    return Array.from(locs).sort();
-  }, [elements]);
-
-  // Character statistics
-  const characterStats = useMemo(() => {
-    const stats = {};
-    let currentScene = 0;
-    
-    elements.forEach((el, idx) => {
-      if (el.type === 'scene') {
-        currentScene++;
-      }
-      if (el.type === 'character' && stripHtml(el.content).trim()) {
-        const name = stripHtml(el.content).trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase();
-        if (!stats[name]) {
-          stats[name] = { 
-            name, 
-            lines: 0, 
-            firstAppearance: currentScene || 1,
-            firstIndex: idx,
-            scenes: new Set()
-          };
+      });
+      setExtractedLocations(Array.from(locs).sort());
+      // Character stats
+      const cStats = {};
+      let currentScene = 0;
+      els.forEach((el, idx) => {
+        if (el.type === 'scene') currentScene++;
+        if (el.type === 'character' && stripHtml(el.content).trim()) {
+          const name = stripHtml(el.content).trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase();
+          if (!cStats[name]) cStats[name] = { name, lines: 0, firstAppearance: currentScene || 1, firstIndex: idx, scenes: new Set() };
+          cStats[name].lines++;
+          if (currentScene > 0) cStats[name].scenes.add(currentScene);
         }
-        stats[name].lines++;
-        if (currentScene > 0) stats[name].scenes.add(currentScene);
-      }
-    });
-    
-    // Convert scenes Set to count
-    Object.values(stats).forEach(s => {
-      s.sceneCount = s.scenes.size;
-      delete s.scenes;
-    });
-    
-    return Object.values(stats).sort((a, b) => b.lines - a.lines);
+      });
+      Object.values(cStats).forEach(s => { s.sceneCount = s.scenes.size; delete s.scenes; });
+      setCharacterStats(Object.values(cStats).sort((a, b) => b.lines - a.lines));
+    }, 300);
+    return () => { if (locsStatsTimerRef.current) clearTimeout(locsStatsTimerRef.current); };
   }, [elements]);
 
   // Search functionality
@@ -8414,45 +8377,45 @@ export default function ScreenplayEditor() {
       else if (el.type === 'dialogue' && !e.shiftKey) changeType(index, 'parenthetical');
       else if (el.type === 'parenthetical' && !e.shiftKey) { const pc = stripHtml(el.content).trim(); if (pc) { let c = pc; if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; updateElement(index, { ...el, content: c }); } changeType(index, 'dialogue'); }
     }
-    if (e.key === 'Backspace' && stripHtml(el.content) === '' && elements.length > 1) { e.preventDefault(); deleteElement(index); }
-    
+    if (e.key === 'Backspace' && stripHtml(el.content) === '' && elementsRef.current.length > 1) { e.preventDefault(); deleteElement(index); }
+
     // Arrow navigation: let browser handle normal cursor movement within element
     // Only intercept at element boundaries
     if (e.key === 'ArrowDown' && !e.metaKey && !e.ctrlKey) {
       // Only move to next element if truly at the end of content
-      if (isCursorAtEnd() && index < elements.length - 1) {
+      if (isCursorAtEnd() && index < elementsRef.current.length - 1) {
         e.preventDefault();
         handleFocus(index + 1, 0);
       }
       // Otherwise, let browser handle normal line navigation
     }
-    
+
     if (e.key === 'ArrowUp' && !e.metaKey && !e.ctrlKey) {
       // Only move to prev element if truly at the start
       if (isCursorAtStart() && index > 0) {
         e.preventDefault();
-        handleFocus(index - 1, stripHtml(elements[index - 1].content).length);
+        handleFocus(index - 1, stripHtml(elementsRef.current[index - 1].content).length);
       }
       // Otherwise, let browser handle normal line navigation
     }
-    
+
     // Cmd/Ctrl + Arrow for quick element navigation
     if (e.key === 'ArrowUp' && e.metaKey) { e.preventDefault(); handleFocus(Math.max(0, index - 1), 0); }
-    if (e.key === 'ArrowDown' && e.metaKey) { e.preventDefault(); handleFocus(Math.min(elements.length - 1, index + 1), 0); }
+    if (e.key === 'ArrowDown' && e.metaKey) { e.preventDefault(); handleFocus(Math.min(elementsRef.current.length - 1, index + 1), 0); }
     if ((e.metaKey || e.ctrlKey) && ['1','2','3','4','5','6'].includes(e.key)) { e.preventDefault(); changeType(index, ELEMENT_TYPES[parseInt(e.key) - 1].id); }
 
     // Cmd+A: select all blocks
     if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
       e.preventDefault();
-      setSelectedRange({ start: 0, end: elements.length - 1 });
+      setSelectedRange({ start: 0, end: elementsRef.current.length - 1 });
     }
 
     // Shift+ArrowDown/Up: extend block selection
     if (e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedRange(prev => {
-        if (!prev) return { start: index, end: Math.min(elements.length - 1, index + 1) };
-        return { start: prev.start, end: Math.min(elements.length - 1, prev.end + 1) };
+        if (!prev) return { start: index, end: Math.min(elementsRef.current.length - 1, index + 1) };
+        return { start: prev.start, end: Math.min(elementsRef.current.length - 1, prev.end + 1) };
       });
     }
     if (e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowUp') {
@@ -8462,7 +8425,7 @@ export default function ScreenplayEditor() {
         return { start: Math.max(0, prev.start - 1), end: prev.end };
       });
     }
-  }, [elements, insertElement, changeType, deleteElement, updateElement, canEdit, handleFocus]);
+  }, [insertElement, changeType, deleteElement, updateElement, canEdit, handleFocus]);
 
   // ============ MULTI-BLOCK CLIPBOARD (global handler) ============
   useEffect(() => {
@@ -10705,8 +10668,8 @@ export default function ScreenplayEditor() {
                       onSelectLocation={handleSelectLocation}
                       remoteCursors={remoteCursors} 
                       onCursorMove={handleCursor} 
-                      canEdit={canEdit && !isElementLocked(index)}
-                      isLocked={isElementLocked(index)}
+                      canEdit={canEdit && !lockedElementsMap[element.id]}
+                      isLocked={!!lockedElementsMap[element.id]}
                       sceneNumber={sceneNumbersMap[element.id]}
                       showSceneNumbers={showSceneNumbers}
                       note={notes[element.id]}
