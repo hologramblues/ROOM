@@ -8433,27 +8433,41 @@ export default function ScreenplayEditor() {
         deleteElement(index);
         handleFocus(Math.max(0, index - 1), stripHtml(elementsRef.current[Math.max(0, index - 1)]?.content).length);
       } else {
-        // Non-empty line, cursor at start: merge content into previous block
+        // Non-empty line, cursor at start:
+        // Only merge if same type (like Final Draft) — otherwise just move focus up
         const prevEl = elementsRef.current[index - 1];
         if (prevEl) {
-          const prevContent = prevEl.content || '';
-          const curContent = el.content || '';
-          const prevPlainLen = stripHtml(prevContent).length;
-          // Merge as single atomic operation
-          pushToUndo();
-          const mergedContent = stripHtml(prevContent) + stripHtml(curContent);
-          setElements(prev => {
-            const updated = [...prev];
-            updated[index - 1] = { ...updated[index - 1], content: mergedContent };
-            updated.splice(index, 1);
-            return updated;
-          });
-          setActiveIndex(index - 1);
-          // Emit to socket as full-sync to avoid race conditions
-          if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-            setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+          if (prevEl.type === el.type) {
+            // Same type: merge content into previous block
+            const prevContent = prevEl.content || '';
+            const curContent = el.content || '';
+            const prevPlainLen = stripHtml(prevContent).length;
+            pushToUndo();
+            const mergedContent = stripHtml(prevContent) + stripHtml(curContent);
+            setElements(prev => {
+              const updated = [...prev];
+              updated[index - 1] = { ...updated[index - 1], content: mergedContent };
+              updated.splice(index, 1);
+              return updated;
+            });
+            setActiveIndex(index - 1);
+            if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+              setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+            }
+            handleFocus(index - 1, prevPlainLen);
+          } else if (stripHtml(prevEl.content).trim() === '') {
+            // Previous block is empty: delete it, keep current block
+            pushToUndo();
+            setElements(prev => prev.filter((_, i) => i !== index - 1));
+            setActiveIndex(Math.max(0, index - 1));
+            if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+              setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+            }
+            handleFocus(Math.max(0, index - 1), 0);
+          } else {
+            // Different types, both have content: just move focus to end of previous
+            handleFocus(index - 1, stripHtml(prevEl.content).length);
           }
-          handleFocus(index - 1, prevPlainLen);
         }
       }
     }
