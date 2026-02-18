@@ -7063,53 +7063,75 @@ export default function ScreenplayEditor() {
   const selectDocument = (id) => { loadedDocRef.current = null; window.location.hash = id; setShowDocsList(false); };
 
   // Group elements into pages - deferred to avoid blocking Enter key
-  const computePages = (els) => {
-    const result = [];
-    let currentPage = { number: 1, elements: [] };
+  // Compute page break positions and page numbers for each element
+  const computePageInfo = (els) => {
+    const pageBreaks = new Set(); // Set of element indices that start a new page
+    const pageNumbers = {}; // elementIndex -> page number
+    let currentPage = 1;
     let h = 0;
     const getLines = el => {
       const l = el.content ? Math.ceil(stripHtml(el.content).length / 60) : 1;
       const e = { scene: 1.5, action: 1, character: 1, dialogue: 0, parenthetical: 0, transition: 1.5 };
       return l + (e[el.type] || 0);
     };
+    const pageElements = []; // track elements in current page for orphan detection
     els.forEach((el, idx) => {
       const lines = getLines(el);
-      if (h + lines > LINES_PER_PAGE && currentPage.elements.length > 0) {
+      if (h + lines > LINES_PER_PAGE && pageElements.length > 0) {
         let orphanCount = 0;
-        const items = currentPage.elements;
-        const last = items[items.length - 1]?.element;
+        const last = pageElements[pageElements.length - 1];
         if (last && last.type === 'scene') orphanCount = 1;
         else if (last && last.type === 'character') orphanCount = 1;
-        else if (last && last.type === 'parenthetical' && items.length >= 2 && items[items.length - 2]?.element.type === 'character') orphanCount = 2;
-        const orphans = orphanCount > 0 ? items.splice(items.length - orphanCount, orphanCount) : [];
-        if (orphanCount > 0) { h = 0; items.forEach(it => { h += getLines(it.element); }); }
-        result.push(currentPage);
-        currentPage = { number: currentPage.number + 1, elements: [...orphans] };
+        else if (last && last.type === 'parenthetical' && pageElements.length >= 2 && pageElements[pageElements.length - 2]?.type === 'character') orphanCount = 2;
+        // Move orphans to next page
+        const orphanStartIdx = idx - orphanCount;
+        currentPage++;
+        const breakIdx = orphanCount > 0 ? orphanStartIdx : idx;
+        pageBreaks.add(breakIdx);
+        // Recalculate height for orphans
         h = 0;
-        orphans.forEach(o => { h += getLines(o.element); });
+        pageElements.length = 0;
+        for (let i = breakIdx; i < idx; i++) {
+          h += getLines(els[i]);
+          pageElements.push(els[i]);
+          pageNumbers[i] = currentPage;
+        }
       }
-      currentPage.elements.push({ element: el, index: idx });
+      pageElements.push(el);
+      pageNumbers[idx] = currentPage;
       h += lines;
     });
-    if (currentPage.elements.length > 0) result.push(currentPage);
-    return result;
+    return { pageBreaks, pageNumbers, totalPages: currentPage };
   };
-  const [pages, setPages] = useState(() => computePages(elements));
-  const pagesTimerRef = useRef(null);
+  const [pageInfo, setPageInfo] = useState(() => computePageInfo(elements));
+  const pageInfoTimerRef = useRef(null);
   useEffect(() => {
-    if (pagesTimerRef.current) clearTimeout(pagesTimerRef.current);
-    pagesTimerRef.current = setTimeout(() => { setPages(computePages(elementsRef.current)); }, 200);
-    return () => { if (pagesTimerRef.current) clearTimeout(pagesTimerRef.current); };
+    if (pageInfoTimerRef.current) clearTimeout(pageInfoTimerRef.current);
+    pageInfoTimerRef.current = setTimeout(() => { setPageInfo(computePageInfo(elementsRef.current)); }, 200);
+    return () => { if (pageInfoTimerRef.current) clearTimeout(pageInfoTimerRef.current); };
   }, [elements]);
 
-  const extractedCharacters = useMemo(() => { const c = new Set(characters); elements.forEach(el => { const t = stripHtml(el.content).trim(); if (el.type === 'character' && t) c.add(t.replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); }, [elements, characters]);
+  // Deferred: only used for autocomplete dropdown, not rendering
+  const [extractedCharacters, setExtractedCharacters] = useState(() => { const c = new Set(characters); elements.forEach(el => { const t = stripHtml(el.content).trim(); if (el.type === 'character' && t) c.add(t.replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); });
+  const extractedCharsTimerRef = useRef(null);
+  useEffect(() => {
+    if (extractedCharsTimerRef.current) clearTimeout(extractedCharsTimerRef.current);
+    extractedCharsTimerRef.current = setTimeout(() => {
+      const c = new Set(characters);
+      elementsRef.current.forEach(el => { const t = stripHtml(el.content).trim(); if (el.type === 'character' && t) c.add(t.replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); });
+      setExtractedCharacters(Array.from(c).sort());
+    }, 300);
+    return () => { if (extractedCharsTimerRef.current) clearTimeout(extractedCharsTimerRef.current); };
+  }, [elements, characters]);
   const remoteCursors = useMemo(() => users.filter(u => u.id !== myId), [users, myId]);
   const canEdit = myRole === 'editor';
   const canEditNow = (isFullyConnected || !!offlineDocId) && canEdit;
   const canComment = myRole === 'editor' || myRole === 'commenter';
 
   // Pre-compute locked status for all elements (O(n) single pass, replaces O(n²) inline calls)
+  // Fast path: skip entire loop when no scenes are locked or assigned
   const lockedElementsMap = useMemo(() => {
+    if (lockedScenes.size === 0 && Object.keys(sceneAssignments).length === 0) return {};
     const map = {};
     let currentSceneId = null;
     let currentSceneLocked = false;
@@ -7190,17 +7212,21 @@ export default function ScreenplayEditor() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIndex]); // Only recalc when cursor moves, not on every keystroke
 
-  // Map element ID to scene number (for display in script)
-  const sceneNumbersMap = useMemo(() => {
-    const map = {};
-    let num = 0;
-    elements.forEach(el => {
-      if (el.type === 'scene') {
-        num++;
-        map[el.id] = num;
-      }
-    });
+  // Map element ID to scene number (deferred — only decorative display)
+  const [sceneNumbersMap, setSceneNumbersMap] = useState(() => {
+    const map = {}; let num = 0;
+    elements.forEach(el => { if (el.type === 'scene') { num++; map[el.id] = num; } });
     return map;
+  });
+  const sceneNumTimerRef = useRef(null);
+  useEffect(() => {
+    if (sceneNumTimerRef.current) clearTimeout(sceneNumTimerRef.current);
+    sceneNumTimerRef.current = setTimeout(() => {
+      const map = {}; let num = 0;
+      elementsRef.current.forEach(el => { if (el.type === 'scene') { num++; map[el.id] = num; } });
+      setSceneNumbersMap(map);
+    }, 200);
+    return () => { if (sceneNumTimerRef.current) clearTimeout(sceneNumTimerRef.current); };
   }, [elements]);
 
   // Extract locations from scene headings
@@ -10611,47 +10637,49 @@ export default function ScreenplayEditor() {
             ...(isDragSelecting ? { userSelect: 'none', WebkitUserSelect: 'none', cursor: 'default' } : {}),
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {pages.map((page) => (
-              <div key={page.number} style={{ 
-                position: 'relative',
-                contentVisibility: 'auto',
-                containIntrinsicSize: '210mm 297mm'
-              }}>
-                {/* Page content */}
-                <div className="script-page" style={{ 
-                  background: darkMode ? '#3a3a3a' : 'white', 
-                  color: darkMode ? '#e0e0e0' : '#111', 
-                  width: '210mm', 
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="script-page" style={{
+                  background: darkMode ? '#3a3a3a' : 'white',
+                  color: darkMode ? '#e0e0e0' : '#111',
+                  width: '210mm',
                   minHeight: '297mm',
-                  padding: '20mm 25mm 25mm 38mm', 
-                  boxSizing: 'border-box', 
+                  padding: '20mm 25mm 25mm 38mm',
+                  boxSizing: 'border-box',
                   boxShadow: darkMode ? '0 4px 20px rgba(0,0,0,0.6)' : '0 4px 20px rgba(0,0,0,0.4)',
                   position: 'relative'
                 }}>
-                  {/* Page number inside, top right */}
-                  <div style={{ 
-                    position: 'absolute', 
-                    top: '12mm', 
-                    right: '25mm', 
-                    fontSize: '12pt', 
-                    fontFamily: 'Courier Prime, Courier New, monospace',
-                    color: darkMode ? '#e0e0e0' : '#111'
-                  }}>
-                    {page.number}.
-                  </div>
-                  
-                  {page.elements.map(({ element, index }) => (
+
+                  {elements.map((element, index) => (
+                    <React.Fragment key={element.id}>
+                      {/* Page break marker (decorative) */}
+                      {pageInfo.pageBreaks.has(index) && (
+                        <div style={{
+                          borderTop: `1px dashed ${darkMode ? '#555' : '#ccc'}`,
+                          margin: '12px -25mm 12px -38mm',
+                          paddingRight: '25mm',
+                          textAlign: 'right',
+                          position: 'relative'
+                        }}>
+                          <span style={{
+                            position: 'absolute',
+                            right: 0,
+                            top: -10,
+                            fontSize: '10pt',
+                            fontFamily: 'Courier Prime, Courier New, monospace',
+                            color: darkMode ? '#888' : '#999',
+                            background: darkMode ? '#3a3a3a' : 'white',
+                            padding: '0 8px'
+                          }}>
+                            — {pageInfo.pageNumbers[index] || ''} —
+                          </span>
+                        </div>
+                      )}
                     <div
-                      key={element.id}
                       data-element-index={index}
                       onMouseDown={(e) => {
                         if (e.shiftKey) { e.preventDefault(); handleFocus(index, null, true); return; }
-                        // Start potential drag-select (only left click)
                         if (e.button === 0 && !e.metaKey && !e.ctrlKey) {
                           dragStartIndexRef.current = index;
-                          // Don't prevent default here — let TipTap handle normal clicks
-                          // We'll detect drag in mousemove
                         }
                       }}
                       style={{
@@ -10662,19 +10690,19 @@ export default function ScreenplayEditor() {
                         } : {}),
                       }}
                     >
-                      <SceneLine 
-                      element={element} 
-                      index={index} 
-                      isActive={activeIndex === index} 
-                      onUpdate={updateElement} 
-                      onFocus={handleFocus} 
-                      onKeyDown={handleKeyDown} 
+                      <SceneLine
+                      element={element}
+                      index={index}
+                      isActive={activeIndex === index}
+                      onUpdate={updateElement}
+                      onFocus={handleFocus}
+                      onKeyDown={handleKeyDown}
                       characters={extractedCharacters}
                       locations={extractedLocations}
                       onSelectCharacter={handleSelectChar}
                       onSelectLocation={handleSelectLocation}
-                      remoteCursors={remoteCursors} 
-                      onCursorMove={handleCursor} 
+                      remoteCursors={remoteCursors}
+                      onCursorMove={handleCursor}
                       canEdit={canEdit && !lockedElementsMap[element.id]}
                       isLocked={!!lockedElementsMap[element.id]}
                       sceneNumber={sceneNumbersMap[element.id]}
@@ -10690,10 +10718,9 @@ export default function ScreenplayEditor() {
                       t={t}
                     />
                   </div>
+                  </React.Fragment>
                 ))}
               </div>
-            </div>
-          ))}
         </div>
       </div>
       
