@@ -8457,47 +8457,34 @@ export default function ScreenplayEditor() {
         const target = getEmptyEnterType(el.type);
         if (target) {
           changeType(index, target);
-        } else {
-          // Already Action and empty → delete block, focus previous
-          if (index > 0 && elementsRef.current.length > 1) {
-            deleteElement(index);
-            handleFocus(index - 1, stripHtml(elementsRef.current[Math.max(0, index - 1)]?.content).length);
-          }
+        } else if (index > 0 && elementsRef.current.length > 1) {
+          deleteElement(index);
+          handleFocus(index - 1, stripHtml(elementsRef.current[Math.max(0, index - 1)]?.content).length);
         }
       } else if (cursor.atEnd) {
-        // Cursor at end → create next element per Final Draft table
+        // Cursor at end → create next element per Final Draft table (fast path, no pushToUndo — insertElement does it)
         insertElement(index, getNextType(el.type));
       } else if (cursor.atStart) {
-        // Cursor at start → insert empty element of SAME type BEFORE, push content down
-        pushToUndo();
-        const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-        setElements(prev => {
-          const updated = [...prev];
-          updated.splice(index, 0, { id: newId, type: el.type, content: '' });
-          return updated;
-        });
-        setActiveIndex(index + 1);
+        // Cursor at start → insert empty block of SAME type BEFORE, push content down
+        insertElement(index - 1 >= 0 ? index - 1 : -1, el.type);
+        // insertElement inserted at index, content stays at index+1 — focus content
         handleFocus(index + 1, 0);
-        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
-        }
       } else {
-        // Cursor mid-block → split: keep text before in current, text after in new block
+        // Cursor mid-block → split: text before stays, text after goes to new block of SAME type
         pushToUndo();
         const before = cursor.textBefore;
         const after = cursor.textAfter;
         const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-        const nextType = getNextType(el.type);
         setElements(prev => {
           const updated = [...prev];
           updated[index] = { ...updated[index], content: before };
-          updated.splice(index + 1, 0, { id: newId, type: nextType, content: after });
+          updated.splice(index + 1, 0, { id: newId, type: el.type, content: after });
           return updated;
         });
         setActiveIndex(index + 1);
         handleFocus(index + 1, 0);
         if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
+          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 500);
         }
       }
     }
@@ -8533,10 +8520,10 @@ export default function ScreenplayEditor() {
         pushToUndo();
         setElements(prev => prev.filter((_, i) => i !== index - 1));
         setActiveIndex(Math.max(0, index - 1));
-        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
-        }
         handleFocus(Math.max(0, index - 1), 0);
+        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 500);
+        }
       } else if (prevEl) {
         // Both blocks have content → merge: result takes PREVIOUS block's type (Final Draft / Trelby rule)
         const prevContent = prevEl.content || '';
@@ -8551,10 +8538,10 @@ export default function ScreenplayEditor() {
           return updated;
         });
         setActiveIndex(index - 1);
-        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 100);
-        }
         handleFocus(index - 1, prevPlainLen);
+        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 500);
+        }
       }
     }
 
