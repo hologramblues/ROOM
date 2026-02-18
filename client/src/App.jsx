@@ -3579,17 +3579,21 @@ const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onK
   // Sync highlights when they change (without changing text)
   useEffect(() => {
     if (!editorReady || !editor) return;
-    
+
     // Check if highlights actually changed
     const highlightsJson = JSON.stringify(highlights || []);
     if (highlightsJson === lastHighlightsRef.current) return;
-    lastHighlightsRef.current = highlightsJson;
-    
+
     try {
-      // Only update if editor is not focused to avoid cursor jump
-      if (!editor.isFocused) {
+      if (editor.isFocused) {
+        // Editor is focused — save cursor, update content, restore cursor
+        const { from, to } = editor.state.selection;
+        editor.commands.setContent(buildContentWithMarks(element.content, highlights), false);
+        try { editor.commands.setTextSelection({ from, to }); } catch (_) {}
+      } else {
         editor.commands.setContent(buildContentWithMarks(element.content, highlights), false);
       }
+      lastHighlightsRef.current = highlightsJson;
     } catch (e) {
       // Editor not ready yet
     }
@@ -6231,7 +6235,8 @@ export default function ScreenplayEditor() {
     observer.observe(script);
     
     return () => observer.disconnect();
-  }, [elements.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ResizeObserver auto-detects size changes, no need to reconnect on elements.length
   
   // Chat notification audio - Web Audio synthesis (reuse single AudioContext)
   const audioCtxRef = useRef(null);
@@ -7182,7 +7187,8 @@ export default function ScreenplayEditor() {
       if (elements[i]?.type === 'scene') lastScene++;
     }
     return lastScene;
-  }, [elements, activeIndex]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex]); // Only recalc when cursor moves, not on every keystroke
 
   // Map element ID to scene number (for display in script)
   const sceneNumbersMap = useMemo(() => {
@@ -8280,7 +8286,7 @@ export default function ScreenplayEditor() {
 
   const handleKeyDown = useCallback((e, index) => {
     if (!canEdit) return;
-    const el = elements[index];
+    const el = elementsRef.current[index];
     const target = e.target;
     
     // Helper to check if cursor is at the very start of the element
@@ -8425,6 +8431,7 @@ export default function ScreenplayEditor() {
         return { start: Math.max(0, prev.start - 1), end: prev.end };
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insertElement, changeType, deleteElement, updateElement, canEdit, handleFocus]);
 
   // ============ MULTI-BLOCK CLIPBOARD (global handler) ============
