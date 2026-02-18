@@ -36,3 +36,113 @@
     transform: rotate(360deg);
   }
 }
+
+/* ============ SCREENPLAY EDITOR (Single TipTap V272) ============ */
+
+/* Base styles for all screenplay elements */
+.ProseMirror div[data-screenplay-element] {
+  font-family: 'Courier Prime', 'Courier New', monospace;
+  font-size: 12pt;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  min-height: 1em;
+  white-space: pre-wrap;
+}
+
+/* Scene heading */
+.screenplay-scene {
+  text-transform: uppercase;
+  font-weight: bold;
+  margin-top: 2em !important;
+  margin-bottom: 0.5em !important;
+}
+
+/* Action */
+.screenplay-action {
+  margin-top: 1em !important;
+  margin-bottom: 0 !important;
+  line-height: 1.1;
+}
+
+/* Character name */
+.screenplay-character {
+  text-transform: uppercase;
+  font-weight: normal;
+  margin-left: 33%;
+  width: 35%;
+  margin-top: 1em !important;
+  margin-bottom: 0 !important;
+}
+
+/* Dialogue */
+.screenplay-dialogue {
+  margin-left: 17%;
+  width: 58%;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  line-height: 1.1;
+}
+
+/* Parenthetical */
+.screenplay-parenthetical {
+  margin-left: 25%;
+  width: 42%;
+  font-style: italic;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Transition */
+.screenplay-transition {
+  text-transform: uppercase;
+  text-align: right;
+  margin-top: 1em !important;
+}
+
+/* Page break decoration */
+.page-break-decoration {
+  position: relative;
+  height: 60px;
+  margin: 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+.page-break-line {
+  position: absolute;
+  top: 30px;
+  left: -38mm;
+  right: -25mm;
+  border-top: 1px dashed rgba(128, 128, 128, 0.3);
+}
+
+.page-break-number {
+  position: absolute;
+  top: 4px;
+  right: -20mm;
+  font-family: 'Courier Prime', 'Courier New', monospace;
+  font-size: 12pt;
+  color: inherit;
+  opacity: 0.5;
+}
+
+/* Editor focus styles */
+.screenplay-editor-wrapper .ProseMirror {
+  outline: none;
+  min-height: 250mm;
+}
+
+.screenplay-editor-wrapper .ProseMirror:focus {
+  outline: none;
+}
+
+/* Placeholder for empty elements */
+.ProseMirror div[data-screenplay-element].is-empty::before {
+  content: attr(data-placeholder);
+  color: rgba(128, 128, 128, 0.4);
+  pointer-events: none;
+  position: absolute;
+  font-style: italic;
+}

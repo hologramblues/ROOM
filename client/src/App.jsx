@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect, useCallback, useMemo, createContext
 import { io } from 'socket.io-client';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Mark, mergeAttributes } from '@tiptap/core';
+import { Mark, Node, Extension, mergeAttributes } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 // V237 - Smooth scroll: CSS content-visibility instead of React virtualization
 
@@ -606,6 +608,324 @@ const SuggestionMark = Mark.create({
     ];
   },
 });
+
+// ============ SCREENPLAY ELEMENT NODE (Single TipTap Editor) ============
+// Final Draft element type transitions
+const SP_NEXT_TYPE = { scene: 'action', action: 'action', character: 'dialogue', dialogue: 'character', parenthetical: 'dialogue', transition: 'scene' };
+const SP_EMPTY_ENTER = (t) => (t === 'action' ? null : 'action');
+const SP_TAB_FWD = { scene: 'action', action: 'character', character: 'parenthetical', parenthetical: 'dialogue', dialogue: 'transition', transition: 'scene' };
+const SP_TAB_REV = { scene: 'transition', transition: 'dialogue', dialogue: 'parenthetical', parenthetical: 'character', character: 'action', action: 'scene' };
+
+const ScreenplayElement = Node.create({
+  name: 'screenplayElement',
+  group: 'block',
+  content: 'inline*',
+  defining: true,
+
+  addAttributes() {
+    return {
+      elementId: {
+        default: null,
+        parseHTML: el => el.getAttribute('data-element-id'),
+        renderHTML: attrs => ({ 'data-element-id': attrs.elementId }),
+      },
+      elementType: {
+        default: 'action',
+        parseHTML: el => el.getAttribute('data-element-type') || 'action',
+        renderHTML: attrs => ({ 'data-element-type': attrs.elementType }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'div[data-screenplay-element]' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    const type = HTMLAttributes['data-element-type'] || 'action';
+    return ['div', {
+      ...HTMLAttributes,
+      'data-screenplay-element': 'true',
+      class: `screenplay-${type}`,
+    }, 0];
+  },
+
+  addCommands() {
+    return {
+      // Split at cursor, new block gets the next type per Final Draft rules
+      splitScreenplayElement: () => ({ tr, state, dispatch, editor }) => {
+        const { $from, from } = state.selection;
+        const node = $from.parent;
+        if (node.type.name !== 'screenplayElement') return false;
+
+        const currentType = node.attrs.elementType;
+        const atStart = $from.parentOffset === 0;
+        const atEnd = $from.parentOffset >= node.content.size;
+        const isEmpty = node.content.size === 0;
+        const nodeStart = $from.before();
+
+        // Auto-close parenthetical
+        if (currentType === 'parenthetical' && !isEmpty) {
+          const text = node.textContent;
+          let fixed = text;
+          if (!fixed.startsWith('(')) fixed = '(' + fixed;
+          if (!fixed.endsWith(')')) fixed = fixed + ')';
+          if (fixed !== text) {
+            // Replace text content
+            tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
+            tr.insertText(fixed, nodeStart + 1);
+          }
+        }
+
+        if (isEmpty) {
+          // Empty block + Enter → convert to Action (or delete if already Action)
+          const target = SP_EMPTY_ENTER(currentType);
+          if (target) {
+            tr.setNodeMarkup(nodeStart, null, { ...node.attrs, elementType: target });
+            if (dispatch) dispatch(tr);
+            return true;
+          } else {
+            // Already Action and empty — delete this block if not the only one
+            if (state.doc.childCount > 1) {
+              // Delete the node, move cursor to end of previous
+              const $pos = state.doc.resolve(nodeStart);
+              const indexInDoc = $pos.index($pos.depth);
+              if (indexInDoc > 0) {
+                const prevEnd = nodeStart - 1; // end of previous node content
+                tr.delete(nodeStart, nodeStart + node.nodeSize);
+                tr.setSelection(state.selection.constructor.near(tr.doc.resolve(Math.min(prevEnd, tr.doc.content.size))));
+                if (dispatch) dispatch(tr);
+                return true;
+              }
+            }
+            return true;
+          }
+        }
+
+        if (atEnd) {
+          // Cursor at end → insert new element after with next type
+          const nextType = SP_NEXT_TYPE[currentType] || 'action';
+          const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+          const insertPos = nodeStart + node.nodeSize;
+          const newNode = state.schema.nodes.screenplayElement.create(
+            { elementId: newId, elementType: nextType },
+            null
+          );
+          tr.insert(insertPos, newNode);
+          tr.setSelection(state.selection.constructor.near(tr.doc.resolve(insertPos + 1)));
+          if (dispatch) dispatch(tr);
+          return true;
+        }
+
+        if (atStart) {
+          // Cursor at start → insert empty block BEFORE of same type, push content down
+          const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+          const newNode = state.schema.nodes.screenplayElement.create(
+            { elementId: newId, elementType: currentType },
+            null
+          );
+          tr.insert(nodeStart, newNode);
+          // Cursor stays on original content (now shifted down)
+          tr.setSelection(state.selection.constructor.near(tr.doc.resolve(nodeStart + newNode.nodeSize + 1)));
+          if (dispatch) dispatch(tr);
+          return true;
+        }
+
+        // Mid-block split: both halves keep the same type, new half gets new ID
+        const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+        // Use ProseMirror's native split and then fix up attributes
+        tr.split(from, 1, [{ type: state.schema.nodes.screenplayElement, attrs: { elementId: newId, elementType: currentType } }]);
+        if (dispatch) dispatch(tr);
+        return true;
+      },
+
+      // Cycle element type with Tab
+      cycleType: (reverse) => ({ tr, state, dispatch }) => {
+        const { $from } = state.selection;
+        const node = $from.parent;
+        if (node.type.name !== 'screenplayElement') return false;
+
+        const currentType = node.attrs.elementType;
+        const cycle = reverse ? SP_TAB_REV : SP_TAB_FWD;
+        const newType = cycle[currentType] || 'action';
+        const nodeStart = $from.before();
+
+        // Auto-close parenthetical if leaving it
+        if (currentType === 'parenthetical' && node.content.size > 0) {
+          const text = node.textContent;
+          let fixed = text;
+          if (!fixed.startsWith('(')) fixed = '(' + fixed;
+          if (!fixed.endsWith(')')) fixed = fixed + ')';
+          if (fixed !== text) {
+            tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
+            tr.insertText(fixed, nodeStart + 1);
+          }
+        }
+
+        tr.setNodeMarkup(nodeStart, null, { ...node.attrs, elementType: newType });
+        if (dispatch) dispatch(tr);
+        return true;
+      },
+
+      // Set a specific type
+      setScreenplayType: (type) => ({ tr, state, dispatch }) => {
+        const { $from } = state.selection;
+        const node = $from.parent;
+        if (node.type.name !== 'screenplayElement') return false;
+        const nodeStart = $from.before();
+        tr.setNodeMarkup(nodeStart, null, { ...node.attrs, elementType: type });
+        if (dispatch) dispatch(tr);
+        return true;
+      },
+
+      // Handle Backspace at element boundary
+      handleScreenplayBackspace: () => ({ tr, state, dispatch, editor }) => {
+        const { $from, empty } = state.selection;
+        // Only intercept if cursor is at start of a screenplayElement and selection is collapsed
+        if (!empty) return false;
+        const node = $from.parent;
+        if (node.type.name !== 'screenplayElement') return false;
+        if ($from.parentOffset !== 0) return false; // Not at start → let default handle it
+
+        const nodeStart = $from.before();
+        const $nodePos = state.doc.resolve(nodeStart);
+        const indexInDoc = $nodePos.index($nodePos.depth);
+
+        // First element — can't merge backward
+        if (indexInDoc === 0) return false;
+
+        const prevNode = state.doc.child(indexInDoc - 1);
+        const prevStart = nodeStart - prevNode.nodeSize;
+        const currentIsEmpty = node.content.size === 0;
+        const prevIsEmpty = prevNode.content.size === 0;
+
+        if (currentIsEmpty && state.doc.childCount > 1) {
+          // Current is empty → delete it, focus end of previous
+          tr.delete(nodeStart, nodeStart + node.nodeSize);
+          const targetPos = prevStart + 1 + prevNode.content.size;
+          tr.setSelection(state.selection.constructor.near(tr.doc.resolve(Math.min(targetPos, tr.doc.content.size))));
+          if (dispatch) dispatch(tr);
+          return true;
+        }
+
+        if (prevIsEmpty) {
+          // Previous is empty → delete previous, stay in current
+          tr.delete(prevStart, prevStart + prevNode.nodeSize);
+          if (dispatch) dispatch(tr);
+          return true;
+        }
+
+        // Both have content → merge current INTO previous (result takes previous's type)
+        // Append current's content to end of previous, then delete current node
+        const prevContentEnd = prevStart + 1 + prevNode.content.size;
+        const cursorTarget = prevContentEnd; // Where the join point will be
+
+        // Use joinBackward-like approach: delete the boundary between the two nodes
+        // This means deleting from end of prev node to start of current node content
+        const gapStart = prevStart + prevNode.nodeSize; // End of prev node (closing token)
+        const gapEnd = nodeStart + 1; // Start of current node content (after opening token)
+
+        // Delete the gap (prev closing + current opening) to join them
+        tr.delete(gapStart, gapEnd);
+        // The result node keeps the prev node's attributes (type) since we're joining into it
+        tr.setSelection(state.selection.constructor.near(tr.doc.resolve(Math.min(cursorTarget, tr.doc.content.size))));
+        if (dispatch) dispatch(tr);
+        return true;
+      },
+    };
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      'Enter': () => this.editor.commands.splitScreenplayElement(),
+      'Tab': () => this.editor.commands.cycleType(false),
+      'Shift-Tab': () => this.editor.commands.cycleType(true),
+      'Backspace': () => this.editor.commands.handleScreenplayBackspace(),
+      // Cmd/Ctrl+1-6 for quick type change
+      'Mod-1': () => this.editor.commands.setScreenplayType('scene'),
+      'Mod-2': () => this.editor.commands.setScreenplayType('action'),
+      'Mod-3': () => this.editor.commands.setScreenplayType('character'),
+      'Mod-4': () => this.editor.commands.setScreenplayType('dialogue'),
+      'Mod-5': () => this.editor.commands.setScreenplayType('parenthetical'),
+      'Mod-6': () => this.editor.commands.setScreenplayType('transition'),
+    };
+  },
+});
+
+// ============ SCREENPLAY EDITOR HELPERS ============
+// Build ProseMirror doc JSON from elements array
+function buildDocFromElements(els) {
+  if (!els || els.length === 0) {
+    return { type: 'doc', content: [{ type: 'screenplayElement', attrs: { elementId: generateId(), elementType: 'action' } }] };
+  }
+  return {
+    type: 'doc',
+    content: els.map(el => ({
+      type: 'screenplayElement',
+      attrs: { elementId: el.id, elementType: el.type || 'action' },
+      content: el.content && stripHtml(el.content).length > 0
+        ? [{ type: 'text', text: stripHtml(el.content) }]
+        : [],
+    })),
+  };
+}
+
+// Extract elements array from ProseMirror doc
+function extractElementsFromDoc(doc) {
+  const result = [];
+  doc.forEach(node => {
+    if (node.type.name === 'screenplayElement') {
+      result.push({
+        id: node.attrs.elementId || generateId(),
+        type: node.attrs.elementType || 'action',
+        content: node.textContent || '',
+      });
+    }
+  });
+  return result;
+}
+
+// Compare two elements arrays for equality (shallow)
+function elementsEqual(a, b) {
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id || a[i].type !== b[i].type || a[i].content !== b[i].content) return false;
+  }
+  return true;
+}
+
+// Page break decoration plugin for ProseMirror
+const pageBreakPluginKey = new PluginKey('pageBreaks');
+
+function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
+  return new Plugin({
+    key: pageBreakPluginKey,
+    props: {
+      decorations: (state) => {
+        const els = extractElementsFromDoc(state.doc);
+        if (els.length === 0) return DecorationSet.empty;
+        const { pageBreaks, pageNumbers } = computePageInfoFn(els);
+        if (pageBreaks.size === 0) return DecorationSet.empty;
+        const decorations = [];
+        let nodeIndex = 0;
+        state.doc.forEach((node, pos) => {
+          if (node.type.name === 'screenplayElement' && pageBreaks.has(nodeIndex)) {
+            decorations.push(Decoration.widget(pos, () => {
+              const div = document.createElement('div');
+              div.className = 'page-break-decoration';
+              div.setAttribute('contenteditable', 'false');
+              div.innerHTML = '<div class="page-break-line"></div><span class="page-break-number">' + (pageNumbers[nodeIndex] || '') + '.</span>';
+              return div;
+            }, { side: -1, key: 'pb-' + nodeIndex }));
+          }
+          nodeIndex++;
+        });
+        return DecorationSet.create(state.doc, decorations);
+      },
+    },
+  });
+}
 
 // Helper to escape HTML entities
 const escapeHtml = (text) => {
@@ -3261,7 +3581,345 @@ const renderContentWithHighlights = (content, highlights) => {
   return parts.length > 0 ? parts : content;
 };
 
-// ============ SCENE LINE (TIPTAP VERSION) ============
+// ============ SCREENPLAY EDITOR (Single TipTap V272) ============
+const SingleEditor = React.memo(({
+  elements,
+  onElementsChange,
+  canEdit,
+  scriptFont,
+  darkMode,
+  characters,
+  locations,
+  onSelectCharacter,
+  onSelectLocation,
+  onTextSelect,
+  onHighlightClick,
+  onSuggestionClick,
+  remoteCursors,
+  computePageInfoFn,
+  t = (k) => k,
+}) => {
+  const isEditorOriginRef = useRef(false);
+  const lastElementsRef = useRef(elements);
+  const syncTimeoutRef = useRef(null);
+  const [autoState, setAutoState] = useState({ show: false, items: [], idx: 0, type: null, nodePos: null });
+
+  // Create page break extension that wraps ProseMirror plugin
+  const PageBreakExtension = useMemo(() => {
+    const plugin = createPageBreakPlugin(computePageInfoFn, stripHtml, darkMode);
+    return Extension.create({
+      name: 'pageBreakHelper',
+      addProseMirrorPlugins() { return [plugin]; },
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      StarterKit.configure({
+        paragraph: false,
+        history: true,
+        hardBreak: false,
+        heading: false,
+        bulletList: false,
+        orderedList: false,
+        blockquote: false,
+        codeBlock: false,
+        horizontalRule: false,
+      }),
+      ScreenplayElement,
+      CommentMark,
+      SuggestionMark,
+      PageBreakExtension,
+    ],
+    content: buildDocFromElements(elements),
+    editable: canEdit,
+
+    editorProps: {
+      attributes: {
+        spellcheck: 'false',
+      },
+      // Handle click on comment/suggestion marks
+      handleClick: (view, pos, event) => {
+        if (!view) return false;
+        try {
+          const target = event.target;
+          const commentEl = target.closest('[data-comment-id]');
+          if (commentEl && onHighlightClick) {
+            const commentId = commentEl.getAttribute('data-comment-id');
+            setTimeout(() => onHighlightClick(commentId), 0);
+            return false;
+          }
+          const suggestionEl = target.closest('[data-suggestion-id]');
+          if (suggestionEl && onSuggestionClick) {
+            const suggestionId = suggestionEl.getAttribute('data-suggestion-id');
+            setTimeout(() => onSuggestionClick(suggestionId), 0);
+            return false;
+          }
+        } catch (_) {}
+        return false;
+      },
+    },
+
+    onUpdate: ({ editor }) => {
+      if (!editor || !editor.view) return;
+      try {
+        isEditorOriginRef.current = true;
+        const newElements = extractElementsFromDoc(editor.state.doc);
+        // Debounce the elements state update
+        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = setTimeout(() => {
+          if (!elementsEqual(newElements, lastElementsRef.current)) {
+            lastElementsRef.current = newElements;
+            onElementsChange(newElements);
+          }
+          // Reset flag after state propagation
+          requestAnimationFrame(() => { isEditorOriginRef.current = false; });
+        }, 100);
+      } catch (_) {}
+    },
+
+    onSelectionUpdate: ({ editor }) => {
+      if (!editor || !editor.view) return;
+      try {
+        const { $from, from, to } = editor.state.selection;
+        const node = $from.parent;
+        if (node.type.name !== 'screenplayElement') return;
+
+        // Text selection → comment/suggestion creation
+        if (from !== to && onTextSelect) {
+          const selectedText = editor.state.doc.textBetween(from, to);
+          if (selectedText.trim()) {
+            const nodeStart = $from.before();
+            const coords = editor.view.coordsAtPos(from);
+            onTextSelect({
+              elementId: node.attrs.elementId,
+              elementIndex: null, // No longer used by index
+              text: selectedText,
+              startOffset: from - nodeStart - 1,
+              endOffset: to - nodeStart - 1,
+              rect: { top: coords.top, left: coords.left, bottom: coords.bottom, right: coords.right },
+            });
+          }
+        }
+
+        // Autocomplete for character names and locations
+        const currentType = node.attrs.elementType;
+        const text = node.textContent;
+
+        if (currentType === 'character' && text.length > 0) {
+          const q = text.toUpperCase();
+          const f = (characters || []).filter(c => c.toUpperCase().startsWith(q) && c.toUpperCase() !== q);
+          if (f.length > 0) {
+            const coords = editor.view.coordsAtPos(from);
+            setAutoState({ show: true, items: f, idx: 0, type: 'character', coords });
+          } else {
+            setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
+          }
+        } else if (currentType === 'scene' && text.length > 4) {
+          const match = text.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*(.*)$/i);
+          if (match && match[2] && match[2].length > 0) {
+            const q = match[2].toUpperCase();
+            const f = (locations || []).filter(l => l.startsWith(q) && l !== q);
+            if (f.length > 0) {
+              const coords = editor.view.coordsAtPos(from);
+              setAutoState({ show: true, items: f, idx: 0, type: 'location', coords });
+            } else {
+              setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
+            }
+          } else {
+            setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
+          }
+        } else {
+          setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
+        }
+      } catch (_) {}
+    },
+  });
+
+  // Sync external changes (socket, import, undo) into the editor
+  useEffect(() => {
+    if (!editor || isEditorOriginRef.current) return;
+    // Don't replace content while user is typing
+    if (editor.isFocused) {
+      // But still check if elements differ significantly (e.g. from socket full-sync)
+      const currentEls = extractElementsFromDoc(editor.state.doc);
+      if (elementsEqual(currentEls, elements)) return;
+      // If lengths differ, it's a structural change from socket — must apply
+      if (currentEls.length === elements.length) return; // Same structure, skip during typing
+    }
+    const currentEls = extractElementsFromDoc(editor.state.doc);
+    if (!elementsEqual(currentEls, elements)) {
+      // Save cursor
+      const savedPos = editor.state.selection.from;
+      editor.commands.setContent(buildDocFromElements(elements), false);
+      // Restore cursor position
+      try {
+        const maxPos = editor.state.doc.content.size - 1;
+        editor.commands.setTextSelection(Math.min(savedPos, maxPos));
+      } catch (_) {}
+      lastElementsRef.current = elements;
+    }
+  }, [elements, editor]);
+
+  // Update editable state
+  useEffect(() => {
+    if (editor) {
+      const shouldBeEditable = !!canEdit;
+      if (editor.isEditable !== shouldBeEditable) {
+        editor.setEditable(shouldBeEditable);
+      }
+    }
+  }, [editor, canEdit]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    };
+  }, []);
+
+  // Handle autocomplete selection
+  const handleAutoSelect = useCallback((item) => {
+    if (!editor) return;
+    const { $from } = editor.state.selection;
+    const node = $from.parent;
+    if (node.type.name !== 'screenplayElement') return;
+    const nodeStart = $from.before();
+
+    if (autoState.type === 'character') {
+      // Replace entire node content with selected character name
+      const tr = editor.state.tr;
+      if (node.content.size > 0) {
+        tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
+      }
+      tr.insertText(item, nodeStart + 1);
+      editor.view.dispatch(tr);
+      // Then insert a dialogue element after
+      setTimeout(() => {
+        editor.commands.splitScreenplayElement();
+      }, 10);
+    } else if (autoState.type === 'location') {
+      const text = node.textContent;
+      const match = text.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*/i);
+      const prefix = match ? match[1] + ' ' : '';
+      const replacement = prefix + item + ' - ';
+      const tr = editor.state.tr;
+      if (node.content.size > 0) {
+        tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
+      }
+      tr.insertText(replacement, nodeStart + 1);
+      editor.view.dispatch(tr);
+    }
+    setAutoState(prev => ({ ...prev, show: false }));
+  }, [editor, autoState.type]);
+
+  // Autocomplete keyboard navigation
+  useEffect(() => {
+    if (!editor || !autoState.show) return;
+
+    const handleKeyDown = (event) => {
+      if (!autoState.show || autoState.items.length === 0) return;
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        event.stopPropagation();
+        setAutoState(prev => ({ ...prev, idx: (prev.idx + 1) % prev.items.length }));
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        event.stopPropagation();
+        setAutoState(prev => ({ ...prev, idx: (prev.idx - 1 + prev.items.length) % prev.items.length }));
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleAutoSelect(autoState.items[autoState.idx]);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        setAutoState(prev => ({ ...prev, show: false }));
+      }
+    };
+
+    // Use capture phase to intercept before TipTap
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [editor, autoState, handleAutoSelect]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <EditorContent editor={editor} />
+
+      {/* Character autocomplete dropdown */}
+      {autoState.show && autoState.type === 'character' && autoState.coords && (
+        <div style={{
+          position: 'fixed',
+          top: (autoState.coords.bottom || 0) + 4,
+          left: (autoState.coords.left || 0),
+          background: '#1e1e1e',
+          border: '1px solid #555',
+          borderRadius: 6,
+          maxHeight: 150,
+          overflowY: 'auto',
+          zIndex: 1000,
+          minWidth: 200,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+        }}>
+          {autoState.items.map((s, i) => (
+            <div
+              key={s}
+              onClick={() => handleAutoSelect(s)}
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                background: i === autoState.idx ? '#3a3a3a' : '#1e1e1e',
+                color: '#e0e0e0',
+                fontFamily: getFontFamily(scriptFont),
+                fontSize: '12pt',
+              }}
+            >
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Location autocomplete dropdown */}
+      {autoState.show && autoState.type === 'location' && autoState.coords && (
+        <div style={{
+          position: 'fixed',
+          top: (autoState.coords.bottom || 0) + 4,
+          left: (autoState.coords.left || 0),
+          background: '#1e1e1e',
+          border: '1px solid #555',
+          borderRadius: 6,
+          maxHeight: 150,
+          overflowY: 'auto',
+          zIndex: 1000,
+          minWidth: 250,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+        }}>
+          {autoState.items.map((s, i) => (
+            <div
+              key={s}
+              onClick={() => handleAutoSelect(s)}
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                background: i === autoState.idx ? '#3a3a3a' : '#1e1e1e',
+                color: '#e0e0e0',
+                fontFamily: getFontFamily(scriptFont),
+                fontSize: '12pt',
+              }}
+            >
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ============ SCENE LINE (TIPTAP VERSION) — LEGACY, kept for reference ============
 // Empty array constant to avoid creating new arrays on each render
 const emptyHighlights = [];
 
@@ -8206,6 +8864,23 @@ export default function ScreenplayEditor() {
   }, [connected, canEdit, canEditNow, pushToUndo]);
   const changeType = useCallback((i, t) => { if (!canEditNow) return; const elementId = elementsRef.current[i]?.id; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t, elementId }); }, [connected, canEdit, canEditNow]);
   const handleCursor = useCallback((i, pos) => { if (socketRef.current && connected) socketRef.current.emit('cursor-move', { index: i, position: pos }); }, [connected]);
+
+  // V272: Single editor → elements change callback (replaces individual CRUD for typing)
+  const fullSyncTimeoutRef = useRef(null);
+  const handleElementsChange = useCallback((newElements) => {
+    if (!newElements || newElements.length === 0) return;
+    setElements(newElements);
+    setLastSaved(new Date());
+    setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
+    // Debounced full-sync to server
+    if (fullSyncTimeoutRef.current) clearTimeout(fullSyncTimeoutRef.current);
+    fullSyncTimeoutRef.current = setTimeout(() => {
+      if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+        socketRef.current.emit('full-sync', { elements: elementsRef.current });
+      }
+    }, 500);
+  }, [connected, canEdit, currentUser]);
+
   const handleSelectChar = useCallback((i, name) => { updateElement(i, { ...elements[i], content: name }); setTimeout(() => insertElement(i, 'dialogue'), 50); }, [elements, updateElement, insertElement]);
   
   const handleSelectLocation = useCallback((i, location) => {
@@ -10799,101 +11474,38 @@ export default function ScreenplayEditor() {
             ...(isDragSelecting ? { userSelect: 'none', WebkitUserSelect: 'none', cursor: 'default' } : {}),
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {(() => {
-              // Group elements into pages using deferred pageInfo
-              const pageGroups = [];
-              let currentGroup = { number: 1, startIdx: 0 };
-              elements.forEach((_, idx) => {
-                if (pageInfo.pageBreaks.has(idx) && idx > 0) {
-                  pageGroups.push({ ...currentGroup, endIdx: idx - 1 });
-                  currentGroup = { number: pageInfo.pageNumbers[idx] || currentGroup.number + 1, startIdx: idx };
-                }
-              });
-              pageGroups.push({ ...currentGroup, endIdx: elements.length - 1 });
-
-              return pageGroups.map((pg) => (
-                <div key={`page-${pg.startIdx}`} style={{
-                  position: 'relative',
-                  contentVisibility: 'auto',
-                  containIntrinsicSize: '210mm 297mm'
-                }}>
-                  <div className="script-page" style={{
-                    background: darkMode ? '#3a3a3a' : 'white',
-                    color: darkMode ? '#e0e0e0' : '#111',
-                    width: '210mm',
-                    minHeight: '297mm',
-                    padding: '20mm 25mm 25mm 38mm',
-                    boxSizing: 'border-box',
-                    boxShadow: darkMode ? '0 4px 20px rgba(0,0,0,0.6)' : '0 4px 20px rgba(0,0,0,0.4)',
-                    position: 'relative'
-                  }}>
-                    <div style={{
-                      position: 'absolute',
-                      top: '12mm',
-                      right: '25mm',
-                      fontSize: '12pt',
-                      fontFamily: 'Courier Prime, Courier New, monospace',
-                      color: darkMode ? '#e0e0e0' : '#111'
-                    }}>
-                      {pg.number}.
-                    </div>
-
-                    {elements.slice(pg.startIdx, pg.endIdx + 1).map((element, i) => {
-                      const index = pg.startIdx + i;
-                      return (
-                    <div
-                      key={element.id}
-                      data-element-index={index}
-                      onMouseDown={(e) => {
-                        if (e.shiftKey) { e.preventDefault(); handleFocus(index, null, true); return; }
-                        if (e.button === 0 && !e.metaKey && !e.ctrlKey) {
-                          dragStartIndexRef.current = index;
-                        }
-                      }}
-                      style={{
-                        ...(activeIndex === index ? { position: 'relative', zIndex: 10 } : {}),
-                        ...(selectedRange && index >= selectedRange.start && index <= selectedRange.end ? {
-                          background: darkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)',
-                          borderRadius: 2,
-                        } : {}),
-                      }}
-                    >
-                      <SceneLine
-                      element={element}
-                      index={index}
-                      isActive={activeIndex === index}
-                      onUpdate={updateElement}
-                      onFocus={handleFocus}
-                      onKeyDown={handleKeyDown}
-                      characters={extractedCharacters}
-                      locations={extractedLocations}
-                      onSelectCharacter={handleSelectChar}
-                      onSelectLocation={handleSelectLocation}
-                      remoteCursors={remoteCursors}
-                      onCursorMove={handleCursor}
-                      canEdit={canEdit && !lockedElementsMap[element.id]}
-                      isLocked={!!lockedElementsMap[element.id]}
-                      sceneNumber={sceneNumbersMap[element.id]}
-                      showSceneNumbers={showSceneNumbers}
-                      note={notes[element.id]}
-                      onNoteClick={handleNoteClick}
-                      highlights={highlightsByElement[element.id] || emptyHighlights}
-                      initialCursorOffset={activeIndex === index ? cursorOffset : null}
-                      onTextSelect={handleTextSelectCb}
-                      onHighlightClick={handleHighlightClick}
-                      onSuggestionClick={handleSuggestionClickCb}
-                      scriptFont={scriptFont}
-                      t={t}
-                    />
-                  </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ));
-            })()}
-        </div>
+          {/* V272: Single TipTap Editor for entire document */}
+          <div className="screenplay-editor-wrapper" style={{
+            background: darkMode ? '#3a3a3a' : 'white',
+            color: darkMode ? '#e0e0e0' : '#111',
+            width: '210mm',
+            minHeight: '297mm',
+            padding: '20mm 25mm 25mm 38mm',
+            boxSizing: 'border-box',
+            boxShadow: darkMode ? '0 4px 20px rgba(0,0,0,0.6)' : '0 4px 20px rgba(0,0,0,0.4)',
+            position: 'relative',
+            fontFamily: getFontFamily(scriptFont),
+            fontSize: '12pt',
+            lineHeight: '1',
+          }}>
+            <SingleEditor
+              elements={elements}
+              onElementsChange={handleElementsChange}
+              canEdit={canEditNow}
+              scriptFont={scriptFont}
+              darkMode={darkMode}
+              characters={extractedCharacters}
+              locations={extractedLocations}
+              onSelectCharacter={handleSelectChar}
+              onSelectLocation={handleSelectLocation}
+              onTextSelect={handleTextSelectCb}
+              onHighlightClick={handleHighlightClick}
+              onSuggestionClick={handleSuggestionClickCb}
+              remoteCursors={remoteCursors}
+              computePageInfoFn={computePageInfo}
+              t={t}
+            />
+          </div>
       </div>
       
       {/* RIGHT SIDEBAR - Comments */}
