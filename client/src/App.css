@@ -51,54 +51,55 @@
   white-space: pre-wrap;
 }
 
+/* Type-specific styles — use attribute selectors for high specificity matching base rule */
 /* Scene heading */
-.screenplay-scene {
+.ProseMirror div[data-element-type="scene"] {
   text-transform: uppercase;
   font-weight: bold;
-  margin-top: 2em !important;
-  margin-bottom: 0.5em !important;
+  margin-top: 2em;
+  margin-bottom: 0.5em;
 }
 
 /* Action */
-.screenplay-action {
-  margin-top: 1em !important;
-  margin-bottom: 0 !important;
+.ProseMirror div[data-element-type="action"] {
+  margin-top: 1em;
+  margin-bottom: 0;
   line-height: 1.1;
 }
 
-/* Character name */
-.screenplay-character {
+/* Character name — centered per Final Draft (33% left offset, 35% width) */
+.ProseMirror div[data-element-type="character"] {
   text-transform: uppercase;
   font-weight: normal;
   margin-left: 33%;
   width: 35%;
-  margin-top: 1em !important;
-  margin-bottom: 0 !important;
+  margin-top: 1em;
+  margin-bottom: 0;
 }
 
-/* Dialogue */
-.screenplay-dialogue {
+/* Dialogue — indented per Final Draft (17% left offset, 58% width) */
+.ProseMirror div[data-element-type="dialogue"] {
   margin-left: 17%;
   width: 58%;
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
+  margin-top: 0;
+  margin-bottom: 0;
   line-height: 1.1;
 }
 
-/* Parenthetical */
-.screenplay-parenthetical {
+/* Parenthetical — indented per Final Draft (25% left offset, 42% width) */
+.ProseMirror div[data-element-type="parenthetical"] {
   margin-left: 25%;
   width: 42%;
   font-style: italic;
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
-/* Transition */
-.screenplay-transition {
+/* Transition — right aligned */
+.ProseMirror div[data-element-type="transition"] {
   text-transform: uppercase;
   text-align: right;
-  margin-top: 1em !important;
+  margin-top: 1em;
 }
 
 /* Page break decoration */

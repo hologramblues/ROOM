@@ -646,11 +646,10 @@ const ScreenplayElement = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     const type = HTMLAttributes['data-element-type'] || 'action';
-    return ['div', {
-      ...HTMLAttributes,
+    return ['div', mergeAttributes(HTMLAttributes, {
       'data-screenplay-element': 'true',
       class: `screenplay-${type}`,
-    }, 0];
+    }), 0];
   },
 
   addCommands() {
