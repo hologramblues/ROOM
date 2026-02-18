@@ -8,6 +8,9 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 // V237 - Smooth scroll: CSS content-visibility instead of React virtualization
 
+// V272: Import screenplay editor CSS styles (single TipTap)
+import './App.css';
+
 // Import Excalidraw CSS
 import '@excalidraw/excalidraw/index.css';
 
@@ -3591,6 +3594,7 @@ const SingleEditor = React.memo(({
     extensions: [
       StarterKit.configure({
         paragraph: false,
+        listItem: false,
         history: true,
         hardBreak: false,
         heading: false,
