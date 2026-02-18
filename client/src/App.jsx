@@ -927,7 +927,8 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
   });
 }
 
-// Helper to escape HTML entities
+// Helper to escape HTML entities (used by FDX export — keep for future use)
+// eslint-disable-next-line no-unused-vars
 const escapeHtml = (text) => {
   if (!text) return '';
   return String(text)
@@ -952,15 +953,7 @@ const stripHtml = (html) => {
     .replace(/&nbsp;/g, ' ');
 };
 
-// Extract HTML content from TipTap's getHTML() — strips outer <p> wrapper
-const extractTipTapContent = (html) => {
-  if (!html) return '';
-  // Remove outer <p>...</p> wrapper that TipTap always adds
-  let content = html.replace(/^<p>/, '').replace(/<\/p>$/, '');
-  // Normalize empty content
-  if (content === '<br>' || content === '<br/>' || content === '<br class="ProseMirror-trailingBreak">') return '';
-  return content;
-};
+// V272: extractTipTapContent supprimé (plus besoin avec le single editor)
 
 // UUID fallback for browsers that don't support crypto.randomUUID
 const generateId = () => {
@@ -974,6 +967,7 @@ const generateId = () => {
   });
 };
 
+// eslint-disable-next-line no-unused-vars
 const ELEMENT_TYPES = [
   { id: 'scene', label: 'Séquence', shortcut: '1' },
   { id: 'action', label: 'Action', shortcut: '2' },
@@ -3469,33 +3463,11 @@ const FONT_OPTIONS = {
 const getFontFamily = (key) => FONT_OPTIONS[key]?.family || FONT_OPTIONS['courier-prime'].family;
 
 // ============ ELEMENT STYLES ============
-// CSS margins matching Final Draft proportions (based on 6" text width on US Letter)
-// Scene Heading: full width, 2-line gap before
-// Action: full width, 1-line gap before
-// Character: centered-left offset ~33% (FD: 3.5" from 1.5" left margin = 2"/6" = 33%)
-// Dialogue: indented ~17% (FD: 2.5" - 1.5" = 1"/6" = 17%), width ~58% (3.5"/6")
-// Parenthetical: indented ~25% (FD: 3.0" - 1.5" = 1.5"/6" = 25%), width ~42% (2.5"/6")
-// Transition: right-aligned, full width
-const getElementStyle = (type, fontKey) => {
-  const base = { fontFamily: getFontFamily(fontKey), fontSize: '12pt', lineHeight: '1', outline: 'none', border: 'none', width: '100%', background: 'transparent', resize: 'none', padding: 0, margin: 0, display: 'block', minHeight: '1em' };
-  switch (type) {
-    case 'scene': return { ...base, textTransform: 'uppercase', fontWeight: 'bold', marginTop: '2em', marginBottom: '0.5em' };
-    case 'action': return { ...base, marginTop: '1em', marginBottom: 0, lineHeight: '1.1' };
-    case 'character': return { ...base, textTransform: 'uppercase', fontWeight: 'normal', marginLeft: '33%', width: '35%', marginTop: '1em', marginBottom: '0', lineHeight: '1' };
-    case 'dialogue': return { ...base, marginLeft: '17%', width: '58%', marginTop: '0', marginBottom: '0', lineHeight: '1.1' };
-    case 'parenthetical': return { ...base, marginLeft: '25%', width: '42%', fontStyle: 'italic', marginTop: '0', marginBottom: '0' };
-    case 'transition': return { ...base, textTransform: 'uppercase', textAlign: 'right', marginTop: '1em' };
-    default: return base;
-  }
-};
-
-const getPlaceholder = (type) => ({ scene: 'INT./EXT. LIEU - JOUR/NUIT', action: "Description de l'action...", character: 'NOM DU PERSONNAGE', dialogue: 'Réplique du personnage...', parenthetical: '(indication de jeu)', transition: 'CUT TO:' }[type] || '');
-// Final Draft Enter transitions: what pressing Enter at end of a block creates
-const getNextType = (t) => ({ scene: 'action', action: 'action', character: 'dialogue', dialogue: 'character', parenthetical: 'dialogue', transition: 'scene' }[t] || 'action');
-// Final Draft empty-block Enter: pressing Enter on an empty block converts it to Action
-const getEmptyEnterType = (t) => (t === 'action' ? null : 'action'); // null = no change (delete block instead)
+// V272: getElementStyle, getPlaceholder, getNextType, getEmptyEnterType supprimés
+// (styling via CSS classes dans App.css, types gérés par SP_NEXT_TYPE/SP_TAB_FWD dans ScreenplayElement)
 
 // ============ REMOTE CURSOR ============
+// eslint-disable-next-line no-unused-vars
 const RemoteCursor = ({ user }) => (
   <div style={{ position: 'absolute', left: -12, top: 0, display: 'flex', alignItems: 'flex-start', pointerEvents: 'none', zIndex: 10 }}>
     <div style={{ width: 3, height: 20, background: user.color || '#888', borderRadius: 2, flexShrink: 0 }} />
@@ -3919,548 +3891,7 @@ const SingleEditor = React.memo(({
   );
 });
 
-// ============ SCENE LINE (TIPTAP VERSION) — LEGACY, kept for reference ============
-// Empty array constant to avoid creating new arrays on each render
-const emptyHighlights = [];
-
-const SceneLine = React.memo(({ element, index, isActive, onUpdate, onFocus, onKeyDown, characters, locations, onSelectCharacter, onSelectLocation, remoteCursors, onCursorMove, canEdit, isLocked, sceneNumber, showSceneNumbers, note, onNoteClick, highlights, onTextSelect, onHighlightClick, onSuggestionClick, initialCursorOffset, scriptFont, t = (k) => k }) => {
-  const containerRef = useRef(null);
-  const updateTimeoutRef = useRef(null); // For debouncing updates
-  const [showAuto, setShowAuto] = useState(false);
-  const [autoIdx, setAutoIdx] = useState(0);
-  const [filtered, setFiltered] = useState([]);
-  const [autoType, setAutoType] = useState(null);
-  const [editorReady, setEditorReady] = useState(false);
-  const usersOnLine = useMemo(() => remoteCursors.filter(u => u.cursor?.index === index), [remoteCursors, index]);
-  const lastContentRef = useRef(element.content);
-  const lastHighlightsRef = useRef(null);
-  const isUpdatingHighlightsRef = useRef(false);
-  
-  // Cleanup debounce timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
-    };
-  }, []);
-  
-  // Build HTML content with comment and suggestion marks applied
-  const buildContentWithMarks = useCallback((content, highlightsList) => {
-    if (!content) return '<p></p>';
-
-    const allHighlights = (highlightsList || []).filter(h =>
-      h.type === 'comment' || h.type === 'suggestion'
-    );
-
-    // Content may already contain HTML formatting (bold, italic, etc.)
-    // If no highlights, just wrap in <p> and pass through
-    if (allHighlights.length === 0) {
-      // Check if content already has HTML tags — if so, pass through as-is
-      const hasHtml = /<[^>]+>/.test(content);
-      return hasHtml ? `<p>${content}</p>` : `<p>${escapeHtml(content)}</p>`;
-    }
-
-    // For highlights, we need to work with plain text offsets
-    // but preserve inline formatting. Strategy: strip HTML to get plain text,
-    // apply highlights on plain text, then re-wrap in <p>.
-    // This means highlights lose inline formatting inside them — acceptable trade-off.
-    const plainText = stripHtml(content);
-
-    // Sort by startOffset
-    const sorted = [...allHighlights].sort((a, b) => a.startOffset - b.startOffset);
-
-    let html = '';
-    let lastEnd = 0;
-
-    for (const h of sorted) {
-      if (h.startOffset < 0 || h.endOffset > plainText.length || h.startOffset >= h.endOffset) continue;
-
-      // Skip if overlapping with previous (simple approach)
-      if (h.startOffset < lastEnd) continue;
-
-      // Text before this highlight
-      if (h.startOffset > lastEnd) {
-        html += escapeHtml(plainText.slice(lastEnd, h.startOffset));
-      }
-
-      if (h.type === 'comment') {
-        const markedText = escapeHtml(plainText.slice(h.startOffset, h.endOffset));
-        html += `<span data-comment-id="${h.id || h._id}">${markedText}</span>`;
-      } else if (h.type === 'suggestion') {
-        const markedText = escapeHtml(h.originalText || plainText.slice(h.startOffset, h.endOffset));
-        const suggestedText = escapeHtml(h.suggestedText || '');
-        html += `<span data-suggestion-id="${h.id || h._id}" data-suggested-text="${suggestedText}">${markedText}</span>`;
-      }
-
-      lastEnd = h.endOffset;
-    }
-
-    // Remaining text
-    if (lastEnd < plainText.length) {
-      html += escapeHtml(plainText.slice(lastEnd));
-    }
-
-    return `<p>${html}</p>`;
-  }, []);
-  
-  // TipTap editor instance
-  const editor = useEditor({
-    immediatelyRender: false, // Prevent SSR-like errors
-    onCreate: () => {
-      setEditorReady(true);
-    },
-    onDestroy: () => {
-      setEditorReady(false);
-    },
-    extensions: [
-      StarterKit.configure({
-        // Disable block-level elements we don't need
-        heading: false,
-        bulletList: false,
-        orderedList: false,
-        blockquote: false,
-        codeBlock: false,
-        horizontalRule: false,
-        // Enable TipTap's built-in history for inline text undo/redo (Cmd+Z within a line)
-        history: true,
-        // Keep hardBreak for line breaks within elements
-        hardBreak: true,
-        // Keep paragraph but style it
-        paragraph: {
-          HTMLAttributes: { style: 'margin: 0; padding: 0;' },
-        },
-      }),
-      CommentMark,
-      SuggestionMark,
-    ],
-    content: buildContentWithMarks(element.content, highlights),
-    editable: canEdit && !isLocked,
-    
-    // Editor props for styling and keyboard handling
-    editorProps: {
-      attributes: {
-        'data-element-id': element.id,
-        'data-placeholder': getPlaceholder(element.type),
-        style: buildStyleString(element.type, canEdit, isLocked, scriptFont),
-      },
-      
-      // Handle keyboard events
-      handleKeyDown: (view, event) => {
-        if (!view) return false;
-        try {
-        // Cmd+Z / Ctrl+Z: let TipTap's history extension handle undo/redo inline
-        // (global undo only fires when NOT inside an editor)
-        
-        // Autocomplete navigation
-        if (showAuto && filtered.length > 0) {
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            setAutoIdx(i => (i + 1) % filtered.length);
-            return true;
-          }
-          if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            setAutoIdx(i => (i - 1 + filtered.length) % filtered.length);
-            return true;
-          }
-          if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            if (autoType === 'character') onSelectCharacter(index, filtered[autoIdx]);
-            else if (autoType === 'location') onSelectLocation(index, filtered[autoIdx]);
-            setShowAuto(false);
-            return true;
-          }
-          if (event.key === 'Escape') {
-            setShowAuto(false);
-            return true;
-          }
-        }
-        
-        // Navigation between elements
-        const { from, to } = view.state.selection;
-        const docSize = view.state.doc.content.size;
-        const atStart = from <= 1;
-        const atEnd = to >= docSize - 1;
-        
-        // Arrow up at start -> previous element
-        if (event.key === 'ArrowUp' && atStart) {
-          event.preventDefault();
-          onKeyDown(event, index);
-          return true;
-        }
-        
-        // Arrow down at end -> next element
-        if (event.key === 'ArrowDown' && atEnd) {
-          event.preventDefault();
-          onKeyDown(event, index);
-          return true;
-        }
-        
-        // Backspace at start -> merge with previous
-        if (event.key === 'Backspace' && atStart && from === to) {
-          event.preventDefault();
-          onKeyDown(event, index);
-          return true;
-        }
-        
-        // Enter -> create new element only at end, otherwise line break
-        if (event.key === 'Enter' && !event.shiftKey) {
-          // Check if cursor is at the end of content
-          if (atEnd) {
-            event.preventDefault();
-            onKeyDown(event, index);
-            return true;
-          }
-          // Otherwise let TipTap handle it (creates line break)
-          return false;
-        }
-        
-        // Tab -> cycle element type
-        if (event.key === 'Tab') {
-          event.preventDefault();
-          onKeyDown(event, index);
-          return true;
-        }
-        
-        return false;
-        } catch (e) {
-          return false;
-        }
-      },
-      
-      // Handle click on comment and suggestion marks
-      handleClick: (view, pos, event) => {
-        if (!view) return false;
-        try {
-          const target = event.target;
-          
-          // Check for comment click
-          const commentEl = target.closest('[data-comment-id]');
-          if (commentEl && onHighlightClick) {
-            const commentId = commentEl.getAttribute('data-comment-id');
-            setTimeout(() => onHighlightClick(commentId), 0);
-            return false;
-          }
-          
-          // Check for suggestion click
-          const suggestionEl = target.closest('[data-suggestion-id]');
-          if (suggestionEl && onSuggestionClick) {
-            const suggestionId = suggestionEl.getAttribute('data-suggestion-id');
-            setTimeout(() => onSuggestionClick(suggestionId), 0);
-            return false;
-          }
-        } catch (e) {
-          // Ignore errors
-        }
-        return false;
-      },
-    },
-    
-    // Sync content changes back to parent - DEBOUNCED for performance
-    onUpdate: ({ editor }) => {
-      if (!editor || !editor.view) return;
-      if (isUpdatingHighlightsRef.current) return; // Skip updates triggered by highlight sync
-      try {
-        // Use getHTML() to preserve inline formatting (bold, italic, underline)
-        const html = extractTipTapContent(editor.getHTML());
-        if (html !== lastContentRef.current) {
-          lastContentRef.current = html;
-          // Debounce the parent update to avoid re-rendering the entire app on each keystroke
-          if (updateTimeoutRef.current) {
-            clearTimeout(updateTimeoutRef.current);
-          }
-          updateTimeoutRef.current = setTimeout(() => {
-            onUpdate(index, { ...element, content: html });
-          }, 150); // 150ms debounce
-        }
-      } catch (e) {
-        // Editor not ready
-      }
-    },
-    
-    // Handle text selection for comments/suggestions
-    onSelectionUpdate: ({ editor }) => {
-      if (!editor || !editor.view || !onTextSelect) return;
-      try {
-        const { from, to } = editor.state.selection;
-        if (from !== to) {
-          const selectedText = editor.state.doc.textBetween(from, to);
-          if (selectedText.trim()) {
-            const rect = containerRef.current?.getBoundingClientRect();
-            onTextSelect({
-              elementId: element.id,
-              elementIndex: index,
-              text: selectedText,
-              startOffset: from - 1, // -1 because of paragraph wrapper
-              endOffset: to - 1,
-              rect,
-            });
-          }
-        }
-      } catch (e) {
-        // Editor not ready
-      }
-    },
-    
-    // When editor gets focus, notify parent
-    onFocus: ({ editor }) => {
-      if (!editor || !editor.view) return;
-      try {
-        if (!isActive) {
-          onFocus(index, null);
-        }
-      } catch (e) {
-        // Editor not ready
-      }
-    },
-    
-    // Flush debounced update when losing focus
-    onBlur: ({ editor }) => {
-      if (!editor || !editor.view) return;
-      try {
-        // Immediately sync any pending changes
-        if (updateTimeoutRef.current) {
-          clearTimeout(updateTimeoutRef.current);
-          updateTimeoutRef.current = null;
-          const html = extractTipTapContent(editor.getHTML());
-          if (html !== element.content) {
-            onUpdate(index, { ...element, content: html });
-          }
-        }
-      } catch (e) {
-        // Editor not ready
-      }
-    },
-  });
-  
-  // Sync content from parent when it changes externally
-  // IMPORTANT: skip if editor is focused (user is typing) to avoid cursor reset
-  useEffect(() => {
-    if (!editorReady || !editor) return;
-    if (editor.isFocused) return; // Don't reset content while user is actively typing
-    try {
-      const editorHtml = extractTipTapContent(editor.getHTML());
-      if (element.content !== editorHtml && element.content !== lastContentRef.current) {
-        lastContentRef.current = element.content;
-        editor.commands.setContent(buildContentWithMarks(element.content, highlights), false);
-      }
-    } catch (e) {
-      // Editor not ready yet
-    }
-  }, [editorReady, editor, element.content, buildContentWithMarks, highlights]);
-  
-  // Sync highlights when they change (without changing text)
-  useEffect(() => {
-    if (!editorReady || !editor) return;
-
-    // Check if highlights actually changed
-    const highlightsJson = JSON.stringify(highlights || []);
-    if (highlightsJson === lastHighlightsRef.current) return;
-
-    try {
-      // Save cursor state
-      const savedFrom = editor.isFocused ? editor.state.selection.from : null;
-      const savedTo = editor.isFocused ? editor.state.selection.to : null;
-
-      // Rebuild entire content with new marks via setContent
-      // Use the content from element.content (source of truth) + highlights
-      const newContent = buildContentWithMarks(element.content, highlights);
-
-      // Force full DOM replacement by setting empty then real content
-      isUpdatingHighlightsRef.current = true;
-      editor.commands.setContent('<p></p>', false);
-      editor.commands.setContent(newContent, false);
-      isUpdatingHighlightsRef.current = false;
-
-      // Restore cursor
-      if (savedFrom !== null) {
-        try {
-          const maxPos = editor.state.doc.content.size - 1;
-          editor.commands.setTextSelection({
-            from: Math.min(savedFrom, maxPos),
-            to: Math.min(savedTo, maxPos)
-          });
-        } catch (_) {}
-      }
-
-      lastHighlightsRef.current = highlightsJson;
-    } catch (e) {
-      // Editor not ready yet
-    }
-  }, [editorReady, editor, highlights, element.content, buildContentWithMarks]);
-  
-  // Focus editor when becoming active
-  useEffect(() => {
-    if (!editorReady || !editor) return;
-    if (isActive) {
-      try {
-        editor.commands.focus();
-        // Place cursor at specific position if provided
-        if (initialCursorOffset !== null && initialCursorOffset !== undefined && initialCursorOffset >= 0) {
-          const pos = Math.min(initialCursorOffset + 1, editor.state.doc.content.size - 1);
-          editor.commands.setTextSelection(pos);
-        }
-      } catch (e) {
-        // Editor not ready yet
-      }
-    }
-  }, [editorReady, editor, isActive, initialCursorOffset]);
-  
-  // Update editor editable state when lock status changes
-  useEffect(() => {
-    if (editor && editorReady) {
-      const shouldBeEditable = canEdit && !isLocked;
-      if (editor.isEditable !== shouldBeEditable) {
-        editor.setEditable(shouldBeEditable);
-      }
-    }
-  }, [editor, editorReady, canEdit, isLocked]);
-  
-  // Autocomplete for characters and locations
-  useEffect(() => {
-    const plainContent = stripHtml(element.content);
-    if (!plainContent) {
-      setShowAuto(false);
-      setFiltered([]);
-      return;
-    }
-
-    if (element.type === 'character' && isActive && plainContent.length > 0) {
-      const q = plainContent.toUpperCase();
-      const f = characters.filter(c => c.toUpperCase().startsWith(q) && c.toUpperCase() !== q);
-      setFiltered(f);
-      setShowAuto(f.length > 0);
-      setAutoIdx(0);
-      setAutoType('character');
-    } else if (element.type === 'scene' && isActive && plainContent.length > 4) {
-      const match = plainContent.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*(.*)$/i);
-      if (match && match[2] && match[2].length > 0) {
-        const q = match[2].toUpperCase();
-        const f = locations.filter(l => l.startsWith(q) && l !== q);
-        setFiltered(f);
-        setShowAuto(f.length > 0);
-        setAutoIdx(0);
-        setAutoType('location');
-      } else {
-        setShowAuto(false);
-        setFiltered([]);
-      }
-    } else {
-      setShowAuto(false);
-      setFiltered([]);
-    }
-  }, [element.content, element.type, isActive, characters, locations]);
-  
-  return (
-    <div ref={containerRef} style={{ position: 'relative', margin: 0, padding: 0, lineHeight: 0 }}>
-      {/* Remote cursors */}
-      {usersOnLine.map(u => <RemoteCursor key={u.id} user={u} />)}
-      
-      {/* Lock icon for locked scenes - only show if not active (active shows label with lock) */}
-      {element.type === 'scene' && isLocked && !isActive && (
-        <span style={{ position: 'absolute', left: showSceneNumbers ? -55 : -25, top: 4, fontSize: 14, color: '#f59e0b', display: 'flex', alignItems: 'center' }} title={t('sceneLocked')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
-      )}
-      
-      {/* Scene number left */}
-      {element.type === 'scene' && showSceneNumbers && sceneNumber && (
-        <span style={{ position: 'absolute', left: -35, top: 4, fontSize: '12pt', fontFamily: getFontFamily(scriptFont), color: 'inherit', fontWeight: 'bold' }}>{sceneNumber}</span>
-      )}
-      
-      {/* Scene number right */}
-      {element.type === 'scene' && showSceneNumbers && sceneNumber && (
-        <span style={{ position: 'absolute', right: -35, top: 4, fontSize: '12pt', fontFamily: getFontFamily(scriptFont), color: 'inherit', fontWeight: 'bold' }}>{sceneNumber}</span>
-      )}
-      
-      {/* Note indicator */}
-      {note && (
-        <div 
-          onClick={() => onNoteClick(element.id)} 
-          style={{ position: 'absolute', right: -55, top: 2, width: 20, height: 20, background: note.color || '#fbbf24', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, cursor: 'pointer', boxShadow: '1px 1px 3px rgba(0,0,0,0.2)' }}
-          title={note.content}
-        >📝</div>
-      )}
-      
-      {/* Lock icon when active and locked (type label removed — shown elsewhere) */}
-      {isActive && isLocked && (
-        <span style={{ position: 'absolute', left: showSceneNumbers && element.type === 'scene' ? -145 : -110, top: 2, fontSize: 10, color: '#f59e0b', width: 95, textAlign: 'right', lineHeight: '1.2', fontFamily: 'system-ui, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </span>
-      )}
-      
-      {/* TipTap Editor */}
-      <EditorContent editor={editor} />
-      
-      {/* Character autocomplete dropdown */}
-      {autoType === 'character' && showAuto && (
-        <div style={{ position: 'absolute', top: '100%', left: '37%', background: '#1e1e1e', border: '1px solid #555', borderRadius: 6, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200, boxShadow: '0 4px 16px rgba(0,0,0,0.6)' }}>
-          {filtered.map((s, i) => (
-            <div
-              key={s}
-              onClick={() => { onSelectCharacter(index, s); setShowAuto(false); }}
-              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#3a3a3a' : '#1e1e1e', color: '#e0e0e0', fontFamily: getFontFamily(scriptFont), fontSize: '12pt' }}
-            >
-              {s}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Location autocomplete dropdown */}
-      {autoType === 'location' && showAuto && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, background: '#1e1e1e', border: '1px solid #555', borderRadius: 6, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 250, boxShadow: '0 4px 16px rgba(0,0,0,0.6)' }}>
-          {filtered.map((s, i) => (
-            <div
-              key={s}
-              onClick={() => { onSelectLocation(index, s); setShowAuto(false); }}
-              style={{ padding: '8px 12px', cursor: 'pointer', background: i === autoIdx ? '#3a3a3a' : '#1e1e1e', color: '#e0e0e0', fontFamily: getFontFamily(scriptFont), fontSize: '12pt' }}
-            >
-              {s}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}, (prevProps, nextProps) => {
-  // Custom comparison for React.memo - only re-render when these important props change
-  // NOTE: index is deliberately EXCLUDED — index shifts on every insert/delete but
-  // doesn't affect rendering. SceneLine uses index for callbacks only.
-  return (
-    prevProps.element.id === nextProps.element.id &&
-    prevProps.element.content === nextProps.element.content &&
-    prevProps.element.type === nextProps.element.type &&
-    prevProps.isActive === nextProps.isActive &&
-    prevProps.canEdit === nextProps.canEdit &&
-    prevProps.isLocked === nextProps.isLocked &&
-    prevProps.sceneNumber === nextProps.sceneNumber &&
-    prevProps.showSceneNumbers === nextProps.showSceneNumbers &&
-    prevProps.highlights === nextProps.highlights &&
-    prevProps.note === nextProps.note &&
-    prevProps.initialCursorOffset === nextProps.initialCursorOffset &&
-    prevProps.remoteCursors === nextProps.remoteCursors &&
-    prevProps.scriptFont === nextProps.scriptFont
-  );
-});
-
-// Helper to build style string for TipTap editor
-function buildStyleString(elementType, canEdit, isLocked, fontKey) {
-  const base = getElementStyle(elementType, fontKey);
-  // Character/dialogue/parenthetical: tight minHeight to avoid gaps between name and line
-  const tightTypes = ['character', 'dialogue', 'parenthetical'];
-  const styles = {
-    ...base,
-    cursor: canEdit ? 'text' : 'default',
-    opacity: canEdit ? 1 : 0.7,
-    background: isLocked ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
-    whiteSpace: 'pre-wrap',
-    minHeight: tightTypes.includes(elementType) ? '1em' : '1.5em',
-    outline: 'none',
-  };
-  return Object.entries(styles)
-    .map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`)
-    .join('; ');
-}
+// V272: SceneLine, emptyHighlights, buildStyleString supprimés (remplacés par SingleEditor)
 
 // ============ BEAT BOARD COMPONENT ============
 const BeatBoard = React.memo(({ 
@@ -6571,7 +6002,7 @@ export default function ScreenplayEditor() {
   const [beatCards, setBeatCards] = useState([]); // Beat Board cards - shared with Outline
   const [whiteboardElements, setWhiteboardElements] = useState([]); // Excalidraw whiteboard elements
   const [activeIndex, setActiveIndex] = useState(0);
-  const [cursorOffset, setCursorOffset] = useState(null); // For click-to-cursor positioning
+  // V272: cursorOffset supprimé (curseur géré par TipTap)
   const [characters, setCharacters] = useState([]);
   const [comments, setComments] = useState([]);
   const [suggestions, setSuggestions] = useState([]); // { id, elementId, elementIndex, originalText, suggestedText, startOffset, endOffset, userName, userColor, createdAt, status: 'pending'|'accepted'|'rejected' }
@@ -7823,8 +7254,7 @@ export default function ScreenplayEditor() {
     });
     return { pageBreaks, pageNumbers, totalPages: currentPage };
   };
-  // Page info computed synchronously — O(n) with simple arithmetic, sub-ms for 500+ elements
-  const pageInfo = useMemo(() => computePageInfo(elements), [elements]);
+  // V272: pageInfo supprimé (pagination gérée par le plugin ProseMirror dans SingleEditor)
 
   // Deferred: only used for autocomplete dropdown, not rendering
   const [extractedCharacters, setExtractedCharacters] = useState(() => { const c = new Set(characters); elements.forEach(el => { const t = stripHtml(el.content).trim(); if (el.type === 'character' && t) c.add(t.replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase()); }); return Array.from(c).sort(); });
@@ -7843,32 +7273,7 @@ export default function ScreenplayEditor() {
   const canEditNow = (isFullyConnected || !!offlineDocId) && canEdit;
   const canComment = myRole === 'editor' || myRole === 'commenter';
 
-  // Pre-compute locked status for all elements (O(n) single pass, replaces O(n²) inline calls)
-  // Fast path: skip entire loop when no scenes are locked or assigned
-  const lockedElementsMap = useMemo(() => {
-    if (lockedScenes.size === 0 && Object.keys(sceneAssignments).length === 0) return {};
-    const map = {};
-    let currentSceneId = null;
-    let currentSceneLocked = false;
-    for (let i = 0; i < elements.length; i++) {
-      if (elements[i]?.type === 'scene') {
-        currentSceneId = elements[i].id;
-        currentSceneLocked = false;
-        if (currentSceneId && lockedScenes.has(currentSceneId)) {
-          currentSceneLocked = true;
-        } else if (currentSceneId && sceneAssignments[currentSceneId]) {
-          const assignment = sceneAssignments[currentSceneId];
-          if (assignment.userId && assignment.userId !== myId) {
-            currentSceneLocked = true;
-          }
-        }
-      }
-      if (currentSceneLocked) {
-        map[elements[i].id] = true;
-      }
-    }
-    return map;
-  }, [elements, lockedScenes, sceneAssignments, myId]);
+  // V272: lockedElementsMap supprimé (à réimplémenter dans SingleEditor)
 
   const totalComments = comments.filter(c => !c.resolved).length;
 
@@ -7927,22 +7332,7 @@ export default function ScreenplayEditor() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIndex]); // Only recalc when cursor moves, not on every keystroke
 
-  // Map element ID to scene number (deferred — only decorative display)
-  const [sceneNumbersMap, setSceneNumbersMap] = useState(() => {
-    const map = {}; let num = 0;
-    elements.forEach(el => { if (el.type === 'scene') { num++; map[el.id] = num; } });
-    return map;
-  });
-  const sceneNumTimerRef = useRef(null);
-  useEffect(() => {
-    if (sceneNumTimerRef.current) clearTimeout(sceneNumTimerRef.current);
-    sceneNumTimerRef.current = setTimeout(() => {
-      const map = {}; let num = 0;
-      elementsRef.current.forEach(el => { if (el.type === 'scene') { num++; map[el.id] = num; } });
-      setSceneNumbersMap(map);
-    }, 200);
-    return () => { if (sceneNumTimerRef.current) clearTimeout(sceneNumTimerRef.current); };
-  }, [elements]);
+  // V272: sceneNumbersMap supprimé (numéros de scènes à réimplémenter via décorations ProseMirror)
 
   // Extract locations from scene headings
   // Locations and character stats - deferred to avoid blocking Enter key
@@ -8852,6 +8242,7 @@ export default function ScreenplayEditor() {
     if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-insert', { afterIndex: after, afterElementId, element: el });
     setLastSaved(new Date());
   }, [connected, canEdit, canEditNow, pushToUndo]);
+  // eslint-disable-next-line no-unused-vars
   const deleteElement = useCallback(i => {
     if (!canEditNow) return;
     if (elementsRef.current.length === 1) return;
@@ -8863,7 +8254,7 @@ export default function ScreenplayEditor() {
     setLastSaved(new Date());
   }, [connected, canEdit, canEditNow, pushToUndo]);
   const changeType = useCallback((i, t) => { if (!canEditNow) return; const elementId = elementsRef.current[i]?.id; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t, elementId }); }, [connected, canEdit, canEditNow]);
-  const handleCursor = useCallback((i, pos) => { if (socketRef.current && connected) socketRef.current.emit('cursor-move', { index: i, position: pos }); }, [connected]);
+  // V272: handleCursor supprimé (curseurs distants à réimplémenter via décorations ProseMirror)
 
   // V272: Single editor → elements change callback (replaces individual CRUD for typing)
   const fullSyncTimeoutRef = useRef(null);
@@ -8978,36 +8369,9 @@ export default function ScreenplayEditor() {
     } catch (err) { console.error(err); }
   };
 
-  // Handle focus with optional cursor offset for click-to-cursor
-  const handleFocus = useCallback((index, offset = null, shiftKey = false) => {
-    // Shift+Click: extend/create block selection
-    if (shiftKey && activeIndex !== null && activeIndex !== index) {
-      const start = Math.min(activeIndex, index);
-      const end = Math.max(activeIndex, index);
-      setSelectedRange({ start, end });
-      return; // Don't change activeIndex or cursor
-    }
-    // Normal click: clear block selection
-    setSelectedRange(null);
-    setActiveIndex(index);
-    setCursorOffset(offset);
-    setScriptHasFocus(true);
-    setSelectedCommentId(null);
-    setSelectedSuggestionId(null);
-    setTimeout(() => {
-      const el = document.querySelector(`[data-element-index="${index}"]`);
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        setContextMenuTop(rect.top + rect.height / 2);
-      }
-    }, 10);
-    if (offset !== null) {
-      setTimeout(() => setCursorOffset(null), 100);
-    }
-  }, [activeIndex]);
+  // V272: handleFocus supprimé (curseur géré par TipTap single editor)
 
-  // Memoized callbacks for SceneLine to prevent re-renders
-  const handleNoteClick = useCallback((id) => setShowNoteFor(id), []);
+  // V272: handleNoteClick supprimé (SceneLine legacy)
   
   const handleTextSelectCb = useCallback((selection) => {
     if (canComment) {
@@ -9042,232 +8406,7 @@ export default function ScreenplayEditor() {
     }, 150);
   }, []);
 
-  const handleKeyDown = useCallback((e, index) => {
-    if (!canEdit) return;
-    const el = elementsRef.current[index];
-    const target = e.target;
-    
-    // Helper to check if cursor is at the very start of the element
-    const isCursorAtStart = () => {
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return true;
-      
-      const range = selection.getRangeAt(0);
-      if (range.startOffset !== 0) return false;
-      
-      // Check if we're in the first text node
-      let node = range.startContainer;
-      while (node && node !== target) {
-        if (node.previousSibling) return false;
-        node = node.parentNode;
-      }
-      return true;
-    };
-    
-    // Helper to check if cursor is at the very end of the element
-    const isCursorAtEnd = () => {
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return true;
-      
-      const range = selection.getRangeAt(0);
-      const container = range.startContainer;
-      const offset = range.startOffset;
-      
-      // If in a text node, check if at end of that node
-      if (container.nodeType === Node.TEXT_NODE) {
-        if (offset < container.textContent.length) return false;
-      }
-      
-      // Check if there's any content after the cursor position
-      let node = container;
-      while (node && node !== target) {
-        if (node.nextSibling) {
-          // Check if next sibling has actual content
-          const next = node.nextSibling;
-          if (next.nodeType === Node.TEXT_NODE && next.textContent.length > 0) return false;
-          if (next.nodeType === Node.ELEMENT_NODE && next.textContent.length > 0) return false;
-        }
-        node = node.parentNode;
-      }
-      return true;
-    };
-    
-    // Helper to get cursor position for Enter key handling
-    const getCursorPosition = () => {
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return { pos: 0, atStart: true, atEnd: true };
-      
-      const range = selection.getRangeAt(0);
-      const preCaretRange = range.cloneRange();
-      preCaretRange.selectNodeContents(target);
-      preCaretRange.setEnd(range.startContainer, range.startOffset);
-      const pos = preCaretRange.toString().length;
-      
-      const text = (target.innerText || '').replace(/\n$/, '');
-      return {
-        pos,
-        atStart: pos === 0,
-        atEnd: pos >= text.length,
-        textBefore: text.substring(0, pos),
-        textAfter: text.substring(pos)
-      };
-    };
-    
-    // Enter key handling — Final Draft behavior
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const cursor = getCursorPosition();
-      const plainEl = stripHtml(el.content).trim();
-
-      // Auto-close parenthetical parentheses
-      if (el.type === 'parenthetical' && plainEl) {
-        let c = plainEl;
-        if (!c.startsWith('(')) c = '(' + c;
-        if (!c.endsWith(')')) c = c + ')';
-        if (c !== plainEl) updateElement(index, { ...el, content: c });
-      }
-
-      if (plainEl === '') {
-        // Empty block + Enter → convert to Action (or delete if already Action)
-        const target = getEmptyEnterType(el.type);
-        if (target) {
-          changeType(index, target);
-        } else if (index > 0 && elementsRef.current.length > 1) {
-          deleteElement(index);
-          handleFocus(index - 1, stripHtml(elementsRef.current[Math.max(0, index - 1)]?.content).length);
-        }
-      } else if (cursor.atEnd) {
-        // Cursor at end → create next element per Final Draft table (fast path, no pushToUndo — insertElement does it)
-        insertElement(index, getNextType(el.type));
-      } else if (cursor.atStart) {
-        // Cursor at start → insert empty block of SAME type BEFORE, push content down
-        insertElement(index - 1 >= 0 ? index - 1 : -1, el.type);
-        // insertElement inserted at index, content stays at index+1 — focus content
-        handleFocus(index + 1, 0);
-      } else {
-        // Cursor mid-block → split: text before stays, text after goes to new block of SAME type
-        pushToUndo();
-        const before = cursor.textBefore;
-        const after = cursor.textAfter;
-        const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-        setElements(prev => {
-          const updated = [...prev];
-          updated[index] = { ...updated[index], content: before };
-          updated.splice(index + 1, 0, { id: newId, type: el.type, content: after });
-          return updated;
-        });
-        setActiveIndex(index + 1);
-        handleFocus(index + 1, 0);
-        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 500);
-        }
-      }
-    }
-    
-    // Tab — Final Draft type cycling (Tab = forward, Shift+Tab = reverse)
-    // Forward:  Scene → Action → Character → Parenthetical → Dialogue → Transition → Scene
-    // Reverse:  Scene → Transition → Dialogue → Parenthetical → Character → Action → Scene
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const tabForward = { scene: 'action', action: 'character', character: 'parenthetical', parenthetical: 'dialogue', dialogue: 'transition', transition: 'scene' };
-      const tabReverse = { scene: 'transition', transition: 'dialogue', dialogue: 'parenthetical', parenthetical: 'character', character: 'action', action: 'scene' };
-      const cycle = e.shiftKey ? tabReverse : tabForward;
-      const newType = cycle[el.type] || 'action';
-      // Auto-close parenthetical if leaving it
-      if (el.type === 'parenthetical') {
-        const pc = stripHtml(el.content).trim();
-        if (pc) { let c = pc; if (!c.startsWith('(')) c = '(' + c; if (!c.endsWith(')')) c = c + ')'; if (c !== pc) updateElement(index, { ...el, content: c }); }
-      }
-      changeType(index, newType);
-    }
-    // Backspace — only intercept at element boundary (cursor at position 0)
-    if (e.key === 'Backspace' && index > 0 && isCursorAtStart()) {
-      e.preventDefault();
-      const plainContent = stripHtml(el.content).trim();
-      const prevEl = elementsRef.current[index - 1];
-
-      if (plainContent === '' && elementsRef.current.length > 1) {
-        // Current block is empty → delete it, focus end of previous
-        deleteElement(index);
-        handleFocus(Math.max(0, index - 1), stripHtml(elementsRef.current[Math.max(0, index - 1)]?.content).length);
-      } else if (prevEl && stripHtml(prevEl.content).trim() === '') {
-        // Previous block is empty → delete previous block, keep current
-        pushToUndo();
-        setElements(prev => prev.filter((_, i) => i !== index - 1));
-        setActiveIndex(Math.max(0, index - 1));
-        handleFocus(Math.max(0, index - 1), 0);
-        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 500);
-        }
-      } else if (prevEl) {
-        // Both blocks have content → merge: result takes PREVIOUS block's type (Final Draft / Trelby rule)
-        const prevContent = prevEl.content || '';
-        const curContent = el.content || '';
-        const prevPlainLen = stripHtml(prevContent).length;
-        pushToUndo();
-        const mergedContent = stripHtml(prevContent) + stripHtml(curContent);
-        setElements(prev => {
-          const updated = [...prev];
-          updated[index - 1] = { ...updated[index - 1], content: mergedContent };
-          updated.splice(index, 1);
-          return updated;
-        });
-        setActiveIndex(index - 1);
-        handleFocus(index - 1, prevPlainLen);
-        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current }); }, 500);
-        }
-      }
-    }
-
-    // Arrow navigation: let browser handle normal cursor movement within element
-    // Only intercept at element boundaries
-    if (e.key === 'ArrowDown' && !e.metaKey && !e.ctrlKey) {
-      // Only move to next element if truly at the end of content
-      if (isCursorAtEnd() && index < elementsRef.current.length - 1) {
-        e.preventDefault();
-        handleFocus(index + 1, 0);
-      }
-      // Otherwise, let browser handle normal line navigation
-    }
-
-    if (e.key === 'ArrowUp' && !e.metaKey && !e.ctrlKey) {
-      // Only move to prev element if truly at the start
-      if (isCursorAtStart() && index > 0) {
-        e.preventDefault();
-        handleFocus(index - 1, stripHtml(elementsRef.current[index - 1].content).length);
-      }
-      // Otherwise, let browser handle normal line navigation
-    }
-
-    // Cmd/Ctrl + Arrow for quick element navigation
-    if (e.key === 'ArrowUp' && e.metaKey) { e.preventDefault(); handleFocus(Math.max(0, index - 1), 0); }
-    if (e.key === 'ArrowDown' && e.metaKey) { e.preventDefault(); handleFocus(Math.min(elementsRef.current.length - 1, index + 1), 0); }
-    if ((e.metaKey || e.ctrlKey) && ['1','2','3','4','5','6'].includes(e.key)) { e.preventDefault(); changeType(index, ELEMENT_TYPES[parseInt(e.key) - 1].id); }
-
-    // Cmd+A: select all blocks
-    if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
-      e.preventDefault();
-      setSelectedRange({ start: 0, end: elementsRef.current.length - 1 });
-    }
-
-    // Shift+ArrowDown/Up: extend block selection
-    if (e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedRange(prev => {
-        if (!prev) return { start: index, end: Math.min(elementsRef.current.length - 1, index + 1) };
-        return { start: prev.start, end: Math.min(elementsRef.current.length - 1, prev.end + 1) };
-      });
-    }
-    if (e.shiftKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedRange(prev => {
-        if (!prev) return { start: Math.max(0, index - 1), end: index };
-        return { start: Math.max(0, prev.start - 1), end: prev.end };
-      });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [insertElement, changeType, deleteElement, updateElement, canEdit, handleFocus]);
+  // V272: handleKeyDown supprimé — keyboard shortcuts gérés nativement par ScreenplayElement node
 
   // ============ MULTI-BLOCK CLIPBOARD (global handler) ============
   useEffect(() => {
