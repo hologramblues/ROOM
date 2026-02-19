@@ -3833,11 +3833,13 @@ const SingleEditor = React.memo(({
   }, []);
 
   // Apply comment/suggestion marks to editor content (creates real <span> elements for clicks + Safari)
+  // Deps include elements so marks are reapplied after content changes (doc switch, socket sync)
   useEffect(() => {
     if (!editor || !highlightsByElement) return;
 
     if (marksTimeoutRef.current) clearTimeout(marksTimeoutRef.current);
 
+    // Delay to ensure editor content is synced first (sync effect runs on same render)
     marksTimeoutRef.current = setTimeout(() => {
       if (!editor || !editor.view || editor.isDestroyed) return;
 
@@ -3907,7 +3909,8 @@ const SingleEditor = React.memo(({
         });
       }
     }, 200);
-  }, [editor, highlightsByElement]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, highlightsByElement, elements]);
 
   // Handle autocomplete selection
   const handleAutoSelect = useCallback((item) => {
@@ -7772,7 +7775,7 @@ export default function ScreenplayEditor() {
   // Pre-compute highlights per element (memoized for performance)
   const highlightsByElement = useMemo(() => {
     const map = {};
-    
+
     // Process comments (supports multi-element spans)
     comments.forEach(c => {
       if (c.resolved) return;
@@ -7802,7 +7805,7 @@ export default function ScreenplayEditor() {
         });
       }
     });
-    
+
     // Process suggestions
     suggestions.forEach(s => {
       if (s.elementId && s.status === 'pending') {
@@ -7818,14 +7821,40 @@ export default function ScreenplayEditor() {
         });
       }
     });
-    
+
+    // Show pending comment highlight immediately (before comment is submitted)
+    if (pendingInlineComment && pendingInlineComment.elementId) {
+      if (pendingInlineComment.spans && pendingInlineComment.spans.length > 0) {
+        pendingInlineComment.spans.forEach(span => {
+          if (!span.elementId) return;
+          if (!map[span.elementId]) map[span.elementId] = [];
+          map[span.elementId].push({
+            startOffset: span.startOffset,
+            endOffset: span.endOffset,
+            type: 'comment',
+            id: 'pending-comment',
+            userColor: currentUser?.color || '#f59e0b'
+          });
+        });
+      } else {
+        if (!map[pendingInlineComment.elementId]) map[pendingInlineComment.elementId] = [];
+        map[pendingInlineComment.elementId].push({
+          startOffset: pendingInlineComment.startOffset,
+          endOffset: pendingInlineComment.endOffset,
+          type: 'comment',
+          id: 'pending-comment',
+          userColor: currentUser?.color || '#f59e0b'
+        });
+      }
+    }
+
     // Sort each element's highlights
     Object.keys(map).forEach(key => {
       map[key].sort((a, b) => a.startOffset - b.startOffset);
     });
-    
+
     return map;
-  }, [comments, suggestions]);
+  }, [comments, suggestions, pendingInlineComment, currentUser]);
 
   // Get highlight data for an element (now just a lookup)
   // eslint-disable-next-line no-unused-vars
