@@ -793,16 +793,24 @@ const ScreenplayElement = Node.create({
         const $nodePos = state.doc.resolve(nodeStart);
         const indexInDoc = $nodePos.index($nodePos.depth);
 
+        console.log('[Backspace] At start of element', indexInDoc, '| type:', node.attrs.elementType, '| content:', JSON.stringify(node.textContent), '| contentSize:', node.content.size);
+
         // First element — can't merge backward
-        if (indexInDoc === 0) return false;
+        if (indexInDoc === 0) {
+          console.log('[Backspace] First element, cannot merge backward');
+          return true; // consume the event to prevent default
+        }
 
         const prevNode = state.doc.child(indexInDoc - 1);
         const prevStart = nodeStart - prevNode.nodeSize;
         const currentIsEmpty = node.content.size === 0;
         const prevIsEmpty = prevNode.content.size === 0;
 
+        console.log('[Backspace] prev type:', prevNode.attrs.elementType, '| prevContent:', JSON.stringify(prevNode.textContent), '| currentEmpty:', currentIsEmpty, '| prevEmpty:', prevIsEmpty);
+
         if (currentIsEmpty && state.doc.childCount > 1) {
           // Current is empty → delete it, focus end of previous
+          console.log('[Backspace] Deleting empty current node');
           tr.delete(nodeStart, nodeStart + node.nodeSize);
           const targetPos = prevStart + 1 + prevNode.content.size;
           tr.setSelection(state.selection.constructor.near(tr.doc.resolve(Math.min(targetPos, tr.doc.content.size))));
@@ -812,12 +820,15 @@ const ScreenplayElement = Node.create({
 
         if (prevIsEmpty) {
           // Previous is empty → delete previous, stay in current
+          console.log('[Backspace] Deleting empty previous node');
           tr.delete(prevStart, prevStart + prevNode.nodeSize);
           if (dispatch) dispatch(tr);
           return true;
         }
 
         // Both have content → merge current's text into end of previous, delete current
+        console.log('[Backspace] Merging two content nodes. prevStart:', prevStart, 'nodeStart:', nodeStart, 'prevContentSize:', prevNode.content.size, 'curContentSize:', node.content.size);
+
         const prevContentEnd = prevStart + 1 + prevNode.content.size;
 
         // Grab current node's content (inline fragment)
@@ -825,15 +836,18 @@ const ScreenplayElement = Node.create({
 
         // Step 1: Delete the current node entirely
         tr.delete(nodeStart, nodeStart + node.nodeSize);
+        console.log('[Backspace] After delete, doc size:', tr.doc.content.size);
 
         // Step 2: Insert current's content at the end of the previous node
         if (currentContent.size > 0) {
           tr.insert(prevContentEnd, currentContent);
+          console.log('[Backspace] Inserted content at', prevContentEnd, ', doc size now:', tr.doc.content.size);
         }
 
         // Step 3: Set cursor at the join point
         const cursorPos = Math.min(prevContentEnd, tr.doc.content.size);
         tr.setSelection(state.selection.constructor.near(tr.doc.resolve(cursorPos)));
+        console.log('[Backspace] Cursor set at', cursorPos);
         if (dispatch) dispatch(tr);
         return true;
       },
