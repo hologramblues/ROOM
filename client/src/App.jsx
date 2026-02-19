@@ -817,18 +817,25 @@ const ScreenplayElement = Node.create({
           return true;
         }
 
-        // Both have content → merge current INTO previous (result takes previous's type)
+        // Both have content → merge current's text into end of previous, delete current
         const prevContentEnd = prevStart + 1 + prevNode.content.size;
-        const cursorTarget = prevContentEnd; // Where the join point will be
 
-        // Join the two nodes at their boundary using ProseMirror's join
-        if (tr.doc.canJoin(nodeStart)) {
-          tr.join(nodeStart);
-          tr.setSelection(state.selection.constructor.near(tr.doc.resolve(Math.min(cursorTarget, tr.doc.content.size))));
-          if (dispatch) dispatch(tr);
-          return true;
+        // Grab current node's content (inline fragment)
+        const currentContent = node.content;
+
+        // Step 1: Delete the current node entirely
+        tr.delete(nodeStart, nodeStart + node.nodeSize);
+
+        // Step 2: Insert current's content at the end of the previous node
+        if (currentContent.size > 0) {
+          tr.insert(prevContentEnd, currentContent);
         }
-        return false;
+
+        // Step 3: Set cursor at the join point
+        const cursorPos = Math.min(prevContentEnd, tr.doc.content.size);
+        tr.setSelection(state.selection.constructor.near(tr.doc.resolve(cursorPos)));
+        if (dispatch) dispatch(tr);
+        return true;
       },
     };
   },
