@@ -918,8 +918,8 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               div.className = 'page-break-decoration';
               div.setAttribute('contenteditable', 'false');
               const gapBg = darkMode ? '#2b2b2b' : '#e5e7eb';
-              const pageBg = darkMode ? '#3a3a3a' : 'white';
-              div.innerHTML = '<div class="page-edge-bottom" style="background:' + pageBg + '"></div><div class="page-gap" style="background:' + gapBg + '"><span class="page-break-number">' + (pageNumbers[nodeIndex] || '') + '.</span></div><div class="page-edge-top" style="background:' + pageBg + '"></div>';
+              div.style.background = gapBg;
+              div.innerHTML = '<span class="page-break-number">' + (pageNumbers[nodeIndex] || '') + '.</span>';
               return div;
             }, { side: -1, key: 'pb-' + nodeIndex }));
           }
@@ -7727,7 +7727,18 @@ export default function ScreenplayEditor() {
       // Check if ProseMirror DOM is ready
       const proseMirror = document.querySelector('.ProseMirror');
       if (!proseMirror || !proseMirror.querySelector('[data-element-id]')) {
+        console.log('[Highlights] DOM not ready, will retry');
         return false; // DOM not ready
+      }
+
+      // Count total highlights available
+      let totalHighlights = 0;
+      elements.forEach(element => {
+        const highlights = getElementHighlights(element.id);
+        totalHighlights += highlights.length;
+      });
+      if (totalHighlights > 0) {
+        console.log('[Highlights] Found', totalHighlights, 'highlights to paint across', elements.length, 'elements');
       }
 
       // Find all elements with highlights
@@ -7737,7 +7748,10 @@ export default function ScreenplayEditor() {
 
         // Find the DOM element
         const domEl = proseMirror.querySelector(`[data-element-id="${element.id}"]`);
-        if (!domEl) return;
+        if (!domEl) {
+          console.warn('[Highlights] DOM element not found for', element.id);
+          return;
+        }
 
         highlights.forEach(h => {
           try {
@@ -7746,6 +7760,11 @@ export default function ScreenplayEditor() {
             let currentOffset = 0;
             let startNode = null, startOffset = 0;
             let endNode = null, endOffset = 0;
+            const totalTextLength = domEl.textContent.length;
+
+            // Clamp offsets to actual text length
+            const clampedStart = Math.min(h.startOffset, totalTextLength);
+            const clampedEnd = Math.min(h.endOffset, totalTextLength);
 
             let node = walker.nextNode();
 
@@ -7753,15 +7772,15 @@ export default function ScreenplayEditor() {
               const nodeLength = node.textContent.length;
 
               // Check if start is in this node
-              if (!startNode && currentOffset + nodeLength > h.startOffset) {
+              if (!startNode && currentOffset + nodeLength > clampedStart) {
                 startNode = node;
-                startOffset = h.startOffset - currentOffset;
+                startOffset = clampedStart - currentOffset;
               }
 
               // Check if end is in this node
-              if (!endNode && currentOffset + nodeLength >= h.endOffset) {
+              if (!endNode && currentOffset + nodeLength >= clampedEnd) {
                 endNode = node;
-                endOffset = h.endOffset - currentOffset;
+                endOffset = clampedEnd - currentOffset;
                 break;
               }
 
@@ -7779,9 +7798,11 @@ export default function ScreenplayEditor() {
               } else if (h.type === 'suggestion') {
                 suggestionRanges.push(range);
               }
+            } else {
+              console.warn('[Highlights] Could not find text nodes for', h.type, 'offset', clampedStart, '-', clampedEnd, 'in element', element.id, '(text length:', totalTextLength, ')');
             }
           } catch (err) {
-            // Silently ignore highlight errors
+            console.warn('[Highlights] Error creating range:', err.message);
           }
         });
       });
@@ -7791,11 +7812,13 @@ export default function ScreenplayEditor() {
         // eslint-disable-next-line no-undef
         const commentHighlight = new Highlight(...commentRanges);
         CSS.highlights.set('comment-highlight', commentHighlight);
+        console.log('[Highlights] Painted', commentRanges.length, 'comment highlights');
       }
       if (suggestionRanges.length > 0) {
         // eslint-disable-next-line no-undef
         const suggestionHighlight = new Highlight(...suggestionRanges);
         CSS.highlights.set('suggestion-highlight', suggestionHighlight);
+        console.log('[Highlights] Painted', suggestionRanges.length, 'suggestion highlights');
       }
       return true;
     };

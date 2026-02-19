@@ -56,6 +56,11 @@ const commentSchema = new mongoose.Schema({
     startOffset: Number,
     endOffset: Number
   },
+  spans: [{
+    elementId: String,
+    startOffset: Number,
+    endOffset: Number
+  }],
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   userName: { type: String, required: true },
   userColor: { type: String, required: true },
