@@ -3589,6 +3589,7 @@ const SingleEditor = React.memo(({
   onHighlightClick,
   onSuggestionClick,
   onEditorFocus,
+  onActiveElementChange,
   remoteCursors,
   computePageInfoFn,
   highlightsByElement,
@@ -3687,6 +3688,15 @@ const SingleEditor = React.memo(({
         const node = $from.parent;
         if (node.type.name !== 'screenplayElement') return;
 
+        // Notify parent of active element index
+        let elemIdx = 0;
+        editor.state.doc.forEach((child, offset, index) => {
+          if (offset <= $from.pos && offset + child.nodeSize > $from.pos) {
+            elemIdx = index;
+          }
+        });
+        if (onActiveElementChange) onActiveElementChange(elemIdx);
+
         // Text selection → comment/suggestion creation
         if (from !== to && onTextSelect) {
           const selectedText = editor.state.doc.textBetween(from, to);
@@ -3757,26 +3767,51 @@ const SingleEditor = React.memo(({
   // Sync external changes (socket, import, undo) into the editor
   useEffect(() => {
     if (!editor || isEditorOriginRef.current) return;
-    // Don't replace content while user is typing
-    if (editor.isFocused) {
-      // But still check if elements differ significantly (e.g. from socket full-sync)
-      const currentEls = extractElementsFromDoc(editor.state.doc);
-      if (elementsEqual(currentEls, elements)) return;
-      // If lengths differ, it's a structural change from socket — must apply
-      if (currentEls.length === elements.length) return; // Same structure, skip during typing
-    }
     const currentEls = extractElementsFromDoc(editor.state.doc);
-    if (!elementsEqual(currentEls, elements)) {
-      // Save cursor
-      const savedPos = editor.state.selection.from;
-      editor.commands.setContent(buildDocFromElements(elements), false);
-      // Restore cursor position
-      try {
-        const maxPos = editor.state.doc.content.size - 1;
-        editor.commands.setTextSelection(Math.min(savedPos, maxPos));
-      } catch (_) {}
-      lastElementsRef.current = elements;
+    if (elementsEqual(currentEls, elements)) return;
+
+    // Check if only element types changed (not content) — apply type changes without full setContent
+    if (editor.isFocused && currentEls.length === elements.length) {
+      // Check if only types differ (content is the same)
+      let onlyTypeDiff = true;
+      const typeChanges = [];
+      for (let i = 0; i < elements.length; i++) {
+        if (currentEls[i].content !== elements[i].content || currentEls[i].id !== elements[i].id) {
+          onlyTypeDiff = false;
+          break;
+        }
+        if (currentEls[i].type !== elements[i].type) {
+          typeChanges.push({ index: i, type: elements[i].type });
+        }
+      }
+      if (onlyTypeDiff && typeChanges.length > 0) {
+        // Apply type changes via setNodeMarkup (preserves cursor & content)
+        const { tr } = editor.state;
+        typeChanges.forEach(({ index, type }) => {
+          const child = editor.state.doc.child(index);
+          let pos = 0;
+          for (let j = 0; j < index; j++) pos += editor.state.doc.child(j).nodeSize;
+          tr.setNodeMarkup(pos, null, { ...child.attrs, elementType: type });
+        });
+        tr.setMeta('addToHistory', false);
+        editor.view.dispatch(tr);
+        lastElementsRef.current = elements;
+        return;
+      }
+      if (onlyTypeDiff) return; // No type changes either, skip
+      // Content changed while typing with same length — skip to avoid disrupting input
+      return;
     }
+    // Not focused or structure changed — full content replace
+    // Save cursor
+    const savedPos = editor.state.selection.from;
+    editor.commands.setContent(buildDocFromElements(elements), false);
+    // Restore cursor position
+    try {
+      const maxPos = editor.state.doc.content.size - 1;
+      editor.commands.setTextSelection(Math.min(savedPos, maxPos));
+    } catch (_) {}
+    lastElementsRef.current = elements;
   }, [elements, editor]);
 
   // Update editable state
@@ -10673,6 +10708,7 @@ export default function ScreenplayEditor() {
               onHighlightClick={handleHighlightClick}
               onSuggestionClick={handleSuggestionClickCb}
               onEditorFocus={() => setScriptHasFocus(true)}
+              onActiveElementChange={setActiveIndex}
               remoteCursors={remoteCursors}
               computePageInfoFn={computePageInfo}
               highlightsByElement={highlightsByElement}
