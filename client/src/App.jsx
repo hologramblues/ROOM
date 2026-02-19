@@ -929,10 +929,8 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
         const decorations = [];
         let nodeIndex = 0;
 
-        // Page and scroll container colors
-        const pageBg = darkMode ? '#3a3a3a' : 'white';
+        // Scroll container color for the gap between pages
         const scrollBg = darkMode ? '#2a2a2a' : '#e0e0e0';
-        const edgeShadow = darkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.18)';
         const numColor = darkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
 
         state.doc.forEach((node, pos) => {
@@ -942,54 +940,37 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               const wrapper = document.createElement('div');
               wrapper.className = 'page-break-decoration';
               wrapper.setAttribute('contenteditable', 'false');
-              // Extends to wrapper's full width via negative margins matching padding
               wrapper.style.cssText = `
                 margin-left: -38mm; margin-right: -25mm;
                 user-select: none; pointer-events: none;
-                position: relative;
               `;
 
-              // Bottom edge of ending page (bottom margin area)
-              const bottomEdge = document.createElement('div');
-              bottomEdge.style.cssText = `
-                height: 15mm;
-                background: ${pageBg};
-                border-radius: 0 0 2px 2px;
-                box-shadow: 0 2px 8px ${edgeShadow};
-                position: relative;
-                z-index: 2;
-              `;
-              wrapper.appendChild(bottomEdge);
+              // Bottom margin of ending page (transparent = shows wrapper's page bg)
+              const bottomMargin = document.createElement('div');
+              bottomMargin.style.cssText = 'height: 15mm;';
+              wrapper.appendChild(bottomMargin);
 
-              // Gap: full-bleed band using box-shadow trick
-              // box-shadow spreads 9999px in all directions (same color as scroll bg)
-              // clip-path constrains it to gap height only, extending infinitely horizontally
-              // This COVERS the wrapper's background + shadow at this vertical position
+              // Gap: full-bleed band using box-shadow + clip-path trick
+              // The massive box-shadow (same color as scroll container) extends
+              // horizontally to cover the wrapper's background AND shadow,
+              // creating the visual illusion that the wrapper is split into pages.
               const gap = document.createElement('div');
               gap.style.cssText = `
                 height: 24px;
                 background: ${scrollBg};
-                position: relative;
-                z-index: 3;
                 box-shadow: 0 0 0 9999px ${scrollBg};
-                clip-path: inset(-1px -9999px -1px -9999px);
+                clip-path: inset(0 -9999px);
               `;
               wrapper.appendChild(gap);
 
-              // Top edge of next page (top margin area) with page number
-              const topEdge = document.createElement('div');
-              topEdge.style.cssText = `
+              // Top margin of next page (transparent = shows wrapper's page bg)
+              const topMargin = document.createElement('div');
+              topMargin.style.cssText = `
                 height: 13mm;
-                background: ${pageBg};
-                border-radius: 2px 2px 0 0;
-                box-shadow: 0 -2px 8px ${edgeShadow};
-                position: relative;
-                z-index: 2;
                 display: flex;
                 align-items: flex-start;
                 justify-content: flex-end;
               `;
-              // Page number at top-right of new page
               const num = document.createElement('span');
               num.textContent = pageNum + '.';
               num.style.cssText = `
@@ -997,8 +978,8 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
                 font-size: 10pt; color: ${numColor};
                 margin-top: 4mm; margin-right: 2mm;
               `;
-              topEdge.appendChild(num);
-              wrapper.appendChild(topEdge);
+              topMargin.appendChild(num);
+              wrapper.appendChild(topMargin);
 
               return wrapper;
             }, { side: -1, key: 'pb-' + nodeIndex }));
@@ -10781,8 +10762,7 @@ export default function ScreenplayEditor() {
             minHeight: '297mm',
             padding: '20mm 25mm 25mm 38mm',
             boxSizing: 'border-box',
-            boxShadow: darkMode ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.18)',
-            borderRadius: '2px',
+            boxShadow: darkMode ? '0 2px 16px rgba(0,0,0,0.5)' : '0 2px 16px rgba(0,0,0,0.12)',
             position: 'relative',
             fontFamily: getFontFamily(scriptFont),
             fontSize: '12pt',
