@@ -3574,11 +3574,14 @@ const SingleEditor = React.memo(({
   onEditorFocus,
   remoteCursors,
   computePageInfoFn,
+  highlightsByElement,
   t = (k) => k,
 }) => {
   const isEditorOriginRef = useRef(false);
+  const isApplyingMarksRef = useRef(false);
   const lastElementsRef = useRef(elements);
   const syncTimeoutRef = useRef(null);
+  const marksTimeoutRef = useRef(null);
   const [autoState, setAutoState] = useState({ show: false, items: [], idx: 0, type: null, nodePos: null });
 
   // Create page break extension that wraps ProseMirror plugin
@@ -3642,6 +3645,8 @@ const SingleEditor = React.memo(({
 
     onUpdate: ({ editor }) => {
       if (!editor || !editor.view) return;
+      // Skip state sync when we're just applying highlight marks
+      if (isApplyingMarksRef.current) return;
       try {
         isEditorOriginRef.current = true;
         const newElements = extractElementsFromDoc(editor.state.doc);
@@ -3771,8 +3776,86 @@ const SingleEditor = React.memo(({
   useEffect(() => {
     return () => {
       if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      if (marksTimeoutRef.current) clearTimeout(marksTimeoutRef.current);
     };
   }, []);
+
+  // Apply comment/suggestion marks to editor content (creates real <span> elements for clicks + Safari)
+  useEffect(() => {
+    if (!editor || !highlightsByElement) return;
+
+    if (marksTimeoutRef.current) clearTimeout(marksTimeoutRef.current);
+
+    marksTimeoutRef.current = setTimeout(() => {
+      if (!editor || !editor.view || editor.isDestroyed) return;
+
+      try {
+        isApplyingMarksRef.current = true;
+        const { tr } = editor.state;
+        const schema = editor.state.schema;
+        const commentMarkType = schema.marks.comment;
+        const suggestionMarkType = schema.marks.suggestion;
+
+        if (!commentMarkType && !suggestionMarkType) {
+          isApplyingMarksRef.current = false;
+          return;
+        }
+
+        // First, remove all existing comment/suggestion marks
+        editor.state.doc.forEach((node, pos) => {
+          if (node.type.name !== 'screenplayElement') return;
+          const nodeStart = pos + 1; // +1 to skip into node content
+          const nodeEnd = pos + node.nodeSize - 1;
+          if (commentMarkType) {
+            tr.removeMark(nodeStart, nodeEnd, commentMarkType);
+          }
+          if (suggestionMarkType) {
+            tr.removeMark(nodeStart, nodeEnd, suggestionMarkType);
+          }
+        });
+
+        // Then apply marks for each element with highlights
+        editor.state.doc.forEach((node, pos) => {
+          if (node.type.name !== 'screenplayElement') return;
+          const elementId = node.attrs.elementId;
+          const highlights = highlightsByElement[elementId];
+          if (!highlights || highlights.length === 0) return;
+
+          const nodeStart = pos + 1; // +1 to skip into node content
+          const textLength = node.textContent.length;
+
+          highlights.forEach(h => {
+            const start = Math.max(0, Math.min(h.startOffset, textLength));
+            const end = Math.max(start, Math.min(h.endOffset, textLength));
+            if (start >= end) return;
+
+            const from = nodeStart + start;
+            const to = nodeStart + end;
+
+            if (h.type === 'comment' && commentMarkType) {
+              tr.addMark(from, to, commentMarkType.create({ commentId: h.id }));
+            } else if (h.type === 'suggestion' && suggestionMarkType) {
+              tr.addMark(from, to, suggestionMarkType.create({
+                suggestionId: h.id,
+                suggestedText: h.suggestedText || ''
+              }));
+            }
+          });
+        });
+
+        // Dispatch without adding to undo history
+        tr.setMeta('addToHistory', false);
+        editor.view.dispatch(tr);
+      } catch (err) {
+        console.warn('[Marks] Error applying highlight marks:', err.message);
+      } finally {
+        // Reset flag after DOM updates settle
+        requestAnimationFrame(() => {
+          isApplyingMarksRef.current = false;
+        });
+      }
+    }, 200);
+  }, [editor, highlightsByElement]);
 
   // Handle autocomplete selection
   const handleAutoSelect = useCallback((item) => {
@@ -7693,157 +7776,19 @@ export default function ScreenplayEditor() {
   }, [comments, suggestions]);
 
   // Get highlight data for an element (now just a lookup)
+  // eslint-disable-next-line no-unused-vars
   const getElementHighlights = useCallback((elementId) => {
     return highlightsByElement[elementId] || [];
   }, [highlightsByElement]);
 
-  // Apply CSS Highlights globally (throttled for performance)
-  // DISABLED on Safari due to performance issues
-  const highlightsTimeoutRef = useRef(null);
+  // V272: CSS Highlight API replaced by TipTap marks (applied in SingleEditor)
+  // Clean up any leftover CSS highlights
   useEffect(() => {
-    // Disable on Safari - use span-based highlighting instead
-    if (isSafari) {
-      return;
-    }
-    
-    // Check if CSS Highlight API is supported
-    if (typeof CSS === 'undefined' || !CSS.highlights) {
-      return;
-    }
-    
-    // Throttle highlights calculation
-    if (highlightsTimeoutRef.current) {
-      clearTimeout(highlightsTimeoutRef.current);
-    }
-    
-    const applyHighlights = () => {
-      // Clear all existing highlights
+    if (typeof CSS !== 'undefined' && CSS.highlights) {
       CSS.highlights.delete('comment-highlight');
       CSS.highlights.delete('suggestion-highlight');
-
-      const commentRanges = [];
-      const suggestionRanges = [];
-
-      // Check if ProseMirror DOM is ready
-      const proseMirror = document.querySelector('.ProseMirror');
-      if (!proseMirror || !proseMirror.querySelector('[data-element-id]')) {
-        console.log('[Highlights] DOM not ready, will retry');
-        return false; // DOM not ready
-      }
-
-      // Count total highlights available
-      let totalHighlights = 0;
-      elements.forEach(element => {
-        const highlights = getElementHighlights(element.id);
-        totalHighlights += highlights.length;
-      });
-      if (totalHighlights > 0) {
-        console.log('[Highlights] Found', totalHighlights, 'highlights to paint across', elements.length, 'elements');
-      }
-
-      // Find all elements with highlights
-      elements.forEach(element => {
-        const highlights = getElementHighlights(element.id);
-        if (highlights.length === 0) return;
-
-        // Find the DOM element
-        const domEl = proseMirror.querySelector(`[data-element-id="${element.id}"]`);
-        if (!domEl) {
-          console.warn('[Highlights] DOM element not found for', element.id);
-          return;
-        }
-
-        highlights.forEach(h => {
-          try {
-            // Find the correct text node and offsets using TreeWalker
-            const walker = document.createTreeWalker(domEl, NodeFilter.SHOW_TEXT, null, false);
-            let currentOffset = 0;
-            let startNode = null, startOffset = 0;
-            let endNode = null, endOffset = 0;
-            const totalTextLength = domEl.textContent.length;
-
-            // Clamp offsets to actual text length
-            const clampedStart = Math.min(h.startOffset, totalTextLength);
-            const clampedEnd = Math.min(h.endOffset, totalTextLength);
-
-            let node = walker.nextNode();
-
-            while (node) {
-              const nodeLength = node.textContent.length;
-
-              // Check if start is in this node
-              if (!startNode && currentOffset + nodeLength > clampedStart) {
-                startNode = node;
-                startOffset = clampedStart - currentOffset;
-              }
-
-              // Check if end is in this node
-              if (!endNode && currentOffset + nodeLength >= clampedEnd) {
-                endNode = node;
-                endOffset = clampedEnd - currentOffset;
-                break;
-              }
-
-              currentOffset += nodeLength;
-              node = walker.nextNode();
-            }
-
-            if (startNode && endNode) {
-              const range = new Range();
-              range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
-              range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
-
-              if (h.type === 'comment') {
-                commentRanges.push(range);
-              } else if (h.type === 'suggestion') {
-                suggestionRanges.push(range);
-              }
-            } else {
-              console.warn('[Highlights] Could not find text nodes for', h.type, 'offset', clampedStart, '-', clampedEnd, 'in element', element.id, '(text length:', totalTextLength, ')');
-            }
-          } catch (err) {
-            console.warn('[Highlights] Error creating range:', err.message);
-          }
-        });
-      });
-
-      // Create and register the highlights
-      if (commentRanges.length > 0) {
-        // eslint-disable-next-line no-undef
-        const commentHighlight = new Highlight(...commentRanges);
-        CSS.highlights.set('comment-highlight', commentHighlight);
-        console.log('[Highlights] Painted', commentRanges.length, 'comment highlights');
-      }
-      if (suggestionRanges.length > 0) {
-        // eslint-disable-next-line no-undef
-        const suggestionHighlight = new Highlight(...suggestionRanges);
-        CSS.highlights.set('suggestion-highlight', suggestionHighlight);
-        console.log('[Highlights] Painted', suggestionRanges.length, 'suggestion highlights');
-      }
-      return true;
-    };
-
-    // Try immediately after short delay, retry if DOM not ready
-    highlightsTimeoutRef.current = setTimeout(() => {
-      if (!applyHighlights()) {
-        // DOM not ready, retry after longer delay
-        highlightsTimeoutRef.current = setTimeout(() => {
-          applyHighlights();
-        }, 500);
-      }
-    }, 150);
-    
-    // Cleanup function
-    return () => {
-      if (highlightsTimeoutRef.current) {
-        clearTimeout(highlightsTimeoutRef.current);
-      }
-      if (typeof CSS !== 'undefined' && CSS.highlights) {
-        CSS.highlights.delete('comment-highlight');
-        CSS.highlights.delete('suggestion-highlight');
-      }
-    };
-  }, [elements, comments, suggestions, activeIndex, getElementHighlights, isSafari]);
+    }
+  }, []);
 
   // Get initials from a name (e.g. "Jeremie Goldstein" -> "JG", "RomainV" -> "RV")
   // Render text content with highlighted comments (legacy fallback)
@@ -10713,6 +10658,7 @@ export default function ScreenplayEditor() {
               onEditorFocus={() => setScriptHasFocus(true)}
               remoteCursors={remoteCursors}
               computePageInfoFn={computePageInfo}
+              highlightsByElement={highlightsByElement}
               t={t}
             />
           </div>
