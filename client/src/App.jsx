@@ -929,10 +929,10 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
         const decorations = [];
         let nodeIndex = 0;
 
-        // Colors that match the page wrapper and scroll container
+        // Page and scroll container colors
         const pageBg = darkMode ? '#3a3a3a' : 'white';
-        const gapBg = darkMode ? '#252525' : '#bfbfbf';
-        const shadowDark = darkMode ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.25)';
+        const scrollBg = darkMode ? '#2a2a2a' : '#e0e0e0';
+        const pageShadow = darkMode ? '0 4px 20px rgba(0,0,0,0.6)' : '0 4px 20px rgba(0,0,0,0.4)';
         const numColor = darkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
 
         state.doc.forEach((node, pos) => {
@@ -942,44 +942,50 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               const wrapper = document.createElement('div');
               wrapper.className = 'page-break-decoration';
               wrapper.setAttribute('contenteditable', 'false');
+              // Extends to wrapper's full width
               wrapper.style.cssText = `
                 margin-left: -38mm; margin-right: -25mm;
                 user-select: none; pointer-events: none;
+                position: relative;
               `;
 
-              // Bottom margin of current page (simulates page bottom padding)
+              // Bottom margin of current page
               const bottomEdge = document.createElement('div');
               bottomEdge.style.cssText = `
-                height: 12mm; background: ${pageBg};
-                box-shadow: 0 4px 16px ${shadowDark};
+                height: 15mm; background: ${pageBg};
+                box-shadow: ${pageShadow};
                 position: relative; z-index: 2;
               `;
               wrapper.appendChild(bottomEdge);
 
-              // Gap between pages (visible dark/grey strip like scroll area)
+              // Gap: extends BEYOND the wrapper to visually cut it into separate pages
+              // Extra -30mm on each side covers wrapper shadow + scroll container padding
               const gap = document.createElement('div');
               gap.style.cssText = `
-                height: 32px; background: ${gapBg};
-                display: flex; align-items: center;
-                position: relative; z-index: 0;
+                height: 32px; background: ${scrollBg};
+                margin-left: -30mm; margin-right: -30mm;
+                position: relative; z-index: 3;
               `;
+              wrapper.appendChild(gap);
+
+              // Top margin of next page with page number
+              const topEdge = document.createElement('div');
+              topEdge.style.cssText = `
+                height: 14mm; background: ${pageBg};
+                box-shadow: ${pageShadow};
+                position: relative; z-index: 2;
+                display: flex; align-items: flex-start; justify-content: flex-end;
+                padding-right: 0;
+              `;
+              // Page number at top-right of new page
               const num = document.createElement('span');
               num.textContent = pageNum + '.';
               num.style.cssText = `
                 font-family: 'Courier Prime', 'Courier New', monospace;
                 font-size: 10pt; color: ${numColor};
-                position: absolute; right: 8mm;
+                margin-top: 4mm; margin-right: 0;
               `;
-              gap.appendChild(num);
-              wrapper.appendChild(gap);
-
-              // Top margin of next page (simulates page top padding)
-              const topEdge = document.createElement('div');
-              topEdge.style.cssText = `
-                height: 10mm; background: ${pageBg};
-                box-shadow: 0 -4px 16px ${shadowDark};
-                position: relative; z-index: 2;
-              `;
+              topEdge.appendChild(num);
               wrapper.appendChild(topEdge);
 
               return wrapper;
@@ -10751,6 +10757,7 @@ export default function ScreenplayEditor() {
             justifyContent: 'center',
             padding: 32,
             gap: 20,
+            background: darkMode ? '#2a2a2a' : '#e0e0e0',
             ...(isDragSelecting ? { userSelect: 'none', WebkitUserSelect: 'none', cursor: 'default' } : {}),
           }}
         >
