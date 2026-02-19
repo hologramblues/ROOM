@@ -932,7 +932,7 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
         // Page and scroll container colors
         const pageBg = darkMode ? '#3a3a3a' : 'white';
         const scrollBg = darkMode ? '#2a2a2a' : '#e0e0e0';
-        const pageShadow = darkMode ? '0 4px 20px rgba(0,0,0,0.6)' : '0 4px 20px rgba(0,0,0,0.4)';
+        const edgeShadow = darkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.18)';
         const numColor = darkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
 
         state.doc.forEach((node, pos) => {
@@ -942,40 +942,52 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               const wrapper = document.createElement('div');
               wrapper.className = 'page-break-decoration';
               wrapper.setAttribute('contenteditable', 'false');
-              // Extends to wrapper's full width
+              // Extends to wrapper's full width via negative margins matching padding
               wrapper.style.cssText = `
                 margin-left: -38mm; margin-right: -25mm;
                 user-select: none; pointer-events: none;
                 position: relative;
               `;
 
-              // Bottom margin of current page
+              // Bottom edge of ending page (bottom margin area)
               const bottomEdge = document.createElement('div');
               bottomEdge.style.cssText = `
-                height: 15mm; background: ${pageBg};
-                box-shadow: ${pageShadow};
-                position: relative; z-index: 2;
+                height: 15mm;
+                background: ${pageBg};
+                border-radius: 0 0 2px 2px;
+                box-shadow: 0 2px 8px ${edgeShadow};
+                position: relative;
+                z-index: 2;
               `;
               wrapper.appendChild(bottomEdge);
 
-              // Gap: extends BEYOND the wrapper to visually cut it into separate pages
-              // Extra -30mm on each side covers wrapper shadow + scroll container padding
+              // Gap: full-bleed band using box-shadow trick
+              // box-shadow spreads 9999px in all directions (same color as scroll bg)
+              // clip-path constrains it to gap height only, extending infinitely horizontally
+              // This COVERS the wrapper's background + shadow at this vertical position
               const gap = document.createElement('div');
               gap.style.cssText = `
-                height: 32px; background: ${scrollBg};
-                margin-left: -30mm; margin-right: -30mm;
-                position: relative; z-index: 3;
+                height: 24px;
+                background: ${scrollBg};
+                position: relative;
+                z-index: 3;
+                box-shadow: 0 0 0 9999px ${scrollBg};
+                clip-path: inset(-1px -9999px -1px -9999px);
               `;
               wrapper.appendChild(gap);
 
-              // Top margin of next page with page number
+              // Top edge of next page (top margin area) with page number
               const topEdge = document.createElement('div');
               topEdge.style.cssText = `
-                height: 14mm; background: ${pageBg};
-                box-shadow: ${pageShadow};
-                position: relative; z-index: 2;
-                display: flex; align-items: flex-start; justify-content: flex-end;
-                padding-right: 0;
+                height: 13mm;
+                background: ${pageBg};
+                border-radius: 2px 2px 0 0;
+                box-shadow: 0 -2px 8px ${edgeShadow};
+                position: relative;
+                z-index: 2;
+                display: flex;
+                align-items: flex-start;
+                justify-content: flex-end;
               `;
               // Page number at top-right of new page
               const num = document.createElement('span');
@@ -983,7 +995,7 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               num.style.cssText = `
                 font-family: 'Courier Prime', 'Courier New', monospace;
                 font-size: 10pt; color: ${numColor};
-                margin-top: 4mm; margin-right: 0;
+                margin-top: 4mm; margin-right: 2mm;
               `;
               topEdge.appendChild(num);
               wrapper.appendChild(topEdge);
@@ -10769,7 +10781,8 @@ export default function ScreenplayEditor() {
             minHeight: '297mm',
             padding: '20mm 25mm 25mm 38mm',
             boxSizing: 'border-box',
-            boxShadow: darkMode ? '0 4px 20px rgba(0,0,0,0.6)' : '0 4px 20px rgba(0,0,0,0.4)',
+            boxShadow: darkMode ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.18)',
+            borderRadius: '2px',
             position: 'relative',
             fontFamily: getFontFamily(scriptFont),
             fontSize: '12pt',
