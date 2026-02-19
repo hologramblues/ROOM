@@ -818,21 +818,17 @@ const ScreenplayElement = Node.create({
         }
 
         // Both have content → merge current INTO previous (result takes previous's type)
-        // Append current's content to end of previous, then delete current node
         const prevContentEnd = prevStart + 1 + prevNode.content.size;
         const cursorTarget = prevContentEnd; // Where the join point will be
 
-        // Use joinBackward-like approach: delete the boundary between the two nodes
-        // This means deleting from end of prev node to start of current node content
-        const gapStart = prevStart + prevNode.nodeSize; // End of prev node (closing token)
-        const gapEnd = nodeStart + 1; // Start of current node content (after opening token)
-
-        // Delete the gap (prev closing + current opening) to join them
-        tr.delete(gapStart, gapEnd);
-        // The result node keeps the prev node's attributes (type) since we're joining into it
-        tr.setSelection(state.selection.constructor.near(tr.doc.resolve(Math.min(cursorTarget, tr.doc.content.size))));
-        if (dispatch) dispatch(tr);
-        return true;
+        // Join the two nodes at their boundary using ProseMirror's join
+        if (tr.doc.canJoin(nodeStart)) {
+          tr.join(nodeStart);
+          tr.setSelection(state.selection.constructor.near(tr.doc.resolve(Math.min(cursorTarget, tr.doc.content.size))));
+          if (dispatch) dispatch(tr);
+          return true;
+        }
+        return false;
       },
     };
   },
