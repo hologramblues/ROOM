@@ -929,8 +929,10 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
         const decorations = [];
         let nodeIndex = 0;
 
-        const borderColor = darkMode ? '#555' : '#bbb';
-        const gapBg = darkMode ? '#1a1a1a' : '#d0d0d0';
+        // Colors that match the page wrapper and scroll container
+        const pageBg = darkMode ? '#3a3a3a' : 'white';
+        const gapBg = darkMode ? '#252525' : '#bfbfbf';
+        const shadowDark = darkMode ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.25)';
         const numColor = darkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
 
         state.doc.forEach((node, pos) => {
@@ -942,21 +944,24 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               wrapper.setAttribute('contenteditable', 'false');
               wrapper.style.cssText = `
                 margin-left: -38mm; margin-right: -25mm;
-                margin-top: 2em; margin-bottom: 2em;
                 user-select: none; pointer-events: none;
               `;
 
-              // Top border line (bottom edge of current page)
-              const topLine = document.createElement('div');
-              topLine.style.cssText = `height: 1px; background: ${borderColor};`;
-              wrapper.appendChild(topLine);
+              // Bottom margin of current page (simulates page bottom padding)
+              const bottomEdge = document.createElement('div');
+              bottomEdge.style.cssText = `
+                height: 12mm; background: ${pageBg};
+                box-shadow: 0 4px 16px ${shadowDark};
+                position: relative; z-index: 2;
+              `;
+              wrapper.appendChild(bottomEdge);
 
-              // Gap between pages with page number
+              // Gap between pages (visible dark/grey strip like scroll area)
               const gap = document.createElement('div');
               gap.style.cssText = `
-                height: 28px; background: ${gapBg};
+                height: 32px; background: ${gapBg};
                 display: flex; align-items: center;
-                position: relative;
+                position: relative; z-index: 0;
               `;
               const num = document.createElement('span');
               num.textContent = pageNum + '.';
@@ -968,10 +973,14 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               gap.appendChild(num);
               wrapper.appendChild(gap);
 
-              // Bottom border line (top edge of next page)
-              const bottomLine = document.createElement('div');
-              bottomLine.style.cssText = `height: 1px; background: ${borderColor};`;
-              wrapper.appendChild(bottomLine);
+              // Top margin of next page (simulates page top padding)
+              const topEdge = document.createElement('div');
+              topEdge.style.cssText = `
+                height: 10mm; background: ${pageBg};
+                box-shadow: 0 -4px 16px ${shadowDark};
+                position: relative; z-index: 2;
+              `;
+              wrapper.appendChild(topEdge);
 
               return wrapper;
             }, { side: -1, key: 'pb-' + nodeIndex }));
