@@ -9252,7 +9252,8 @@ export default function ScreenplayEditor() {
       const gaps = w.querySelectorAll('.page-break-gap');
       const wRect = w.getBoundingClientRect();
       const zoom = parseFloat(w.style.zoom) || 1;
-      const wHeight = w.scrollHeight;
+      // Use getBoundingClientRect height / zoom for consistency with gap positions
+      const wHeight = Math.round(wRect.height / zoom);
       const rects = [];
       let prevBottom = 0;
       gaps.forEach(g => {
@@ -9295,7 +9296,7 @@ export default function ScreenplayEditor() {
       clearTimeout(pageBgTimerRef.current);
       pageBgTimerRef.current = setTimeout(updatePageBgs, 80);
     });
-    observer.observe(wrapper, { childList: true, subtree: true });
+    observer.observe(wrapper, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
 
     // Watch for resize
     const resizeObs = new ResizeObserver(() => {
@@ -10918,8 +10919,7 @@ export default function ScreenplayEditor() {
           </div>
         )}
         
-        {/* CENTER - Script content + footer */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* CENTER - Script content */}
         <div
           ref={scriptContainerRef}
           className="script-container"
@@ -10974,37 +10974,6 @@ export default function ScreenplayEditor() {
             />
           </div>
 
-      </div>
-
-          {/* Zoom footer bar — outside scroll container, always visible */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 8, padding: '4px 16px',
-            background: darkMode ? '#1e1e1e' : '#f5f5f5',
-            borderTop: `1px solid ${darkMode ? '#444' : '#ddd'}`,
-            fontSize: 12, color: darkMode ? '#aaa' : '#666',
-            flexShrink: 0, height: 28,
-          }}>
-            <button
-              onClick={() => { const z = Math.max(0.5, Math.round((scriptZoom - 0.1) * 10) / 10); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'inherit', padding: '0 4px', lineHeight: 1 }}
-              title="Zoom out"
-            >−</button>
-            <input
-              type="range" min="0.5" max="2" step="0.05"
-              value={scriptZoom}
-              onChange={e => { const z = parseFloat(e.target.value); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
-              style={{ width: 100, cursor: 'pointer', accentColor: darkMode ? '#888' : '#555' }}
-            />
-            <button
-              onClick={() => { const z = Math.min(2, Math.round((scriptZoom + 0.1) * 10) / 10); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'inherit', padding: '0 4px', lineHeight: 1 }}
-              title="Zoom in"
-            >+</button>
-            <span style={{ minWidth: 38, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-              {Math.round(scriptZoom * 100)}%
-            </span>
-          </div>
       </div>
 
       {/* RIGHT SIDEBAR - Comments */}
@@ -11140,7 +11109,39 @@ export default function ScreenplayEditor() {
         </div>
       )}
       </div>
-      
+
+      {/* FOOTER — Zoom slider, full-width bar matching header */}
+      {activeView === 'script' && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+          gap: 8, padding: '4px 16px',
+          background: darkMode ? '#333333' : 'white',
+          borderTop: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
+          fontSize: 12, color: darkMode ? '#aaa' : '#666',
+          flexShrink: 0, height: 28,
+        }}>
+          <button
+            onClick={() => { const z = Math.max(0.5, Math.round((scriptZoom - 0.1) * 10) / 10); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'inherit', padding: '0 4px', lineHeight: 1 }}
+            title="Zoom out"
+          >−</button>
+          <input
+            type="range" min="0.5" max="2" step="0.05"
+            value={scriptZoom}
+            onChange={e => { const z = parseFloat(e.target.value); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
+            style={{ width: 100, cursor: 'pointer', accentColor: darkMode ? '#888' : '#555' }}
+          />
+          <button
+            onClick={() => { const z = Math.min(2, Math.round((scriptZoom + 0.1) * 10) / 10); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'inherit', padding: '0 4px', lineHeight: 1 }}
+            title="Zoom in"
+          >+</button>
+          <span style={{ minWidth: 38, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+            {Math.round(scriptZoom * 100)}%
+          </span>
+        </div>
+      )}
+
       {/* Beat Board - Always mounted, hidden when not active */}
       <div style={{ flex: 1, display: activeView === 'beatboard' ? 'flex' : 'none', flexDirection: 'column' }}>
         <BeatBoard
