@@ -6241,6 +6241,10 @@ export default function ScreenplayEditor() {
   const [importing, setImporting] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const [scriptFont, setScriptFont] = useState(() => localStorage.getItem('rooms-script-font') || 'courier-prime');
+  const [scriptZoom, setScriptZoom] = useState(() => {
+    const saved = localStorage.getItem('rooms-script-zoom');
+    return saved ? parseFloat(saved) : 1;
+  });
   const [language, setLanguage] = useState(() => localStorage.getItem('rooms-language') || 'fr');
   
   // Translation function
@@ -9148,13 +9152,15 @@ export default function ScreenplayEditor() {
       const w = pageWrapperRef.current;
       const gaps = w.querySelectorAll('.page-break-gap');
       const wRect = w.getBoundingClientRect();
+      const zoom = parseFloat(w.style.zoom) || 1;
       const wHeight = w.scrollHeight;
       const rects = [];
       let prevBottom = 0;
       gaps.forEach(g => {
         const gRect = g.getBoundingClientRect();
-        const gTop = Math.round(gRect.top - wRect.top);
-        const gBottom = Math.round(gRect.bottom - wRect.top);
+        // Divide by zoom to convert visual coordinates to internal CSS coordinates
+        const gTop = Math.round((gRect.top - wRect.top) / zoom);
+        const gBottom = Math.round((gRect.bottom - wRect.top) / zoom);
         if (gTop > prevBottom) rects.push({ top: prevBottom, h: gTop - prevBottom });
         prevBottom = gBottom;
       });
@@ -10841,6 +10847,7 @@ export default function ScreenplayEditor() {
             boxSizing: 'border-box',
             position: 'relative',
             zIndex: 0, /* creates stacking context so z-index:-1 backgrounds work */
+            zoom: scriptZoom,
             fontFamily: getFontFamily(scriptFont),
             fontSize: '12pt',
             lineHeight: '1',
@@ -10866,8 +10873,40 @@ export default function ScreenplayEditor() {
               t={t}
             />
           </div>
+
+          {/* Zoom control bar */}
+          <div style={{
+            position: 'sticky', bottom: 0, left: 0, right: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+            gap: 8, padding: '6px 16px',
+            background: darkMode ? 'rgba(30,30,30,0.85)' : 'rgba(245,245,245,0.85)',
+            backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+            borderTop: `1px solid ${darkMode ? '#444' : '#ddd'}`,
+            zIndex: 10, fontSize: 12, color: darkMode ? '#aaa' : '#666',
+            minHeight: 32,
+          }}>
+            <button
+              onClick={() => { const z = Math.max(0.5, Math.round((scriptZoom - 0.1) * 10) / 10); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'inherit', padding: '0 4px', lineHeight: 1 }}
+              title="Zoom out"
+            >−</button>
+            <input
+              type="range" min="0.5" max="2" step="0.05"
+              value={scriptZoom}
+              onChange={e => { const z = parseFloat(e.target.value); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
+              style={{ width: 100, cursor: 'pointer', accentColor: darkMode ? '#888' : '#555' }}
+            />
+            <button
+              onClick={() => { const z = Math.min(2, Math.round((scriptZoom + 0.1) * 10) / 10); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'inherit', padding: '0 4px', lineHeight: 1 }}
+              title="Zoom in"
+            >+</button>
+            <span style={{ minWidth: 38, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+              {Math.round(scriptZoom * 100)}%
+            </span>
+          </div>
       </div>
-      
+
       {/* RIGHT SIDEBAR - Comments */}
       {showComments && (
         <div style={{ 
