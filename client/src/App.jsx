@@ -748,9 +748,29 @@ const ScreenplayElement = Node.create({
         if (node.type.name !== 'screenplayElement') return false;
 
         const currentType = node.attrs.elementType;
+        const nodeStart = $from.before();
+
+        // In dialogue mode, Tab only toggles between dialogue ↔ parenthetical (Final Draft behavior)
+        if (currentType === 'dialogue' || currentType === 'parenthetical') {
+          const newType = currentType === 'dialogue' ? 'parenthetical' : 'dialogue';
+          // Auto-close parenthetical if leaving it
+          if (currentType === 'parenthetical' && node.content.size > 0) {
+            const text = node.textContent;
+            let fixed = text;
+            if (!fixed.startsWith('(')) fixed = '(' + fixed;
+            if (!fixed.endsWith(')')) fixed = fixed + ')';
+            if (fixed !== text) {
+              tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
+              tr.insertText(fixed, nodeStart + 1);
+            }
+          }
+          tr.setNodeMarkup(nodeStart, null, { ...node.attrs, elementType: newType });
+          if (dispatch) dispatch(tr);
+          return true;
+        }
+
         const cycle = reverse ? SP_TAB_REV : SP_TAB_FWD;
         const newType = cycle[currentType] || 'action';
-        const nodeStart = $from.before();
 
         // Auto-close parenthetical if leaving it
         if (currentType === 'parenthetical' && node.content.size > 0) {
@@ -979,6 +999,71 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkModeRef) {
             }, { side: -1, key: 'pb-' + nodeIndex }));
           }
           nodeIndex++;
+        });
+        return DecorationSet.create(state.doc, decorations);
+      },
+    },
+  });
+}
+
+// Scene lock plugin — blocks edits on elements belonging to locked scenes
+const sceneLockPluginKey = new PluginKey('sceneLock');
+function createSceneLockPlugin(lockedScenesRef) {
+  // Helper: build map of node index → owning scene elementId
+  function buildSceneMap(doc) {
+    const sceneForIndex = [];
+    let currentSceneId = null;
+    doc.forEach((node, _offset, index) => {
+      if (node.type.name === 'screenplayElement' && node.attrs.elementType === 'scene') {
+        currentSceneId = node.attrs.elementId;
+      }
+      sceneForIndex[index] = currentSceneId;
+    });
+    return sceneForIndex;
+  }
+
+  return new Plugin({
+    key: sceneLockPluginKey,
+    filterTransaction(tr, state) {
+      if (!tr.docChanged) return true;
+      const locked = lockedScenesRef.current;
+      if (!locked || locked.size === 0) return true;
+
+      const sceneForIndex = buildSceneMap(state.doc);
+
+      // Check each step of the transaction for modifications to locked scenes
+      for (let i = 0; i < tr.steps.length; i++) {
+        const step = tr.steps[i];
+        const map = step.getMap();
+        let blocked = false;
+        map.forEach((oldStart, oldEnd) => {
+          if (blocked) return;
+          state.doc.forEach((node, offset, index) => {
+            if (blocked) return;
+            const nodeEnd = offset + node.nodeSize;
+            if (oldStart < nodeEnd && oldEnd > offset) {
+              const sceneId = sceneForIndex[index];
+              if (sceneId && locked.has(sceneId)) {
+                blocked = true;
+              }
+            }
+          });
+        });
+        if (blocked) return false;
+      }
+      return true;
+    },
+    props: {
+      decorations(state) {
+        const locked = lockedScenesRef.current;
+        if (!locked || locked.size === 0) return DecorationSet.empty;
+        const sceneForIndex = buildSceneMap(state.doc);
+        const decorations = [];
+        state.doc.forEach((node, offset, index) => {
+          const sceneId = sceneForIndex[index];
+          if (sceneId && locked.has(sceneId)) {
+            decorations.push(Decoration.node(offset, offset + node.nodeSize, { class: 'locked-scene-element', style: 'opacity: 0.55; pointer-events: auto;' }));
+          }
         });
         return DecorationSet.create(state.doc, decorations);
       },
@@ -3631,6 +3716,7 @@ const SingleEditor = React.memo(({
   remoteCursors,
   computePageInfoFn,
   highlightsByElement,
+  lockedScenes,
   t = (k) => k,
 }) => {
   const isEditorOriginRef = useRef(false);
@@ -3640,6 +3726,8 @@ const SingleEditor = React.memo(({
   const marksTimeoutRef = useRef(null);
   const darkModeRef = useRef(darkMode);
   darkModeRef.current = darkMode;
+  const lockedScenesRef = useRef(lockedScenes);
+  lockedScenesRef.current = lockedScenes;
   const [autoState, setAutoState] = useState({ show: false, items: [], idx: 0, type: null, nodePos: null });
 
   // Create page break extension that wraps ProseMirror plugin
@@ -3648,6 +3736,16 @@ const SingleEditor = React.memo(({
     const plugin = createPageBreakPlugin(computePageInfoFn, stripHtml, darkModeRef);
     return Extension.create({
       name: 'pageBreakHelper',
+      addProseMirrorPlugins() { return [plugin]; },
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Scene lock extension — blocks edits on elements in locked scenes
+  const SceneLockExtension = useMemo(() => {
+    const plugin = createSceneLockPlugin(lockedScenesRef);
+    return Extension.create({
+      name: 'sceneLockHelper',
       addProseMirrorPlugins() { return [plugin]; },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3672,6 +3770,7 @@ const SingleEditor = React.memo(({
       CommentMark,
       SuggestionMark,
       PageBreakExtension,
+      SceneLockExtension,
     ],
     content: buildDocFromElements(elements),
     editable: canEdit,
@@ -6319,7 +6418,7 @@ export default function ScreenplayEditor() {
   const [sprintDuration, setSprintDuration] = useState(25 * 60); // 25 minutes default
   const [sprintTimeLeft, setSprintTimeLeft] = useState(25 * 60);
   const [sessionWordCount, setSessionWordCount] = useState(0);
-  const [sessionStartWords, setSessionStartWords] = useState(0);
+  const sessionStartWordsRef = useRef(0);
   const [sceneStatus, setSceneStatus] = useState({}); // { sceneId: 'draft' | 'review' | 'final' }
   const [outlineFilter, setOutlineFilter] = useState({ status: '', assignee: '' });
   const [showStatusDropdown, setShowStatusDropdown] = useState(false); // Custom dropdown for status filter
@@ -7732,19 +7831,19 @@ export default function ScreenplayEditor() {
 
   // Track session word count
   useEffect(() => {
-    if (timerRunning && sessionStartWords === 0) {
-      setSessionStartWords(stats.words);
+    if (timerRunning && sessionStartWordsRef.current === 0) {
+      sessionStartWordsRef.current = stats.words;
     }
     if (timerRunning) {
-      setSessionWordCount(Math.max(0, stats.words - sessionStartWords));
+      setSessionWordCount(Math.max(0, stats.words - sessionStartWordsRef.current));
     }
-  }, [stats.words, timerRunning, sessionStartWords]);
+  }, [stats.words, timerRunning]);
 
   const resetTimer = () => {
     setTimerSeconds(0);
     setTimerRunning(false);
     setSessionWordCount(0);
-    setSessionStartWords(0);
+    sessionStartWordsRef.current = 0;
     setSprintTimeLeft(sprintDuration);
   };
 
@@ -10819,15 +10918,15 @@ export default function ScreenplayEditor() {
           </div>
         )}
         
-        {/* CENTER - Script content */}
-        <div 
+        {/* CENTER - Script content + footer */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div
           ref={scriptContainerRef}
           className="script-container"
           style={{
             flex: 1,
-            minWidth: 'fit-content',
             overflowY: 'auto',
-            overflowX: 'hidden',
+            overflowX: 'auto',
             display: 'flex',
             justifyContent: 'center',
             padding: 32,
@@ -10870,20 +10969,21 @@ export default function ScreenplayEditor() {
               remoteCursors={remoteCursors}
               computePageInfoFn={computePageInfo}
               highlightsByElement={highlightsByElement}
+              lockedScenes={lockedScenes}
               t={t}
             />
           </div>
 
-          {/* Zoom control bar */}
+      </div>
+
+          {/* Zoom footer bar — outside scroll container, always visible */}
           <div style={{
-            position: 'sticky', bottom: 0, left: 0, right: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-            gap: 8, padding: '6px 16px',
-            background: darkMode ? 'rgba(30,30,30,0.85)' : 'rgba(245,245,245,0.85)',
-            backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 8, padding: '4px 16px',
+            background: darkMode ? '#1e1e1e' : '#f5f5f5',
             borderTop: `1px solid ${darkMode ? '#444' : '#ddd'}`,
-            zIndex: 10, fontSize: 12, color: darkMode ? '#aaa' : '#666',
-            minHeight: 32,
+            fontSize: 12, color: darkMode ? '#aaa' : '#666',
+            flexShrink: 0, height: 28,
           }}>
             <button
               onClick={() => { const z = Math.max(0.5, Math.round((scriptZoom - 0.1) * 10) / 10); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
@@ -11282,7 +11382,7 @@ export default function ScreenplayEditor() {
         const commentsOffset = showComments ? 160 : 0; // Half of comments width (320/2)
         const scriptCenter = viewportCenter + outlineOffset - commentsOffset;
         const scriptRightEdge = scriptCenter + (scriptWidth / 2);
-        const menuRight = window.innerWidth - scriptRightEdge + 8; // 8px inside the edge
+        const menuRight = window.innerWidth - scriptRightEdge - 24; // Straddle page right edge (half on page, half outside)
         
         // Clamp Y position to viewport
         const clampedTop = Math.max(80, Math.min(window.innerHeight - 120, contextMenuTop));
@@ -11306,53 +11406,6 @@ export default function ScreenplayEditor() {
             border: '1px solid #e0e0e0'
           }}
         >
-          {/* Suggestion button */}
-          <button 
-            onClick={() => {
-              if (hasSelection) {
-                setPendingSuggestion({
-                  elementId: textSelection.elementId,
-                  elementIndex: textSelection.elementIndex,
-                  originalText: textSelection.text,
-                  startOffset: textSelection.startOffset,
-                  endOffset: textSelection.endOffset
-                });
-              } else {
-                // Suggest on entire element
-                setPendingSuggestion({
-                  elementId: currentElement?.id,
-                  elementIndex: activeIndex,
-                  originalText: stripHtml(currentElement?.content) || '',
-                  startOffset: 0,
-                  endOffset: stripHtml(currentElement?.content).length || 0
-                });
-              }
-              setShowComments(true);
-              setTextSelection(null);
-            }}
-            className="floating-action-btn"
-            data-tooltip={t('suggest')}
-            style={{
-              width: 36,
-              height: 36,
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 18,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'background 0.15s ease'
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
-          
           {/* Comment button */}
           <button
             onClick={() => {
@@ -11425,6 +11478,53 @@ export default function ScreenplayEditor() {
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               <line x1="12" y1="8" x2="12" y2="14" />
               <line x1="9" y1="11" x2="15" y2="11" />
+            </svg>
+          </button>
+
+          {/* Suggestion button */}
+          <button
+            onClick={() => {
+              if (hasSelection) {
+                setPendingSuggestion({
+                  elementId: textSelection.elementId,
+                  elementIndex: textSelection.elementIndex,
+                  originalText: textSelection.text,
+                  startOffset: textSelection.startOffset,
+                  endOffset: textSelection.endOffset
+                });
+              } else {
+                // Suggest on entire element
+                setPendingSuggestion({
+                  elementId: currentElement?.id,
+                  elementIndex: activeIndex,
+                  originalText: stripHtml(currentElement?.content) || '',
+                  startOffset: 0,
+                  endOffset: stripHtml(currentElement?.content).length || 0
+                });
+              }
+              setShowComments(true);
+              setTextSelection(null);
+            }}
+            className="floating-action-btn"
+            data-tooltip={t('suggest')}
+            style={{
+              width: 36,
+              height: 36,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 18,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'background 0.15s ease'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f1f3f4'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6368" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
           </button>
           
