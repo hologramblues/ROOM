@@ -950,16 +950,14 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
               bottomMargin.style.cssText = 'height: 15mm;';
               wrapper.appendChild(bottomMargin);
 
-              // Gap: full-bleed band using box-shadow + clip-path trick
-              // The massive box-shadow (same color as scroll container) extends
-              // horizontally to cover the wrapper's background AND shadow,
-              // creating the visual illusion that the wrapper is split into pages.
+              // Gap: simple div with wider margins to cover wrapper + its shadow
+              // No box-shadow trick — just physically wider than the wrapper
               const gap = document.createElement('div');
               gap.style.cssText = `
                 height: 24px;
                 background: ${scrollBg};
-                box-shadow: 0 0 0 9999px ${scrollBg};
-                clip-path: inset(0 -9999px);
+                margin-left: -60px;
+                margin-right: -60px;
               `;
               wrapper.appendChild(gap);
 
