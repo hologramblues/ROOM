@@ -917,7 +917,7 @@ function elementsEqual(a, b) {
 // Page break decoration plugin for ProseMirror
 const pageBreakPluginKey = new PluginKey('pageBreaks');
 
-function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
+function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkModeRef) {
   return new Plugin({
     key: pageBreakPluginKey,
     props: {
@@ -929,9 +929,9 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
         const decorations = [];
         let nodeIndex = 0;
 
-        // Scroll container color for the gap between pages
-        const scrollBg = darkMode ? '#2a2a2a' : '#e0e0e0';
-        const numColor = darkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
+        // Read darkMode from ref so the plugin always uses the current value
+        const dm = darkModeRef.current;
+        const numColor = dm ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
 
         state.doc.forEach((node, pos) => {
           if (node.type.name === 'screenplayElement' && pageBreaks.has(nodeIndex)) {
@@ -945,23 +945,19 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkMode) {
                 user-select: none; pointer-events: none;
               `;
 
-              // Bottom margin of ending page (transparent = shows wrapper's page bg)
+              // Bottom margin of ending page
               const bottomMargin = document.createElement('div');
               bottomMargin.style.cssText = 'height: 15mm;';
               wrapper.appendChild(bottomMargin);
 
-              // Gap: simple div with wider margins to cover wrapper + its shadow
-              // No box-shadow trick — just physically wider than the wrapper
+              // Gap — transparent spacer between pages
+              // (scroll container grey shows through the transparent wrapper)
               const gap = document.createElement('div');
-              gap.style.cssText = `
-                height: 24px;
-                background: ${scrollBg};
-                margin-left: -60px;
-                margin-right: -60px;
-              `;
+              gap.className = 'page-break-gap';
+              gap.style.cssText = 'height: 24px;';
               wrapper.appendChild(gap);
 
-              // Top margin of next page (transparent = shows wrapper's page bg)
+              // Top margin of next page with page number
               const topMargin = document.createElement('div');
               topMargin.style.cssText = `
                 height: 13mm;
@@ -3642,11 +3638,14 @@ const SingleEditor = React.memo(({
   const lastElementsRef = useRef(elements);
   const syncTimeoutRef = useRef(null);
   const marksTimeoutRef = useRef(null);
+  const darkModeRef = useRef(darkMode);
+  darkModeRef.current = darkMode;
   const [autoState, setAutoState] = useState({ show: false, items: [], idx: 0, type: null, nodePos: null });
 
   // Create page break extension that wraps ProseMirror plugin
+  // Uses darkModeRef so the plugin always reads current darkMode value
   const PageBreakExtension = useMemo(() => {
-    const plugin = createPageBreakPlugin(computePageInfoFn, stripHtml, darkMode);
+    const plugin = createPageBreakPlugin(computePageInfoFn, stripHtml, darkModeRef);
     return Extension.create({
       name: 'pageBreakHelper',
       addProseMirrorPlugins() { return [plugin]; },
@@ -6369,6 +6368,8 @@ export default function ScreenplayEditor() {
   const loadedDocRef = useRef(null);
   const offlineDocIdRef = useRef(null);
   const scriptContainerRef = useRef(null);
+  const pageWrapperRef = useRef(null);
+  const pageBgTimerRef = useRef(null);
   const outlineSidebarRef = useRef(null);
   const commentsSidebarRef = useRef(null);
   const chatEndRef = useRef(null);
@@ -9133,6 +9134,83 @@ export default function ScreenplayEditor() {
     if (IS_DESKTOP && title) window.electronAPI.setTitle(title);
   }, [title]);
 
+  // ---- Page backgrounds: create separate white rectangles behind content ----
+  // This replaces the single wrapper background with per-page backgrounds,
+  // giving each page its own floating rectangle + shadow (like Final Draft / V271).
+  useEffect(() => {
+    const wrapper = pageWrapperRef.current;
+    if (!wrapper) return;
+    const bgColor = darkMode ? '#3a3a3a' : 'white';
+    const shadow = darkMode ? '0 2px 16px rgba(0,0,0,0.5)' : '0 2px 16px rgba(0,0,0,0.15)';
+
+    function updatePageBgs() {
+      if (!pageWrapperRef.current) return;
+      const w = pageWrapperRef.current;
+      const gaps = w.querySelectorAll('.page-break-gap');
+      const wRect = w.getBoundingClientRect();
+      const wHeight = w.scrollHeight;
+      const rects = [];
+      let prevBottom = 0;
+      gaps.forEach(g => {
+        const gRect = g.getBoundingClientRect();
+        const gTop = Math.round(gRect.top - wRect.top);
+        const gBottom = Math.round(gRect.bottom - wRect.top);
+        if (gTop > prevBottom) rects.push({ top: prevBottom, h: gTop - prevBottom });
+        prevBottom = gBottom;
+      });
+      if (wHeight > prevBottom) rects.push({ top: prevBottom, h: wHeight - prevBottom });
+
+      let c = w.querySelector('.page-bg-container');
+      if (!c) {
+        c = document.createElement('div');
+        c.className = 'page-bg-container';
+        c.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:-1;';
+        w.insertBefore(c, w.firstChild);
+      }
+      while (c.children.length > rects.length) c.removeChild(c.lastChild);
+      rects.forEach((r, i) => {
+        let d = c.children[i];
+        if (!d) { d = document.createElement('div'); c.appendChild(d); }
+        d.style.cssText = `position:absolute;top:${r.top}px;left:0;right:0;height:${r.h}px;background:${bgColor};box-shadow:${shadow};border-radius:2px;pointer-events:none;`;
+      });
+    }
+
+    // Double rAF to ensure ProseMirror decorations have rendered
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        updatePageBgs();
+      });
+    });
+
+    // Also watch for DOM mutations (content edits that change page breaks)
+    const observer = new MutationObserver(() => {
+      clearTimeout(pageBgTimerRef.current);
+      pageBgTimerRef.current = setTimeout(updatePageBgs, 80);
+    });
+    observer.observe(wrapper, { childList: true, subtree: true });
+
+    // Watch for resize
+    const resizeObs = new ResizeObserver(() => {
+      clearTimeout(pageBgTimerRef.current);
+      pageBgTimerRef.current = setTimeout(updatePageBgs, 80);
+    });
+    resizeObs.observe(wrapper);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      resizeObs.disconnect();
+      clearTimeout(pageBgTimerRef.current);
+      // Clean up bg container
+      const bg = wrapper.querySelector('.page-bg-container');
+      if (bg) bg.remove();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [darkMode]);
+
   // Desktop: wait until port/user are ready before showing UI
   if (IS_DESKTOP && !desktopReady) {
     return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111827', color: 'white', fontSize: 18 }}>Chargement...</div>;
@@ -10753,15 +10831,16 @@ export default function ScreenplayEditor() {
           }}
         >
           {/* V272: Single TipTap Editor for entire document */}
-          <div className="screenplay-editor-wrapper" style={{
-            background: darkMode ? '#3a3a3a' : 'white',
+          <div ref={pageWrapperRef} className="screenplay-editor-wrapper" style={{
+            /* No background/boxShadow here — per-page backgrounds are created
+               dynamically as absolute-positioned divs (see page-bg useEffect) */
             color: darkMode ? '#e0e0e0' : '#111',
             width: '210mm',
             minHeight: '297mm',
             padding: '20mm 25mm 25mm 38mm',
             boxSizing: 'border-box',
-            boxShadow: darkMode ? '0 2px 16px rgba(0,0,0,0.5)' : '0 2px 16px rgba(0,0,0,0.12)',
             position: 'relative',
+            zIndex: 0, /* creates stacking context so z-index:-1 backgrounds work */
             fontFamily: getFontFamily(scriptFont),
             fontSize: '12pt',
             lineHeight: '1',

@@ -102,9 +102,8 @@
   margin-top: 1em;
 }
 
-/* Page break visual — simulates A4 page separation */
+/* Page break visual — spacer between pages */
 .page-break-decoration {
-  position: relative;
   user-select: none;
   pointer-events: none;
 }
