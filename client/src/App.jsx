@@ -9246,21 +9246,30 @@ export default function ScreenplayEditor() {
     const bgColor = darkMode ? '#3a3a3a' : 'white';
     const shadow = darkMode ? '0 2px 16px rgba(0,0,0,0.5)' : '0 2px 16px rgba(0,0,0,0.15)';
 
+    // Get element's internal top offset relative to a specific ancestor,
+    // walking the offsetParent chain. This is zoom-agnostic.
+    function internalTop(el, ancestor) {
+      let top = 0;
+      let cur = el;
+      while (cur && cur !== ancestor) {
+        top += cur.offsetTop;
+        cur = cur.offsetParent;
+      }
+      return top;
+    }
+
     function updatePageBgs() {
       if (!pageWrapperRef.current) return;
       const w = pageWrapperRef.current;
       const gaps = w.querySelectorAll('.page-break-gap');
-      const wRect = w.getBoundingClientRect();
-      const zoom = parseFloat(w.style.zoom) || 1;
-      // Use getBoundingClientRect height / zoom for consistency with gap positions
-      const wHeight = Math.round(wRect.height / zoom);
+      // scrollHeight is in the element's internal coordinate system (unaffected by CSS zoom)
+      const wHeight = w.scrollHeight;
       const rects = [];
       let prevBottom = 0;
       gaps.forEach(g => {
-        const gRect = g.getBoundingClientRect();
-        // Divide by zoom to convert visual coordinates to internal CSS coordinates
-        const gTop = Math.round((gRect.top - wRect.top) / zoom);
-        const gBottom = Math.round((gRect.bottom - wRect.top) / zoom);
+        // offsetTop chain gives internal (pre-zoom) coordinates — no division needed
+        const gTop = internalTop(g, w);
+        const gBottom = gTop + g.offsetHeight;
         if (gTop > prevBottom) rects.push({ top: prevBottom, h: gTop - prevBottom });
         prevBottom = gBottom;
       });
