@@ -1123,7 +1123,7 @@ const ELEMENT_TYPES = [
 
 const TYPE_TO_FDX = { scene: 'Scene Heading', action: 'Action', character: 'Character', dialogue: 'Dialogue', parenthetical: 'Parenthetical', transition: 'Transition' };
 const FDX_TO_TYPE = { 'Scene Heading': 'scene', 'Action': 'action', 'Character': 'character', 'Dialogue': 'dialogue', 'Parenthetical': 'parenthetical', 'Transition': 'transition', 'General': 'action' };
-const LINES_PER_PAGE = 57;
+const LINES_PER_PAGE = 63; // A4 content area: 297mm - 13mm top margin - 15mm bottom margin = 269mm ÷ 4.23mm/line ≈ 63
 
 // ============ AUTH MODAL ============
 const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
@@ -7529,9 +7529,16 @@ export default function ScreenplayEditor() {
     let currentPage = 1;
     let h = 0;
     const getLines = el => {
-      const l = el.content ? Math.ceil(stripHtml(el.content).length / 60) : 1;
-      const e = { scene: 1.5, action: 1, character: 1, dialogue: 0, parenthetical: 0, transition: 1.5 };
-      return l + (e[el.type] || 0);
+      // Chars per line must match CSS widths: action/scene/transition=100%, dialogue=58%, parenthetical=42%, character=35%
+      // Content area ≈ 147mm at 12pt Courier (7.2pt/char) → base ~58 chars
+      const cpl = { scene: 58, action: 58, character: 20, dialogue: 34, parenthetical: 24, transition: 58 };
+      const c = cpl[el.type] || 58;
+      const l = el.content ? Math.ceil(stripHtml(el.content).length / c) : 1;
+      // Extra lines for CSS margins: scene=2em top + 0.5em bottom, action/character/transition=1em top
+      // Action & dialogue use line-height:1.1 → account via 10% increase on text lines
+      const e = { scene: 2.5, action: 1, character: 1, dialogue: 0, parenthetical: 0, transition: 1 };
+      const lh = (el.type === 'action' || el.type === 'dialogue') ? 1.1 : 1;
+      return (l * lh) + (e[el.type] || 0);
     };
     const pageElements = []; // track elements in current page for orphan detection
     els.forEach((el, idx) => {
