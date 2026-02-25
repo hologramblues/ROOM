@@ -467,8 +467,9 @@ app.get('/api/documents', authMiddleware, async (req, res) => {
 // Lightweight meta endpoint for conflict detection (offline mode)
 app.get('/api/documents/:shortId/meta', optionalAuthMiddleware, async (req, res) => {
   try {
-    const doc = await Document.findOne({ shortId: req.params.shortId }).select('updatedAt title');
+    const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc) return res.status(404).json({ error: 'Document non trouve' });
+    if (!checkDocumentAccess(doc, req.user, 'viewer')) return res.status(403).json({ error: 'Acces refuse' });
     res.json({ updatedAt: doc.updatedAt, title: doc.title });
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
@@ -728,6 +729,42 @@ app.put('/api/documents/:shortId/comments/:commentId', authMiddleware, async (re
 const activeRooms = new Map();
 io.use(socketAuthMiddleware);
 
+// ============ SOCKET RATE LIMITING ============
+const socketRates = new Map(); // socketId -> { count, resetAt }
+const SOCKET_RATE_LIMIT = 100; // events per second
+const SOCKET_RATE_WINDOW = 1000; // 1 second
+
+function checkSocketRate(socketId) {
+  const now = Date.now();
+  let entry = socketRates.get(socketId);
+  if (!entry || now >= entry.resetAt) {
+    entry = { count: 1, resetAt: now + SOCKET_RATE_WINDOW };
+    socketRates.set(socketId, entry);
+    return true;
+  }
+  entry.count++;
+  return entry.count <= SOCKET_RATE_LIMIT;
+}
+
+// Cleanup stale rate entries every 60s
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of socketRates) {
+    if (now >= entry.resetAt) socketRates.delete(id);
+  }
+}, 60000);
+
+// ============ SOCKET INPUT VALIDATION ============
+const VALID_ELEMENT_TYPES = new Set(['scene', 'action', 'character', 'dialogue', 'parenthetical', 'transition']);
+const MAX_CONTENT_LENGTH = 50000;
+
+function validateElement(element) {
+  if (!element || typeof element.id !== 'string') return false;
+  if (element.type && !VALID_ELEMENT_TYPES.has(element.type)) return false;
+  if (element.content !== undefined && (typeof element.content !== 'string' || element.content.length > MAX_CONTENT_LENGTH)) return false;
+  return true;
+}
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id, socket.user ? `(${socket.user.name})` : '(anonymous)');
   let currentDocId = null;
@@ -754,6 +791,7 @@ io.on('connection', (socket) => {
       if (currentDocId) { const room = activeRooms.get(currentDocId); if (room) { room.delete(socket.id); socket.to(currentDocId).emit('user-left', { id: socket.id, users: Array.from(room.values()) }); } socket.leave(currentDocId); }
       const doc = await Document.findOne({ shortId: docId });
       if (!doc) return socket.emit('error', { message: 'Document non trouve' });
+      if (!doc.publicAccess?.enabled && !socket.user) return socket.emit('error', { message: 'Authentification requise' });
       if (!checkDocumentAccess(doc, socket.user, 'viewer')) return socket.emit('error', { message: 'Acces refuse' });
       let role = 'viewer';
       if (socket.user) { if (doc.ownerId.equals(socket.user._id)) role = 'editor'; else { const c = doc.collaborators.find(c => c.userId.equals(socket.user._id)); if (c) role = c.role; } }
@@ -800,7 +838,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('title-change', async ({ title }) => {
-    if (!currentDocId || !canWrite()) return;
+    if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
     try {
       const doc = await Document.findOneAndUpdate(
         { shortId: currentDocId },
@@ -813,9 +851,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('element-change', async ({ index, element }) => {
-    if (!currentDocId || !canWrite()) return;
+    if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
     try {
-      if (!element?.id) return;
+      if (!validateElement(element)) return;
       // Use ID-based update instead of positional index (prevents drift in concurrent edits)
       const result = await Document.updateOne(
         { shortId: currentDocId, 'elements.id': element.id },
@@ -828,7 +866,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('element-type-change', async ({ index, type, elementId }) => {
-    if (!currentDocId || !canWrite()) return;
+    if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
+    if (type && !VALID_ELEMENT_TYPES.has(type)) return;
     try {
       // Prefer elementId, fallback to positional index
       const targetId = elementId;
@@ -848,7 +887,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('element-insert', async ({ afterIndex, afterElementId, element }) => {
-    if (!currentDocId || !canWrite()) return;
+    if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
+    if (!validateElement(element)) return;
     try {
       if (afterElementId) {
         // ID-based insert: find position of afterElementId, insert after it
@@ -873,7 +913,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('element-delete', async ({ index, elementId }) => {
-    if (!currentDocId || !canWrite()) return;
+    if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
     try {
       let targetId = elementId;
       if (!targetId) {
@@ -898,6 +938,10 @@ io.on('connection', (socket) => {
   socket.on('comment-add', async ({ comment }) => {
     if (!currentDocId || !canComment()) return;
     try {
+      // Check access BEFORE pushing
+      const doc = await Document.findOne({ shortId: currentDocId });
+      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) return;
+
       const newComment = {
         id: comment.id,
         elementId: comment.elementId,
@@ -912,17 +956,10 @@ io.on('connection', (socket) => {
         replies: [],
         resolved: false
       };
-      // Atomic push — check access on the pre-update doc
-      const doc = await Document.findOneAndUpdate(
+      await Document.updateOne(
         { shortId: currentDocId },
-        { $push: { comments: newComment } },
-        { new: false }
+        { $push: { comments: newComment } }
       );
-      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) {
-        // Rollback
-        if (doc) await Document.updateOne({ shortId: currentDocId }, { $pull: { comments: { id: newComment.id } } });
-        return;
-      }
       socket.to(currentDocId).emit('comment-added', { comment: newComment });
     } catch (error) { console.error('Comment add error:', error); }
   });
@@ -932,6 +969,10 @@ io.on('connection', (socket) => {
   socket.on('suggestion-add', async ({ suggestion }) => {
     if (!currentDocId || !canComment()) return;
     try {
+      // Check access BEFORE pushing
+      const doc = await Document.findOne({ shortId: currentDocId });
+      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) return;
+
       const newSuggestion = {
         id: suggestion.id,
         elementId: suggestion.elementId,
@@ -946,16 +987,10 @@ io.on('connection', (socket) => {
         status: 'pending',
         createdAt: new Date()
       };
-      // Atomic push
-      const doc = await Document.findOneAndUpdate(
+      await Document.updateOne(
         { shortId: currentDocId },
-        { $push: { suggestions: newSuggestion } },
-        { new: false }
+        { $push: { suggestions: newSuggestion } }
       );
-      if (!doc || !checkDocumentAccess(doc, socket.user, 'commenter')) {
-        if (doc) await Document.updateOne({ shortId: currentDocId }, { $pull: { suggestions: { id: newSuggestion.id } } });
-        return;
-      }
       socket.to(currentDocId).emit('suggestion-added', { suggestion: newSuggestion });
       console.log('Suggestion added:', newSuggestion.id);
     } catch (error) { console.error('Suggestion add error:', error); }
@@ -964,51 +999,49 @@ io.on('connection', (socket) => {
   socket.on('suggestion-accept', async ({ suggestionId }) => {
     if (!currentDocId || !canWrite()) return;
     try {
-      const doc = await Document.findOne({ shortId: currentDocId });
-      if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
+      // Atomically remove the suggestion (prevents double-accept race)
+      const pullResult = await Document.findOneAndUpdate(
+        { shortId: currentDocId, 'suggestions.id': suggestionId },
+        { $pull: { suggestions: { id: suggestionId } } },
+        { new: false } // return doc BEFORE pull so we can read the suggestion
+      );
+      if (!pullResult) return;
+      if (!checkDocumentAccess(pullResult, socket.user, 'editor')) return;
 
-      const suggestionIndex = doc.suggestions?.findIndex(s => s.id === suggestionId);
-      if (suggestionIndex !== -1 && suggestionIndex !== undefined) {
-        const suggestion = doc.suggestions[suggestionIndex];
+      const suggestion = pullResult.suggestions?.find(s => s.id === suggestionId);
+      if (!suggestion) return; // already removed by another user
 
-        // Apply the suggestion to the element
-        const elementIndex = doc.elements.findIndex(el => el.id === suggestion.elementId);
-        if (elementIndex !== -1) {
-          const element = doc.elements[elementIndex];
-          const content = element.content || '';
+      // Now apply the text change atomically
+      const elementIndex = pullResult.elements.findIndex(el => el.id === suggestion.elementId);
+      if (elementIndex !== -1) {
+        const element = pullResult.elements[elementIndex];
+        const content = element.content || '';
 
-          // Verify offsets are still valid and originalText matches
-          if (suggestion.startOffset >= 0 && suggestion.endOffset <= content.length &&
-              suggestion.startOffset < suggestion.endOffset) {
-            const currentSlice = content.substring(suggestion.startOffset, suggestion.endOffset);
-            if (currentSlice === suggestion.originalText) {
-              // Safe to apply — text hasn't changed at these offsets
-              const newContent =
-                content.substring(0, suggestion.startOffset) +
-                suggestion.suggestedText +
-                content.substring(suggestion.endOffset);
-              doc.elements[elementIndex].content = newContent;
-              doc.markModified('elements');
-
-              // Broadcast element update
-              socket.to(currentDocId).emit('element-updated', { index: elementIndex, element: doc.elements[elementIndex] });
-            } else {
-              console.warn('Suggestion accept: originalText mismatch, content may have changed. Suggestion removed without applying.');
-            }
+        if (suggestion.startOffset >= 0 && suggestion.endOffset <= content.length &&
+            suggestion.startOffset < suggestion.endOffset) {
+          const currentSlice = content.substring(suggestion.startOffset, suggestion.endOffset);
+          if (currentSlice === suggestion.originalText) {
+            const newContent =
+              content.substring(0, suggestion.startOffset) +
+              suggestion.suggestedText +
+              content.substring(suggestion.endOffset);
+            await Document.updateOne(
+              { shortId: currentDocId, 'elements.id': suggestion.elementId },
+              { $set: { 'elements.$.content': newContent } }
+            );
+            // Broadcast element update
+            const updatedElement = { ...element, content: newContent };
+            socket.to(currentDocId).emit('element-updated', { index: elementIndex, element: updatedElement });
           } else {
-            console.warn('Suggestion accept: offsets out of bounds. Suggestion removed without applying.');
+            console.warn('Suggestion accept: originalText mismatch, suggestion removed without applying.');
           }
+        } else {
+          console.warn('Suggestion accept: offsets out of bounds, suggestion removed without applying.');
         }
-
-        // Remove the suggestion regardless
-        doc.suggestions.splice(suggestionIndex, 1);
-        doc.markModified('suggestions');
-        await doc.save();
-
-        // Broadcast suggestion acceptance
-        io.to(currentDocId).emit('suggestion-accepted', { suggestionId });
-        console.log('Suggestion accepted:', suggestionId);
       }
+
+      io.to(currentDocId).emit('suggestion-accepted', { suggestionId });
+      console.log('Suggestion accepted:', suggestionId);
     } catch (error) { console.error('Suggestion accept error:', error); }
   });
 
@@ -1033,7 +1066,7 @@ io.on('connection', (socket) => {
   // ============ FULL SYNC (undo/redo/drag/offline push) ============
 
   socket.on('full-sync', async ({ elements }) => {
-    if (!currentDocId || !canWrite() || !elements || !Array.isArray(elements)) return;
+    if (!currentDocId || !canWrite() || !checkSocketRate(socket.id) || !elements || !Array.isArray(elements)) return;
     try {
       const doc = await Document.findOne({ shortId: currentDocId });
       if (!doc) return;
@@ -1065,6 +1098,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    socketRates.delete(socket.id);
     if (currentDocId) {
       const room = activeRooms.get(currentDocId);
       if (room) { room.delete(socket.id); if (room.size === 0) activeRooms.delete(currentDocId); else socket.to(currentDocId).emit('user-left', { id: socket.id, users: Array.from(room.values()) }); }
