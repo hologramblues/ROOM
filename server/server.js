@@ -839,6 +839,7 @@ io.on('connection', (socket) => {
 
   socket.on('title-change', async ({ title }) => {
     if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
+    if (typeof title !== 'string' || title.length > 200) return;
     try {
       const doc = await Document.findOneAndUpdate(
         { shortId: currentDocId },
@@ -1048,18 +1049,16 @@ io.on('connection', (socket) => {
   socket.on('suggestion-reject', async ({ suggestionId }) => {
     if (!currentDocId || !canWrite()) return;
     try {
-      const doc = await Document.findOne({ shortId: currentDocId });
-      if (!doc || !checkDocumentAccess(doc, socket.user, 'editor')) return;
-      
-      const suggestionIndex = doc.suggestions?.findIndex(s => s.id === suggestionId);
-      if (suggestionIndex !== -1 && suggestionIndex !== undefined) {
-        doc.suggestions.splice(suggestionIndex, 1);
-        doc.markModified('suggestions');
-        await doc.save();
-        
-        io.to(currentDocId).emit('suggestion-rejected', { suggestionId });
-        console.log('Suggestion rejected:', suggestionId);
-      }
+      const result = await Document.findOneAndUpdate(
+        { shortId: currentDocId, 'suggestions.id': suggestionId },
+        { $pull: { suggestions: { id: suggestionId } } },
+        { new: true }
+      );
+      if (!result) return;
+      if (!checkDocumentAccess(result, socket.user, 'editor')) return;
+
+      io.to(currentDocId).emit('suggestion-rejected', { suggestionId });
+      console.log('Suggestion rejected:', suggestionId);
     } catch (error) { console.error('Suggestion reject error:', error); }
   });
 
@@ -1084,6 +1083,8 @@ io.on('connection', (socket) => {
 
   socket.on('chat-message', ({ docId, message }) => {
     if (!currentDocId || currentDocId !== docId) return;
+    if (!message || typeof message.text !== 'string' || message.text.length > 5000) return;
+    if (typeof message.userName !== 'string' || message.userName.length > 100) return;
     // Broadcast to everyone else in the room
     socket.to(currentDocId).emit('chat-message', message);
   });

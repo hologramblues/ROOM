@@ -1,0 +1,29 @@
+{
+  "name": "rooms-desktop",
+  "version": "1.0.0",
+  "description": "ROOMS — Éditeur de scénario desktop",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "electron:dev": "concurrently \"cd client && npx craco start\" \"wait-on http://localhost:3000 && ELECTRON_DEV=1 npx electron .\"",
+    "electron:start": "npx electron .",
+    "electron:build": "cd client && npx craco build && cd .. && npx electron-builder",
+    "postinstall": "npx electron-rebuild -f -w better-sqlite3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "socket.io": "^4.8.1",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "extends": "electron-builder.yml"
+  }
+}

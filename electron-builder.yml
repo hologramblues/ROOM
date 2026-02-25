@@ -1,0 +1,48 @@
+appId: com.rooms.desktop
+productName: ROOMS
+copyright: Copyright © 2024 ROOMS
+
+directories:
+  output: dist
+
+files:
+  - electron/**/*
+  - client/build/**/*
+  - package.json
+
+asarUnpack:
+  - "**/*.node"
+  - "**/better-sqlite3/**"
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  icon: client/public/favicon.png
+  darkModeSupport: true
+
+dmg:
+  title: ROOMS
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - nsis
+  icon: client/public/favicon.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: client/public/favicon.png
+
+linux:
+  target:
+    - AppImage
+  category: Office
