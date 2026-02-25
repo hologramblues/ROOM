@@ -1086,7 +1086,7 @@ export default function ScreenplayEditor() {
     if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-change', { index: i, element: el });
     setLastSaved(new Date());
     setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
-  }, [connected, canEdit, canEditNow, pushToUndo, currentUser]);
+  }, [connected, canEdit, canEditNow, pushToUndo, currentUser, offlineDocIdRef]);
 
   // Search hook (search/replace, scene navigation)
   const {
@@ -1117,7 +1117,7 @@ export default function ScreenplayEditor() {
     const afterElementId = elementsRef.current[after]?.id;
     if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-insert', { afterIndex: after, afterElementId, element: el });
     setLastSaved(new Date());
-  }, [connected, canEdit, canEditNow, pushToUndo]);
+  }, [connected, canEdit, canEditNow, pushToUndo, offlineDocIdRef]);
   // eslint-disable-next-line no-unused-vars
   const deleteElement = useCallback(i => {
     if (!canEditNow) return;
@@ -1128,8 +1128,8 @@ export default function ScreenplayEditor() {
     setActiveIndex(Math.max(0, i - 1));
     if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-delete', { index: i, elementId });
     setLastSaved(new Date());
-  }, [connected, canEdit, canEditNow, pushToUndo]);
-  const changeType = useCallback((i, t) => { if (!canEditNow) return; const elementId = elementsRef.current[i]?.id; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t, elementId }); }, [connected, canEdit, canEditNow]);
+  }, [connected, canEdit, canEditNow, pushToUndo, offlineDocIdRef]);
+  const changeType = useCallback((i, t) => { if (!canEditNow) return; const elementId = elementsRef.current[i]?.id; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t, elementId }); }, [connected, canEdit, canEditNow, offlineDocIdRef]);
   // V272: handleCursor supprimé (curseurs distants à réimplémenter via décorations ProseMirror)
 
   // V272: Single editor → elements change callback (replaces individual CRUD for typing)
@@ -1146,7 +1146,7 @@ export default function ScreenplayEditor() {
         socketRef.current.emit('full-sync', { elements: elementsRef.current });
       }
     }, 500);
-  }, [connected, canEdit, currentUser]);
+  }, [connected, canEdit, currentUser, offlineDocIdRef]);
 
   const handleSelectChar = useCallback((i, name) => { updateElement(i, { ...elements[i], content: name }); setTimeout(() => insertElement(i, 'dialogue'), 50); }, [elements, updateElement, insertElement]);
   
