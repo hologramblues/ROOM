@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import './App.css';
 import '@excalidraw/excalidraw/index.css';
 
 // Constants
-import { IS_DESKTOP, SERVER_URL } from './constants/config';
+import { IS_DESKTOP, SERVER_URL, CLOUD_URL } from './constants/config';
 import { translations } from './constants/translations';
 import { SCRIPT_TEMPLATES } from './constants/templates';
 import { getFontFamily } from './constants/fonts';
@@ -33,29 +33,32 @@ import useHighlights from './hooks/useHighlights';
 import useElementPositions from './hooks/useElementPositions';
 import usePageBackgrounds from './hooks/usePageBackgrounds';
 import useDragSelect from './hooks/useDragSelect';
+import useCloudSync from './hooks/useCloudSync';
 
-// Components
-import AuthModal from './components/AuthModal';
-import DocumentsList from './components/DocumentsList';
-import HistoryPanel from './components/HistoryPanel';
+// Components — always visible or core to editing (static imports)
 import CommentsSidebar from './components/CommentsSidebar';
 import CharactersPanel from './components/CharactersPanel';
-import NoteEditorModal from './components/NoteEditorModal';
-import StatsPanel from './components/StatsPanel';
-import GoToSceneModal from './components/GoToSceneModal';
-import ShortcutsPanel from './components/ShortcutsPanel';
-import RenameCharacterModal from './components/RenameCharacterModal';
 import SingleEditor from './components/SingleEditor';
-import BeatBoard from './components/BeatBoard';
+import BeatBoard from './components/BeatBoard/index';
 import WritingTimerWidget from './components/WritingTimerWidget';
 import ChatPanel from './components/ChatPanel';
-import AIRewriteModal from './components/AIRewriteModal';
 import OutlineSidebar from './components/OutlineSidebar';
 import HeaderBar from './components/HeaderBar';
 import ContextActionMenu from './components/ContextActionMenu';
 import LandingPage from './components/LandingPage';
-import ShareModal from './components/ShareModal';
-import TemplateModal from './components/TemplateModal';
+
+// Components — lazy-loaded modals (behind boolean guards, never needed on initial render)
+const AuthModal = lazy(() => import('./components/AuthModal'));
+const DocumentsList = lazy(() => import('./components/DocumentsList'));
+const HistoryPanel = lazy(() => import('./components/HistoryPanel'));
+const StatsPanel = lazy(() => import('./components/StatsPanel'));
+const GoToSceneModal = lazy(() => import('./components/GoToSceneModal'));
+const ShortcutsPanel = lazy(() => import('./components/ShortcutsPanel'));
+const RenameCharacterModal = lazy(() => import('./components/RenameCharacterModal'));
+const NoteEditorModal = lazy(() => import('./components/NoteEditorModal'));
+const AIRewriteModal = lazy(() => import('./components/AIRewriteModal'));
+const ShareModal = lazy(() => import('./components/ShareModal'));
+const TemplateModal = lazy(() => import('./components/TemplateModal'));
 
 // ============ MAIN EDITOR ============
 export default function ScreenplayEditor() {
@@ -87,6 +90,9 @@ export default function ScreenplayEditor() {
   const [currentUser, setCurrentUser] = useState(() => { const s = localStorage.getItem('screenplay-user'); return s ? JSON.parse(s) : null; });
   const [token, setToken] = useState(() => localStorage.getItem('screenplay-token'));
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [cloudUser, setCloudUser] = useState(null);
+  const [cloudToken, setCloudToken] = useState(null);
+  const [showCloudAuthModal, setShowCloudAuthModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showDocsList, setShowDocsList] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -133,6 +139,17 @@ export default function ScreenplayEditor() {
           setIsOwner(true);
           setDesktopReady(true);
           console.log('[DESKTOP] Ready — server at', SERVER_URL);
+          // Load persisted cloud credentials
+          try {
+            const creds = await window.electronAPI.cloudAuth.get();
+            if (creds && creds.token && creds.user) {
+              setCloudToken(creds.token);
+              setCloudUser(creds.user);
+              console.log('[DESKTOP] Cloud credentials loaded for', creds.user.name);
+            }
+          } catch (credErr) {
+            console.warn('[DESKTOP] Could not load cloud credentials:', credErr.message);
+          }
         }
       } catch (err) {
         console.error('[DESKTOP] Init failed:', err);
@@ -300,32 +317,107 @@ export default function ScreenplayEditor() {
     setElements, setTitle, setLastSaved, loadedDocRef
   });
 
+  // Cloud sync hook (desktop only) — must be before hooks that use effectiveDocId
+  const {
+    cloudShortId, cloudSyncedAt, editingMode, syncing,
+    loadCloudMeta, pushToCloud, pullFromCloud,
+    switchToCloud, switchToLocal, resetCloudSync,
+  } = useCloudSync({ cloudToken, cloudUser, setShowCloudAuthModal });
+
+  // Load cloud meta when document changes (desktop)
+  useEffect(() => {
+    if (IS_DESKTOP && docId) {
+      loadCloudMeta(docId);
+    } else {
+      resetCloudSync();
+    }
+  }, [docId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ============ CLOUD MODE: Dynamic routing for hooks ============
+  // When in cloud editing mode (desktop), redirect hooks to the cloud server
+  const effectiveServerUrl = (IS_DESKTOP && editingMode === 'cloud') ? CLOUD_URL : undefined;
+  const effectiveToken = (IS_DESKTOP && editingMode === 'cloud') ? cloudToken : token;
+  const effectiveDocId = (IS_DESKTOP && editingMode === 'cloud') ? cloudShortId : docId;
+
   // Auto-save hook (backup, cloud save, snapshots)
   useAutoSave({
-    docId, token, offlineDocId,
+    docId: effectiveDocId, token: effectiveToken, offlineDocId,
     elementsRef, titleRef, beatCardsRef, structureBeatsRef,
     sceneSynopsisRef, sceneStatusRef, whiteboardElementsRef, notesRef,
-    setLastSaved
+    setLastSaved,
+    serverUrl: effectiveServerUrl,
   });
 
   // Document loader hook
   useDocumentLoader({
-    docId, token, loadedDocRef,
+    docId: effectiveDocId, token: effectiveToken, loadedDocRef,
     setElements, setTitle, setCharacters, setComments, setSuggestions,
     setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
     setWhiteboardElements, setIsOwner, setMyRole, setPublicAccessState,
-    setLoading
+    setLoading,
+    serverUrl: effectiveServerUrl,
   });
 
   // Socket connection hook
   useSocketConnection({
-    docId, token,
+    docId: effectiveDocId, token: effectiveToken,
     socketRef, offlineDocIdRef,
     setConnected, setMyId, setMyRole, setUsers,
     setElements, setTitle, setComments, setSuggestions, setCollaborators,
     setChatMessages, setUnreadMessages,
-    playChatNotification
+    playChatNotification,
+    serverUrl: effectiveServerUrl,
   });
+
+  const [showSyncConfirm, setShowSyncConfirm] = useState(null); // 'push' | 'pull' | null
+
+  const handlePushToCloud = useCallback(async () => {
+    const result = await pushToCloud(docId, { elementsRef, titleRef, beatCardsRef, structureBeatsRef, sceneSynopsisRef, sceneStatusRef, whiteboardElementsRef });
+    if (result) {
+      console.log('[APP] Pushed to cloud successfully:', result);
+    }
+  }, [docId, pushToCloud]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handlePullFromCloud = useCallback(async () => {
+    const cloudData = await pullFromCloud(docId);
+    if (cloudData) {
+      // Apply cloud data to local state
+      if (cloudData.title) setTitle(cloudData.title);
+      if (cloudData.elements) setElements(cloudData.elements);
+      if (cloudData.beatCards) setBeatCards(cloudData.beatCards);
+      if (cloudData.structureBeats) setStructureBeats(cloudData.structureBeats);
+      if (cloudData.sceneSynopsis) setSceneSynopsis(cloudData.sceneSynopsis);
+      if (cloudData.sceneStatus) setSceneStatus(cloudData.sceneStatus);
+      if (cloudData.whiteboardElements) setWhiteboardElements(cloudData.whiteboardElements);
+      if (cloudData.comments) setComments(cloudData.comments);
+      if (cloudData.suggestions) setSuggestions(cloudData.suggestions);
+      console.log('[APP] Pulled from cloud successfully');
+    }
+  }, [docId, pullFromCloud]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleToggleEditingMode = useCallback(async () => {
+    if (editingMode === 'local') {
+      const cloudData = await switchToCloud();
+      if (cloudData) {
+        if (cloudData.title) setTitle(cloudData.title);
+        if (cloudData.elements) setElements(cloudData.elements);
+        if (cloudData.beatCards) setBeatCards(cloudData.beatCards);
+        if (cloudData.structureBeats) setStructureBeats(cloudData.structureBeats);
+        if (cloudData.sceneSynopsis) setSceneSynopsis(cloudData.sceneSynopsis);
+        if (cloudData.sceneStatus) setSceneStatus(cloudData.sceneStatus);
+        if (cloudData.whiteboardElements) setWhiteboardElements(cloudData.whiteboardElements);
+        if (cloudData.comments) setComments(cloudData.comments);
+        if (cloudData.suggestions) setSuggestions(cloudData.suggestions);
+        // Force document loader + socket to reconnect via docId change
+        loadedDocRef.current = null;
+      }
+    } else {
+      switchToLocal();
+      // Force reload from local server
+      loadedDocRef.current = null;
+      // Re-trigger document loader by setting a new ref state
+    }
+  }, [editingMode, switchToCloud, switchToLocal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogin = (user, newToken) => {
     setCurrentUser(user);
@@ -343,7 +435,24 @@ export default function ScreenplayEditor() {
       window.location.hash = pending;
     }
   };
-  const handleLogout = () => { 
+  const handleCloudLogin = useCallback(async (user, newToken) => {
+    setCloudUser(user);
+    setCloudToken(newToken);
+    setShowCloudAuthModal(false);
+    if (IS_DESKTOP && window.electronAPI?.cloudAuth) {
+      try { await window.electronAPI.cloudAuth.save({ token: newToken, user }); } catch (e) { /* silent */ }
+    }
+  }, []);
+
+  const handleCloudLogout = useCallback(async () => {
+    setCloudUser(null);
+    setCloudToken(null);
+    if (IS_DESKTOP && window.electronAPI?.cloudAuth) {
+      try { await window.electronAPI.cloudAuth.clear(); } catch (e) { /* silent */ }
+    }
+  }, []);
+
+  const handleLogout = () => {
     localStorage.removeItem('screenplay-token'); 
     localStorage.removeItem('screenplay-user'); 
     setCurrentUser(null); 
@@ -480,7 +589,7 @@ export default function ScreenplayEditor() {
 
   const remoteCursors = useMemo(() => users.filter(u => u.id !== myId), [users, myId]);
   const canEdit = myRole === 'editor';
-  const canEditNow = (isFullyConnected || !!offlineDocId) && canEdit;
+  const canEditNow = (isFullyConnected || !!offlineDocId || docId === 'local') && canEdit;
   const canComment = myRole === 'editor' || myRole === 'commenter';
 
   // V272: lockedElementsMap supprimé (à réimplémenter dans SingleEditor)
@@ -950,17 +1059,19 @@ export default function ScreenplayEditor() {
   }
 
   // Show landing page if not logged in (no token)
-  if (!token && (!docId || docId === '' || docId === 'local')) {
+  if (!token && (!docId || docId === '')) {
     return <LandingPage language={language} setLanguage={setLanguage} t={t} setTitle={setTitle} setShowAuthModal={setShowAuthModal} showAuthModal={showAuthModal} handleLogin={handleLogin} />;
   }
 
   return (
     <div className={`${darkMode ? 'theme-dark' : 'theme-light'}${focusMode ? ' focus-mode-active' : ''}`} style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: darkMode ? '#2b2b2b' : '#e5e7eb', color: darkMode ? '#e5e7eb' : '#2b2b2b', transition: 'background 0.3s, color 0.3s', overflow: 'hidden' }}>
-      {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} t={t} />}
-      
-      {showTemplateModal && <TemplateModal onSelectTemplate={createNewDocument} onClose={() => setShowTemplateModal(false)} darkMode={darkMode} />}
-      {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={() => { setShowDocsList(false); setShowTemplateModal(true); }} onClose={() => setShowDocsList(false)} t={t} />}
-      {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} t={t} />}
+      <Suspense fallback={null}>
+        {showAuthModal && <AuthModal onLogin={handleLogin} onClose={() => setShowAuthModal(false)} t={t} />}
+        {showCloudAuthModal && <AuthModal targetServer={CLOUD_URL} onLogin={handleCloudLogin} onClose={() => setShowCloudAuthModal(false)} t={t} />}
+        {showTemplateModal && <TemplateModal onSelectTemplate={createNewDocument} onClose={() => setShowTemplateModal(false)} darkMode={darkMode} />}
+        {showDocsList && token && <DocumentsList token={token} onSelectDoc={selectDocument} onCreateDoc={() => { setShowDocsList(false); setShowTemplateModal(true); }} onClose={() => setShowDocsList(false)} t={t} />}
+        {showHistory && token && docId && <HistoryPanel docId={docId} token={token} currentTitle={title} onRestore={() => { loadedDocRef.current = null; window.location.reload(); }} onClose={() => setShowHistory(false)} t={t} />}
+      </Suspense>
       
       {/* Search Panel */}
       {showSearch && (
@@ -1026,6 +1137,9 @@ export default function ScreenplayEditor() {
         onExportFountain={exportFountain} onExportTXT={exportTXT} onExportMarkdown={exportMarkdown}
         onLogin={() => setShowAuthModal(true)} onLogout={handleLogout}
         onCopyLink={copyLink}
+        editingMode={editingMode} cloudShortId={cloudShortId} cloudSyncedAt={cloudSyncedAt}
+        onToggleEditingMode={handleToggleEditingMode}
+        cloudUser={cloudUser} onCloudLogin={() => setShowCloudAuthModal(true)} onCloudLogout={handleCloudLogout}
       />
       
       {/* OFFLINE BANNER */}
@@ -1179,7 +1293,9 @@ export default function ScreenplayEditor() {
         </>
       )}
 
-      {showShareModal && <ShareModal shareLink={shareLink} isOwner={isOwner} publicAccessState={publicAccessState} togglePublicAccess={togglePublicAccess} changePublicRole={changePublicRole} onClose={() => setShowShareModal(false)} darkMode={darkMode} language={language} />}
+      <Suspense fallback={null}>
+        {showShareModal && <ShareModal shareLink={shareLink} isOwner={isOwner} publicAccessState={publicAccessState} togglePublicAccess={togglePublicAccess} changePublicRole={changePublicRole} onClose={() => { setShowShareModal(false); setShowSyncConfirm(null); }} darkMode={darkMode} language={language} cloudShortId={cloudShortId} cloudToken={cloudToken} cloudSyncedAt={cloudSyncedAt} syncing={syncing} onPushToCloud={handlePushToCloud} onPullFromCloud={handlePullFromCloud} onCloudLogin={() => { setShowShareModal(false); setShowCloudAuthModal(true); }} showSyncConfirm={showSyncConfirm} setShowSyncConfirm={setShowSyncConfirm} />}
+      </Suspense>
 
       {/* MAIN CONTENT AREA - Flex layout with sidebars */}
       <div style={{ 
@@ -1506,6 +1622,7 @@ export default function ScreenplayEditor() {
         />
       )}
       
+      <Suspense fallback={null}>
       {/* Note Editor Modal - FLOATING */}
       {showNoteFor && (
         <NoteEditorModal
@@ -1633,6 +1750,7 @@ export default function ScreenplayEditor() {
           darkMode={darkMode}
         />
       )}
+      </Suspense>
 
       {/* Drag overlay - prevents blue selection during panel drag */}
       {isDraggingAny && (
