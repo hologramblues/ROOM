@@ -7,6 +7,7 @@ const { startLocalServer } = require('./local-server');
 const { createMenu } = require('./menu');
 const { loadWindowState, trackWindowState } = require('./window-state');
 const { LOCAL_USER } = require('./local-auth');
+const { saveCloudCredentials, getCloudCredentials, clearCloudCredentials } = require('./cloud-auth');
 
 // Keep references to prevent garbage collection
 let mainWindow = null;
@@ -129,6 +130,21 @@ ipcMain.handle('write-file', async (event, filePath, data) => {
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+// Cloud auth handlers
+ipcMain.handle('cloud-auth-save', (event, { token, user }) => {
+  saveCloudCredentials(token, user);
+  return { success: true };
+});
+
+ipcMain.handle('cloud-auth-get', () => {
+  return getCloudCredentials();
+});
+
+ipcMain.handle('cloud-auth-clear', () => {
+  clearCloudCredentials();
+  return { success: true };
 });
 
 // ============ App lifecycle ============

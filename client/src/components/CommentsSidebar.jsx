@@ -1032,4 +1032,4 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
   );
 };
 
-export default CommentsSidebar;
+export default React.memo(CommentsSidebar);

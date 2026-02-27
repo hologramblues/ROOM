@@ -19,7 +19,10 @@
     "start": "craco start",
     "build": "craco build",
     "test": "craco test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "analyze": "ANALYZE=true craco build",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
   },
   "eslintConfig": {
     "extends": [
@@ -38,5 +41,12 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "webpack-bundle-analyzer": "^5.2.0"
   }
 }

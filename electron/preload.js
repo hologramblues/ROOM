@@ -26,4 +26,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Write file to disk (for exports)
   writeFile: (filePath, data) => ipcRenderer.invoke('write-file', filePath, data),
+
+  // Cloud auth (secure credential storage)
+  cloudAuth: {
+    save: ({ token, user }) => ipcRenderer.invoke('cloud-auth-save', { token, user }),
+    get: () => ipcRenderer.invoke('cloud-auth-get'),
+    clear: () => ipcRenderer.invoke('cloud-auth-clear'),
+  },
 });

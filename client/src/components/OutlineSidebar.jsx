@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { getInitials, stripHtml } from '../utils/helpers';
 
-export default function OutlineSidebar({
+function OutlineSidebar({
   outline, filteredOutline, currentSceneNumber,
   outlineFilter, setOutlineFilter,
   beatCards, structureBeats, setStructureBeats,
@@ -617,3 +617,5 @@ export default function OutlineSidebar({
     </>
   );
 }
+
+export default React.memo(OutlineSidebar);

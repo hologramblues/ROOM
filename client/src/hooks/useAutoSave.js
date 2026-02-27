@@ -18,8 +18,10 @@ export default function useAutoSave({
   docId, token, offlineDocId,
   elementsRef, titleRef, beatCardsRef, structureBeatsRef,
   sceneSynopsisRef, sceneStatusRef, whiteboardElementsRef, notesRef,
-  setLastSaved
+  setLastSaved,
+  serverUrl,
 }) {
+  const effectiveUrl = serverUrl || SERVER_URL;
   // Track last saved state for auto-save comparison
   const lastSavedElementsRef = useRef(null);
   const lastSavedTitleRef = useRef(null);
@@ -86,7 +88,7 @@ export default function useAutoSave({
 
       if (elementsChanged || titleChanged || beatDataChanged) {
         try {
-          const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/autosave', {
+          const res = await fetch(effectiveUrl + '/api/documents/' + docId + '/autosave', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
             body: JSON.stringify({
@@ -116,7 +118,7 @@ export default function useAutoSave({
     }, 10000); // Every 10 seconds
 
     return () => clearInterval(autoSaveInterval);
-  }, [docId, token, offlineDocId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [docId, token, offlineDocId, effectiveUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-snapshot every 15 minutes (only when document is open and has content)
   // Uses refs to avoid resetting the 15-min interval on every keystroke
@@ -134,7 +136,7 @@ export default function useAutoSave({
       try {
         const currentTitle = titleRef.current;
         const snapshotName = formatSnapshotName(currentTitle, true);
-        const res = await fetch(SERVER_URL + '/api/documents/' + docId + '/snapshot', {
+        const res = await fetch(effectiveUrl + '/api/documents/' + docId + '/snapshot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
           body: JSON.stringify({
@@ -159,7 +161,7 @@ export default function useAutoSave({
     }, 15 * 60 * 1000); // 15 minutes
 
     return () => clearInterval(autoSnapshotInterval);
-  }, [docId, token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [docId, token, effectiveUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { lastSavedElementsRef, lastSavedTitleRef, lastSavedBeatDataRef };
 }

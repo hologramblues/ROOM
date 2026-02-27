@@ -230,7 +230,7 @@ function startLocalServer() {
     app.get('/api/documents', authMiddleware, async (req, res) => {
       try {
         const docs = await Document.find().sort({ updatedAt: -1 }).limit(50);
-        const documents = docs.map(d => ({ shortId: d.shortId, title: d.title, updatedAt: d.updatedAt }));
+        const documents = docs.map(d => ({ shortId: d.shortId, title: d.title, updatedAt: d.updatedAt, cloudShortId: d.cloudShortId || null }));
         res.json({ documents });
       } catch (error) {
         res.status(500).json({ error: 'Erreur' });
@@ -243,6 +243,30 @@ function startLocalServer() {
         const doc = await Document.findOne({ shortId: req.params.shortId });
         if (!doc) return res.status(404).json({ error: 'Document non trouve' });
         res.json({ updatedAt: doc.updatedAt, title: doc.title });
+      } catch (error) {
+        res.status(500).json({ error: 'Erreur' });
+      }
+    });
+
+    // Cloud meta (get/set cloud mapping)
+    app.get('/api/documents/:shortId/cloud-meta', optionalAuthMiddleware, async (req, res) => {
+      try {
+        const doc = await Document.findOne({ shortId: req.params.shortId });
+        if (!doc) return res.status(404).json({ error: 'Document non trouve' });
+        res.json({ cloudShortId: doc.cloudShortId || null, cloudSyncedAt: doc.cloudSyncedAt || null });
+      } catch (error) {
+        res.status(500).json({ error: 'Erreur' });
+      }
+    });
+
+    app.put('/api/documents/:shortId/cloud-meta', optionalAuthMiddleware, async (req, res) => {
+      try {
+        const doc = await Document.findOne({ shortId: req.params.shortId });
+        if (!doc) return res.status(404).json({ error: 'Document non trouve' });
+        if (req.body.cloudShortId !== undefined) doc.cloudShortId = req.body.cloudShortId;
+        if (req.body.cloudSyncedAt !== undefined) doc.cloudSyncedAt = req.body.cloudSyncedAt;
+        await doc.save();
+        res.json({ cloudShortId: doc.cloudShortId, cloudSyncedAt: doc.cloudSyncedAt });
       } catch (error) {
         res.status(500).json({ error: 'Erreur' });
       }
@@ -266,6 +290,8 @@ function startLocalServer() {
           sceneSynopsis: doc.sceneSynopsis || {},
           sceneStatus: doc.sceneStatus || {},
           whiteboardElements: doc.whiteboardElements || [],
+          cloudShortId: doc.cloudShortId || null,
+          cloudSyncedAt: doc.cloudSyncedAt || null,
           isOwner: true,
           publicAccess: { enabled: false, role: 'viewer' },
         });

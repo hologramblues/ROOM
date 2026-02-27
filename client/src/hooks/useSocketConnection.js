@@ -8,13 +8,15 @@ export default function useSocketConnection({
   setConnected, setMyId, setMyRole, setUsers,
   setElements, setTitle, setComments, setSuggestions, setCollaborators,
   setChatMessages, setUnreadMessages,
-  playChatNotification
+  playChatNotification,
+  serverUrl,
 }) {
   useEffect(() => {
     if (docId === 'local') return; // Don't connect socket in local mode
     let isStale = false; // Guard against stale updates after cleanup
 
-    const socket = io(SERVER_URL, { transports: ['websocket', 'polling'], auth: { token }, reconnectionAttempts: 10, timeout: 30000 });
+    const effectiveUrl = serverUrl || SERVER_URL;
+    const socket = io(effectiveUrl, { transports: ['websocket', 'polling'], auth: { token }, reconnectionAttempts: 10, timeout: 30000 });
     socketRef.current = socket;
 
     socket.on('connect', () => { if (isStale) return; setConnected(true); setMyId(socket.id); if (docId && docId !== 'local') socket.emit('join-document', { docId }); });
@@ -117,5 +119,5 @@ export default function useSocketConnection({
     socket.on('chat-history', (messages) => { if (!isStale) setChatMessages(messages); });
 
     return () => { isStale = true; socket.disconnect(); };
-  }, [docId, token, playChatNotification]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [docId, token, playChatNotification, serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 }

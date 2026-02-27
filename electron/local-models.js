@@ -21,6 +21,8 @@ const FIELD_MAP = {
   whiteboardElements: 'whiteboard_elements',
   createdAt: 'created_at',
   updatedAt: 'updated_at',
+  cloudShortId: 'cloud_short_id',
+  cloudSyncedAt: 'cloud_synced_at',
 };
 
 const REVERSE_FIELD_MAP = {};
@@ -69,6 +71,14 @@ function rowToDoc(row) {
     if (doc.title !== undefined) {
       setClauses.push('title = @title');
       values.title = doc.title;
+    }
+    if (doc.cloudShortId !== undefined) {
+      setClauses.push('cloud_short_id = @cloud_short_id');
+      values.cloud_short_id = doc.cloudShortId;
+    }
+    if (doc.cloudSyncedAt !== undefined) {
+      setClauses.push('cloud_synced_at = @cloud_synced_at');
+      values.cloud_synced_at = doc.cloudSyncedAt;
     }
     setClauses.push("updated_at = datetime('now')");
     values.id = doc.id;

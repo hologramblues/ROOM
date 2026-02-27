@@ -1,3 +1,5 @@
+const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
+
 module.exports = {
   webpack: {
     configure: (webpackConfig) => {
@@ -8,6 +10,13 @@ module.exports = {
           fullySpecified: false
         }
       });
+      if (process.env.ANALYZE === 'true') {
+        webpackConfig.plugins.push(new BundleAnalyzerPlugin({
+          analyzerMode: 'static',
+          openAnalyzer: false,
+          reportFilename: 'bundle-report.html'
+        }));
+      }
       return webpackConfig;
     }
   }

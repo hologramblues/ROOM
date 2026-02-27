@@ -7,10 +7,13 @@ export default function useDocumentLoader({
   setElements, setTitle, setCharacters, setComments, setSuggestions,
   setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
   setWhiteboardElements, setIsOwner, setMyRole, setPublicAccessState,
-  setLoading
+  setLoading,
+  serverUrl,
 }) {
   // Load document via REST API
   useEffect(() => {
+    const effectiveUrl = serverUrl || SERVER_URL;
+
     const loadDocument = async () => {
       if (!docId || docId === 'local') {
         setElements([{ id: generateId(), type: 'scene', content: '' }]);
@@ -25,7 +28,7 @@ export default function useDocumentLoader({
       setLoading(true);
       try {
         const headers = { Authorization: 'Bearer ' + token };
-        const res = await fetch(SERVER_URL + '/api/documents/' + docId, { headers });
+        const res = await fetch(effectiveUrl + '/api/documents/' + docId, { headers });
         if (res.ok) {
           const data = await res.json();
           console.log('[LOAD] Document loaded with', data.elements?.length, 'elements');
@@ -99,5 +102,5 @@ export default function useDocumentLoader({
       setTimeout(() => setLoading(false), 100);
     };
     loadDocument();
-  }, [docId, token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [docId, token, serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 }

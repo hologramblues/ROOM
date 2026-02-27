@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatTime } from '../utils/helpers';
 
-export default function WritingTimerWidget({
+function WritingTimerWidget({
   timerPosition, timerCompact, setTimerCompact,
   timerSeconds, timerRunning, setTimerRunning, timerMode, setTimerMode,
   sprintDuration, sprintTimeLeft, setSprintTimeLeft,
@@ -330,3 +330,5 @@ export default function WritingTimerWidget({
     </div>
   );
 }
+
+export default React.memo(WritingTimerWidget);

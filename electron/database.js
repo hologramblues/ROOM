@@ -56,10 +56,15 @@ function initDatabase() {
     )
   `);
 
+  // Cloud sync columns (safe migration — ALTER TABLE ignores if column exists)
+  try { db.exec("ALTER TABLE documents ADD COLUMN cloud_short_id TEXT DEFAULT NULL"); } catch(e) {}
+  try { db.exec("ALTER TABLE documents ADD COLUMN cloud_synced_at TEXT DEFAULT NULL"); } catch(e) {}
+
   // Indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_documents_short_id ON documents(short_id);
     CREATE INDEX IF NOT EXISTS idx_history_document_id ON history_entries(document_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_documents_cloud_short_id ON documents(cloud_short_id);
   `);
 
   console.log('[DB] Database initialized successfully');

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { IS_DESKTOP } from '../constants/config';
 import { FONT_OPTIONS } from '../constants/fonts';
 import Logo from './Logo';
 import UserAvatar from './UserAvatar';
 
-export default function HeaderBar({
+function HeaderBar({
   // State toggles
   showOutline, setShowOutline, showComments, setShowComments,
   showTimer, setShowTimer, focusMode, setFocusMode,
@@ -38,7 +39,10 @@ export default function HeaderBar({
   onImportFDX, onCreateSnapshot,
   onExportFDX, onExportPDF, onExportFountain, onExportTXT, onExportMarkdown,
   onLogin, onLogout,
-  onCopyLink
+  onCopyLink,
+  // Cloud sync (desktop only)
+  editingMode, cloudShortId, cloudSyncedAt, onToggleEditingMode,
+  cloudUser, onCloudLogin, onCloudLogout,
 }) {
   // Internalized dropdown states
   const [showDocMenu, setShowDocMenu] = useState(false);
@@ -50,10 +54,10 @@ export default function HeaderBar({
   const [showTypeMenu, setShowTypeMenu] = useState(false);
 
   return (
-    <div style={{ position: 'sticky', top: 0, background: darkMode ? '#333333' : 'white', borderBottom: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, padding: '6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 200, gap: 16 }}>
+    <div style={{ position: 'sticky', top: 0, background: darkMode ? '#333333' : 'white', borderBottom: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`, padding: '6px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 200, gap: 16, WebkitAppRegion: IS_DESKTOP ? 'drag' : undefined, minWidth: 0 }}>
 
       {/* LEFT ZONE: Logo + Menus */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, WebkitAppRegion: 'no-drag' }}>
         <Logo darkMode={darkMode} />
 
         {/* DOCUMENT MENU */}
@@ -320,7 +324,7 @@ export default function HeaderBar({
       </div>
 
       {/* CENTER ZONE: Title only */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center', minWidth: 0, WebkitAppRegion: 'no-drag' }}>
         <div className="header-btn" data-tooltip={title} style={{ position: 'relative' }}>
           <input
             value={title}
@@ -336,14 +340,43 @@ export default function HeaderBar({
         </div>
         {docId && offlineDocId && <span style={{ fontSize: 10, color: '#f59e0b', whiteSpace: 'nowrap' }}>{t('offlineCopyBadge')}</span>}
         {docId && !offlineDocId && lastSaved && <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>✓ {lastSaved.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
-        {docId && !isFullyConnected && !offlineDocId && <span style={{ fontSize: 10, color: '#f59e0b', whiteSpace: 'nowrap' }}>⚠ Offline</span>}
+        {docId && !isFullyConnected && !offlineDocId && !IS_DESKTOP && <span style={{ fontSize: 10, color: '#f59e0b', whiteSpace: 'nowrap' }}>⚠ Offline</span>}
         {docId && !canEdit && <span style={{ fontSize: 10, background: '#f59e0b', color: 'black', padding: '2px 6px', borderRadius: 4 }}>{t('reading')}</span>}
+        {/* Cloud sync badge (desktop only) */}
+        {IS_DESKTOP && docId && (
+          <>
+            <span style={{
+              fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap',
+              background: editingMode === 'cloud' ? '#3b82f6' : (darkMode ? '#484848' : '#e5e7eb'),
+              color: editingMode === 'cloud' ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'),
+            }}>
+              {editingMode === 'cloud' ? t('cloudBadge') : t('localBadge')}
+            </span>
+            {cloudShortId && onToggleEditingMode && (
+              <button
+                onClick={onToggleEditingMode}
+                style={{
+                  fontSize: 10, padding: '2px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                  background: darkMode ? '#374151' : '#f3f4f6',
+                  color: darkMode ? '#d1d5db' : '#374151',
+                }}
+              >
+                {editingMode === 'local' ? t('switchToCloud') : t('switchToLocal')}
+              </button>
+            )}
+            {cloudSyncedAt && (
+              <span style={{ fontSize: 9, color: '#6b7280', whiteSpace: 'nowrap' }}>
+                {t('lastSynced')}: {new Date(cloudSyncedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </>
+        )}
         {loading && <span style={{ fontSize: 11, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ display: 'inline-block', width: 8, height: 8, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> {t('loading')}</span>}
         {importing && <span style={{ fontSize: 11, color: '#f59e0b' }}>Import en cours...</span>}
       </div>
 
       {/* RIGHT ZONE: User/Collab + Toggles */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, WebkitAppRegion: 'no-drag' }}>
         {/* User & Collaborators */}
         {currentUser ? (
           <>
@@ -362,6 +395,28 @@ export default function HeaderBar({
           </>
         ) : (
           <button onClick={onLogin} style={{ padding: '4px 10px', border: `1px solid ${darkMode ? '#555555' : '#d1d5db'}`, borderRadius: 6, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 11 }}>{t('connection')}</button>
+        )}
+        {/* Cloud account button (desktop only) */}
+        {IS_DESKTOP && (
+          cloudUser ? (
+            <button
+              onClick={onCloudLogout}
+              className="header-btn"
+              data-tooltip={`${t('cloudLogout')} (${cloudUser.name || cloudUser.email})`}
+              style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#3b82f6', color: 'white', cursor: 'pointer', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}
+            >
+              ☁
+            </button>
+          ) : (
+            <button
+              onClick={onCloudLogin}
+              className="header-btn"
+              data-tooltip={t('cloudAccount')}
+              style={{ padding: '4px 8px', borderRadius: 6, border: `1px dashed ${darkMode ? '#555555' : '#d1d5db'}`, background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontSize: 10, whiteSpace: 'nowrap' }}
+            >
+              ☁
+            </button>
+          )
         )}
 
         {docId && (
@@ -504,3 +559,5 @@ export default function HeaderBar({
     </div>
   );
 }
+
+export default React.memo(HeaderBar);

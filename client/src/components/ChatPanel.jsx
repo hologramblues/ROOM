@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function ChatPanel({
+function ChatPanel({
   chatPosition, onMouseDown, onClose,
   chatMessages, chatInput, setChatInput, sendChatMessage, chatEndRef,
   users, myId, darkMode
@@ -181,3 +181,5 @@ export default function ChatPanel({
     </div>
   );
 }
+
+export default React.memo(ChatPanel);

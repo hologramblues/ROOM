@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SERVER_URL } from '../constants/config';
 
-const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
+const AuthModal = ({ onLogin, onClose, t = (k) => k, targetServer }) => {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -9,6 +9,8 @@ const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
   const [lastName, setLastName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const authUrl = targetServer || SERVER_URL;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,11 +20,13 @@ const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
       const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
       const name = mode === 'register' ? `${firstName} ${lastName}`.trim() : '';
       const body = mode === 'login' ? { email, password } : { email, password, name };
-      const res = await fetch(SERVER_URL + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch(authUrl + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      localStorage.setItem('screenplay-token', data.token);
-      localStorage.setItem('screenplay-user', JSON.stringify(data.user));
+      if (!targetServer) {
+        localStorage.setItem('screenplay-token', data.token);
+        localStorage.setItem('screenplay-user', JSON.stringify(data.user));
+      }
       onLogin(data.user, data.token);
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
@@ -43,7 +47,9 @@ const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: '#333333', borderRadius: 12, padding: 32, width: 'calc(100% - 32px)', maxWidth: 380, boxShadow: '0 25px 50px rgba(0,0,0,0.5)', border: '1px solid #484848' }}>
-        <h2 style={{ color: 'white', fontSize: 22, marginBottom: 24, textAlign: 'center', fontWeight: 600 }}>{mode === 'login' ? t('connection') : t('registration')}</h2>
+        <h2 style={{ color: 'white', fontSize: 22, marginBottom: 24, textAlign: 'center', fontWeight: 600 }}>
+          {targetServer ? (t('cloudConnection') || 'Cloud') : (mode === 'login' ? t('connection') : t('registration'))}
+        </h2>
         <form onSubmit={handleSubmit}>
           {mode === 'register' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
@@ -133,7 +139,7 @@ const AuthModal = ({ onLogin, onClose, t = (k) => k }) => {
             fontSize: 13
           }}
         >
-          {t('continueWithoutAccount')}
+          {t('cancel')}
         </button>
       </div>
     </div>
