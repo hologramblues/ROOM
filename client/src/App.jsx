@@ -1584,7 +1584,7 @@ export default function ScreenplayEditor() {
       )}
 
       {/* Beat Board - Always mounted, hidden when not active */}
-      <div style={{ flex: 1, display: activeView === 'beatboard' ? 'flex' : 'none', flexDirection: 'column' }}>
+      <div style={{ flex: 1, display: activeView === 'beatboard' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
         <BeatBoard
           elements={elements}
           setElements={setElements}
