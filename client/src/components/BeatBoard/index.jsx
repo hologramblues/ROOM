@@ -318,57 +318,60 @@ const BeatBoard = React.memo(({
 
   return (
     <div className="beat-board">
-      {/* Scene Strip */}
-      <BeatBoardSceneStrip
-        sceneMetrics={sceneMetrics}
-        structureBeats={structureBeats}
-        beatCards={beatCards}
-        elements={elements}
-        darkMode={darkMode}
-        onReorderTimeline={handleReorderTimeline}
-        onDoubleClickCard={(card) => setEditModalCard(card)}
-        t={t}
-      />
-
-      {/* Active View */}
-      {viewMode === 'grid' && (
-        <BeatBoardGridView
-          beatCards={beatCards}
-          setBeatCards={setBeatCards}
+      {/* Content area — takes remaining space, toolbar stays visible below */}
+      <div className="bb-content">
+        {/* Scene Strip */}
+        <BeatBoardSceneStrip
           sceneMetrics={sceneMetrics}
           structureBeats={structureBeats}
-          elements={elements}
-          selectedCards={selectedCards}
-          setSelectedCards={setSelectedCards}
-          onToggleCut={toggleCut}
-          onUpdateCard={updateCard}
-          onDeleteCard={deleteCard}
-          onOpenEditModal={(card) => setEditModalCard(card)}
-          onPushToUndo={onPushToUndo}
-          darkMode={darkMode}
-          t={t}
-        />
-      )}
-
-      {viewMode === 'canvas' && (
-        <BeatBoardCanvasView
           beatCards={beatCards}
-          setBeatCards={setBeatCards}
-          selectedCards={selectedCards}
-          setSelectedCards={setSelectedCards}
-          darkMode={darkMode}
-          isActive={isActive}
-          onPushToUndo={onPushToUndo}
-          onOpenEditModal={(card) => setEditModalCard(card)}
-          onToggleCut={toggleCut}
-          onDeleteCard={deleteCard}
-          onUpdateCard={updateCard}
           elements={elements}
-          whiteboardElements={whiteboardElements}
-          setWhiteboardElements={setWhiteboardElements}
+          darkMode={darkMode}
+          onReorderTimeline={handleReorderTimeline}
+          onDoubleClickCard={(card) => setEditModalCard(card)}
           t={t}
         />
-      )}
+
+        {/* Active View */}
+        {viewMode === 'grid' && (
+          <BeatBoardGridView
+            beatCards={beatCards}
+            setBeatCards={setBeatCards}
+            sceneMetrics={sceneMetrics}
+            structureBeats={structureBeats}
+            elements={elements}
+            selectedCards={selectedCards}
+            setSelectedCards={setSelectedCards}
+            onToggleCut={toggleCut}
+            onUpdateCard={updateCard}
+            onDeleteCard={deleteCard}
+            onOpenEditModal={(card) => setEditModalCard(card)}
+            onPushToUndo={onPushToUndo}
+            darkMode={darkMode}
+            t={t}
+          />
+        )}
+
+        {viewMode === 'canvas' && (
+          <BeatBoardCanvasView
+            beatCards={beatCards}
+            setBeatCards={setBeatCards}
+            selectedCards={selectedCards}
+            setSelectedCards={setSelectedCards}
+            darkMode={darkMode}
+            isActive={isActive}
+            onPushToUndo={onPushToUndo}
+            onOpenEditModal={(card) => setEditModalCard(card)}
+            onToggleCut={toggleCut}
+            onDeleteCard={deleteCard}
+            onUpdateCard={updateCard}
+            elements={elements}
+            whiteboardElements={whiteboardElements}
+            setWhiteboardElements={setWhiteboardElements}
+            t={t}
+          />
+        )}
+      </div>
 
       {/* Footer toolbar */}
       <BeatBoardToolbar

@@ -45,6 +45,15 @@
   overflow: hidden;
 }
 
+/* Content area — fills space between header and footer toolbar */
+.bb-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* Toolbar */
 .bb-toolbar {
   height: 34px;
