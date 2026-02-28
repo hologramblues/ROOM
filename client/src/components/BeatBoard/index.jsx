@@ -37,8 +37,6 @@ const BeatBoard = React.memo(({
   });
   const [selectedCards, setSelectedCards] = useState(new Set());
   const [editModalCard, setEditModalCard] = useState(null);
-  const [timelineSyncMode, setTimelineSyncMode] = useState('live');
-  const [hasTimelineChanges, setHasTimelineChanges] = useState(false);
 
   const defaultCardColor = '#ffffff';
 
@@ -166,41 +164,6 @@ const BeatBoard = React.memo(({
     setEditModalCard(newNote);
   }, [setBeatCards]);
 
-  // Apply timeline order to script
-  const applyTimelineOrder = useCallback(() => {
-    const linkedCards = timelineCards.filter(c => c.linkedSceneId);
-    if (linkedCards.length === 0) return;
-    onPushToUndo?.();
-
-    setElements(prev => {
-      const sceneIndices = prev.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
-      let newElements = [];
-      const usedSceneIds = new Set();
-
-      linkedCards.forEach(card => {
-        const sceneIdx = prev.findIndex(el => el.id === card.linkedSceneId);
-        if (sceneIdx === -1) return;
-        const scenePos = sceneIndices.indexOf(sceneIdx);
-        const nextSceneIdx = scenePos < sceneIndices.length - 1 ? sceneIndices[scenePos + 1] : prev.length;
-        newElements.push(...prev.slice(sceneIdx, nextSceneIdx));
-        usedSceneIds.add(card.linkedSceneId);
-      });
-
-      prev.filter(el => el.type === 'scene').forEach(scene => {
-        if (!usedSceneIds.has(scene.id)) {
-          const sceneIdx = prev.findIndex(el => el.id === scene.id);
-          const scenePos = sceneIndices.indexOf(sceneIdx);
-          const nextSceneIdx = scenePos < sceneIndices.length - 1 ? sceneIndices[scenePos + 1] : prev.length;
-          newElements.push(...prev.slice(sceneIdx, nextSceneIdx));
-        }
-      });
-
-      return newElements.length > 0 ? newElements : prev;
-    });
-    setHasTimelineChanges(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineCards, setElements, onPushToUndo]);
-
   // Reorder timeline (from scene strip drag)
   const handleReorderTimeline = useCallback((draggedId, draggedIdx, dropIndex) => {
     onPushToUndo?.();
@@ -214,38 +177,34 @@ const BeatBoard = React.memo(({
       return newIdx !== -1 ? { ...c, timelineIndex: newIdx } : c;
     }));
 
-    if (timelineSyncMode === 'live') {
-      const newSceneOrder = orderedIds
-        .map(id => beatCards.find(c => c.id === id)?.linkedSceneId)
-        .filter(Boolean);
+    const newSceneOrder = orderedIds
+      .map(id => beatCards.find(c => c.id === id)?.linkedSceneId)
+      .filter(Boolean);
 
-      const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
-      let newElements = [];
-      const usedSceneIds = new Set();
+    const sceneIndices = elements.map((el, i) => el.type === 'scene' ? i : -1).filter(i => i >= 0);
+    let newElements = [];
+    const usedSceneIds = new Set();
 
-      newSceneOrder.forEach(sceneId => {
-        const sceneIdx = elements.findIndex(el => el.id === sceneId);
-        if (sceneIdx === -1) return;
+    newSceneOrder.forEach(sceneId => {
+      const sceneIdx = elements.findIndex(el => el.id === sceneId);
+      if (sceneIdx === -1) return;
+      const scenePos = sceneIndices.indexOf(sceneIdx);
+      const nextSceneIdx = scenePos < sceneIndices.length - 1 ? sceneIndices[scenePos + 1] : elements.length;
+      newElements.push(...elements.slice(sceneIdx, nextSceneIdx));
+      usedSceneIds.add(sceneId);
+    });
+
+    elements.filter(el => el.type === 'scene').forEach(scene => {
+      if (!usedSceneIds.has(scene.id)) {
+        const sceneIdx = elements.findIndex(el => el.id === scene.id);
         const scenePos = sceneIndices.indexOf(sceneIdx);
         const nextSceneIdx = scenePos < sceneIndices.length - 1 ? sceneIndices[scenePos + 1] : elements.length;
         newElements.push(...elements.slice(sceneIdx, nextSceneIdx));
-        usedSceneIds.add(sceneId);
-      });
+      }
+    });
 
-      elements.filter(el => el.type === 'scene').forEach(scene => {
-        if (!usedSceneIds.has(scene.id)) {
-          const sceneIdx = elements.findIndex(el => el.id === scene.id);
-          const scenePos = sceneIndices.indexOf(sceneIdx);
-          const nextSceneIdx = scenePos < sceneIndices.length - 1 ? sceneIndices[scenePos + 1] : elements.length;
-          newElements.push(...elements.slice(sceneIdx, nextSceneIdx));
-        }
-      });
-
-      setElements(newElements);
-    } else {
-      setHasTimelineChanges(true);
-    }
-  }, [sceneMetrics, beatCards, elements, setElements, setBeatCards, onPushToUndo, timelineSyncMode]);
+    setElements(newElements);
+  }, [sceneMetrics, beatCards, elements, setElements, setBeatCards, onPushToUndo]);
 
   // Apply structure preset
   const applyStructurePreset = useCallback((presetId) => {
@@ -363,13 +322,8 @@ const BeatBoard = React.memo(({
       <BeatBoardToolbar
         viewMode={viewMode}
         setViewMode={setViewMode}
-        timelineSyncMode={timelineSyncMode}
-        setTimelineSyncMode={setTimelineSyncMode}
-        hasTimelineChanges={hasTimelineChanges}
-        setHasTimelineChanges={setHasTimelineChanges}
         onAddCard={addNewCard}
         onAddNote={addNewNote}
-        onApplyToScript={applyTimelineOrder}
         onExportSVG={handleExportSVG}
         onApplyPreset={applyStructurePreset}
         onClearStructure={clearStructure}
