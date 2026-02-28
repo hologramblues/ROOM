@@ -34,12 +34,6 @@ const BeatBoardToolbar = ({
         >
           {t('canvasView') || 'Canvas'}
         </button>
-        <button
-          className={`bb-toolbar__view-btn ${viewMode === 'whiteboard' ? 'bb-toolbar__view-btn--active' : ''}`}
-          onClick={() => setViewMode('whiteboard')}
-        >
-          {t('drawView') || 'Dessin'}
-        </button>
       </div>
 
       {/* Add buttons */}

@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+
+const Excalidraw = lazy(() => import('@excalidraw/excalidraw').then(module => ({ default: module.Excalidraw })));
 
 const statusColors = { done: '#22c55e', progress: '#3b82f6', urgent: '#ef4444' };
 const statusIcons = { done: '\u2713', progress: '\u25D0', urgent: '!' };
@@ -16,6 +18,9 @@ const BeatBoardCanvasView = ({
   onDeleteCard,
   onUpdateCard,
   elements,
+  // Whiteboard (drawing) props
+  whiteboardElements,
+  setWhiteboardElements,
   t,
 }) => {
   const [canvasZoom, setCanvasZoom] = useState(1);
@@ -26,18 +31,25 @@ const BeatBoardCanvasView = ({
   const [draggedCard, setDraggedCard] = useState(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [pendingDrag, setPendingDrag] = useState(null);
+  // Drawing (Excalidraw) state
+  const [drawingEnabled, setDrawingEnabled] = useState(false);
+  const [whiteboardKey, setWhiteboardKey] = useState(0);
+  const [selectedExcalidrawId, setSelectedExcalidrawId] = useState(null);
+
   const canvasRef = useRef(null);
   const lastClickRef = useRef({ cardId: null, time: 0 });
   const dragOriginalPosRef = useRef(null);
   const dragSelectedPositionsRef = useRef(null);
   const dragMoveRAF = useRef(null);
+  const excalidrawRef = useRef(null);
 
   const cardWidth = 240;
   const cardMinHeight = 180;
+  const defaultCardColor = '#ffffff';
 
-  // Wheel handler
+  // Wheel handler — only when drawing is NOT active (Excalidraw handles its own)
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || drawingEnabled) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -58,11 +70,11 @@ const BeatBoardCanvasView = ({
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     return () => canvas.removeEventListener('wheel', handleWheel);
-  }, [isActive]);
+  }, [isActive, drawingEnabled]);
 
   // Space key for pan mode
   useEffect(() => {
-    if (!isActive) { setIsSpacePressed(false); setIsPanning(false); return; }
+    if (!isActive || drawingEnabled) { setIsSpacePressed(false); setIsPanning(false); return; }
     const down = (e) => {
       if (e.code === 'Space' && !e.repeat && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && !document.activeElement?.isContentEditable) {
         e.preventDefault();
@@ -75,16 +87,17 @@ const BeatBoardCanvasView = ({
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-  }, [isActive]);
+  }, [isActive, drawingEnabled]);
 
   // Pan handlers
   const handlePanStart = useCallback((e) => {
+    if (drawingEnabled) return;
     if (isSpacePressed && (e.target === canvasRef.current || e.target.classList.contains('bb-canvas__bg'))) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
-  }, [isSpacePressed, pan]);
+  }, [isSpacePressed, pan, drawingEnabled]);
 
   const handlePanMove = useCallback((e) => {
     if (isPanning) setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
@@ -160,7 +173,7 @@ const BeatBoardCanvasView = ({
     });
   }, [draggedCard, dragOffset, pan, canvasZoom, pendingDrag, setBeatCards]);
 
-  const handleDragEnd = useCallback((e) => {
+  const handleDragEnd = useCallback(() => {
     if (dragMoveRAF.current) { cancelAnimationFrame(dragMoveRAF.current); dragMoveRAF.current = null; }
 
     if (pendingDrag) {
@@ -198,15 +211,89 @@ const BeatBoardCanvasView = ({
     return map;
   }, [elements]);
 
+  // Excalidraw handlers
+  const handleExcalidrawChange = useCallback((elems, appState) => {
+    setWhiteboardElements(elems);
+
+    // Sync zoom/pan from Excalidraw
+    if (appState.zoom?.value !== undefined) {
+      const newZoom = appState.zoom.value;
+      if (Math.abs(newZoom - canvasZoom) > 0.01) setCanvasZoom(newZoom);
+    }
+    if (appState.scrollX !== undefined && appState.scrollY !== undefined) {
+      if (Math.abs(appState.scrollX - pan.x) > 1 || Math.abs(appState.scrollY - pan.y) > 1) {
+        setPan({ x: appState.scrollX, y: appState.scrollY });
+      }
+    }
+
+    const selectedIds = Object.keys(appState.selectedElementIds || {});
+    if (selectedIds.length === 1) {
+      const sel = elems.find(el => el.id === selectedIds[0]);
+      if (sel && ['rectangle', 'ellipse', 'text'].includes(sel.type)) {
+        setSelectedExcalidrawId(selectedIds[0]);
+      } else {
+        setSelectedExcalidrawId(null);
+      }
+    } else {
+      setSelectedExcalidrawId(null);
+    }
+  }, [setWhiteboardElements, canvasZoom, pan]);
+
+  const convertExcalidrawToCard = useCallback((elementId, cardType = 'scene') => {
+    const api = excalidrawRef.current;
+    if (!api) return;
+
+    const elems = api.getSceneElements();
+    const element = elems.find(el => el.id === elementId);
+    if (!element) return;
+
+    let title = cardType === 'note' ? '\uD83D\uDCDD Note' : 'Nouvelle scene';
+    let synopsis = '';
+
+    if (element.type === 'text') {
+      title = element.text.split('\n')[0].substring(0, 50) || title;
+      synopsis = element.text.split('\n').slice(1).join('\n') || '';
+    } else {
+      const boundText = elems.find(el => el.containerId === element.id && el.type === 'text');
+      if (boundText) {
+        title = boundText.text.split('\n')[0].substring(0, 50) || title;
+        synopsis = boundText.text.split('\n').slice(1).join('\n') || '';
+      }
+    }
+
+    const newCard = {
+      id: (cardType === 'note' ? 'note_' : 'card_') + Date.now(),
+      linkedSceneId: null, linkedSceneIndex: null,
+      title, synopsis,
+      color: cardType === 'note' ? '#fbbf24' : defaultCardColor,
+      position: { x: element.x, y: element.y },
+      timelineIndex: null, status: null, isNew: true, type: cardType,
+    };
+
+    setBeatCards(prev => [...prev, newCard]);
+    setSelectedCards(new Set([newCard.id]));
+    onOpenEditModal(newCard);
+
+    api.updateScene({
+      elements: elems.filter(el => el.id !== elementId && el.containerId !== elementId)
+    });
+    setSelectedExcalidrawId(null);
+  }, [setBeatCards, setSelectedCards, onOpenEditModal]);
+
+  const toggleDrawing = useCallback(() => {
+    if (!drawingEnabled) setWhiteboardKey(k => k + 1);
+    setDrawingEnabled(prev => !prev);
+  }, [drawingEnabled]);
+
   return (
     <div
       ref={canvasRef}
       className="bb-canvas"
-      onMouseDown={handlePanStart}
-      onMouseMove={handlePanMove}
-      onMouseUp={handlePanEnd}
-      onMouseLeave={handlePanEnd}
-      onClick={() => setSelectedCards(new Set())}
+      onMouseDown={!drawingEnabled ? handlePanStart : undefined}
+      onMouseMove={!drawingEnabled ? handlePanMove : undefined}
+      onMouseUp={!drawingEnabled ? handlePanEnd : undefined}
+      onMouseLeave={!drawingEnabled ? handlePanEnd : undefined}
+      onClick={!drawingEnabled ? () => setSelectedCards(new Set()) : undefined}
       style={{
         cursor: isPanning ? 'grabbing' : (isSpacePressed ? 'grab' : 'default'),
         backgroundImage: darkMode ? 'radial-gradient(circle, #484848 1px, transparent 1px)' : 'radial-gradient(circle, #d1d5db 1px, transparent 1px)',
@@ -214,7 +301,8 @@ const BeatBoardCanvasView = ({
         backgroundPosition: `${pan.x * canvasZoom}px ${pan.y * canvasZoom}px`,
       }}
     >
-      <div className="bb-canvas__cards">
+      {/* Cards layer — above Excalidraw so cards remain interactive */}
+      <div className="bb-canvas__cards" style={{ zIndex: drawingEnabled ? 60 : 1 }}>
         {beatCards.map(card => {
           const isCut = card.timelineIndex !== null;
           const isNote = card.type === 'note';
@@ -233,10 +321,8 @@ const BeatBoardCanvasView = ({
               key={card.id}
               className="bb-canvas__card"
               style={{
-                left: screenX,
-                top: screenY,
-                width: scaledWidth,
-                minHeight: scaledMinHeight,
+                left: screenX, top: screenY,
+                width: scaledWidth, minHeight: scaledMinHeight,
                 pointerEvents: 'auto',
               }}
               onMouseDown={(e) => handleDragStart(e, card)}
@@ -303,13 +389,96 @@ const BeatBoardCanvasView = ({
         })}
       </div>
 
-      {/* Zoom controls */}
-      <div className="bb-canvas__zoom-controls">
-        <button className="bb-canvas__zoom-btn" onClick={() => setCanvasZoom(z => Math.max(0.3, z - 0.1))}>{'\u2212'}</button>
-        <span className="bb-canvas__zoom-label">{Math.round(canvasZoom * 100)}%</span>
-        <button className="bb-canvas__zoom-btn" onClick={() => setCanvasZoom(z => Math.min(2, z + 0.1))}>+</button>
-        <button className="bb-canvas__zoom-btn" onClick={() => { setCanvasZoom(1); setPan({ x: 0, y: 0 }); }} style={{ fontSize: 10, width: 'auto', padding: '0 6px' }}>Reset</button>
+      {/* Excalidraw drawing overlay */}
+      {drawingEnabled && (
+        <div className="bb-whiteboard" style={{ position: 'absolute', inset: 0, zIndex: 50 }}>
+          <Suspense fallback={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--bb-text-secondary)' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>{'\u270F\uFE0F'}</div>
+                <div>{t('loadingWhiteboard') || 'Chargement du whiteboard...'}</div>
+              </div>
+            </div>
+          }>
+            <Excalidraw
+              key={whiteboardKey}
+              excalidrawAPI={(api) => { excalidrawRef.current = api; }}
+              initialData={{
+                elements: whiteboardElements,
+                appState: {
+                  viewBackgroundColor: 'transparent',
+                  theme: darkMode ? 'dark' : 'light',
+                  gridSize: null,
+                  zenModeEnabled: false,
+                  viewModeEnabled: false,
+                  scrollX: pan.x,
+                  scrollY: pan.y,
+                  zoom: { value: canvasZoom },
+                }
+              }}
+              onChange={handleExcalidrawChange}
+              theme={darkMode ? 'dark' : 'light'}
+              UIOptions={{
+                canvasActions: { loadScene: false, export: { saveFileToDisk: false }, saveAsImage: false, changeViewBackgroundColor: false },
+                tools: { image: false },
+              }}
+            />
+          </Suspense>
+
+          {/* Convert to card menu */}
+          {selectedExcalidrawId && (
+            <div className="bb-whiteboard__convert-menu">
+              <span className="bb-whiteboard__convert-label">{t('convertTo') || 'Convertir en :'}</span>
+              <button className="bb-whiteboard__convert-btn bb-whiteboard__convert-btn--scene" onClick={() => convertExcalidrawToCard(selectedExcalidrawId, 'scene')}>
+                {'\uD83C\uDFAC'} {t('scene') || 'Scene'}
+              </button>
+              <button className="bb-whiteboard__convert-btn bb-whiteboard__convert-btn--note" onClick={() => convertExcalidrawToCard(selectedExcalidrawId, 'note')}>
+                {'\uD83D\uDCDD'} Note
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Drawing toggle button — top left */}
+      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 100 }}>
+        <button
+          onClick={toggleDrawing}
+          style={{
+            padding: '7px 12px', height: 32, borderRadius: 6,
+            background: drawingEnabled ? '#8b5cf6' : (darkMode ? 'rgba(58,58,58,0.95)' : 'rgba(255,255,255,0.98)'),
+            border: drawingEnabled ? 'none' : `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
+            color: drawingEnabled ? 'white' : (darkMode ? '#9ca3af' : '#6b7280'),
+            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 5,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          }}
+        >
+          {'\u270F\uFE0F'} {drawingEnabled ? (t('drawingOn') || 'Dessin ON') : (t('draw') || 'Dessiner')}
+        </button>
       </div>
+
+      {/* Zoom controls — bottom right, hidden when drawing (Excalidraw has its own) */}
+      {!drawingEnabled && (
+        <div className="bb-canvas__zoom-controls">
+          <button className="bb-canvas__zoom-btn" onClick={() => setCanvasZoom(z => Math.max(0.3, z - 0.1))}>{'\u2212'}</button>
+          <span className="bb-canvas__zoom-label">{Math.round(canvasZoom * 100)}%</span>
+          <button className="bb-canvas__zoom-btn" onClick={() => setCanvasZoom(z => Math.min(2, z + 0.1))}>+</button>
+          <button className="bb-canvas__zoom-btn" onClick={() => { setCanvasZoom(1); setPan({ x: 0, y: 0 }); }} style={{ fontSize: 10, width: 'auto', padding: '0 6px' }}>Reset</button>
+        </div>
+      )}
+
+      {/* Drawing instructions */}
+      {drawingEnabled && (
+        <div style={{
+          position: 'absolute', bottom: 16, left: 16,
+          background: darkMode ? 'rgba(51,51,51,0.9)' : 'rgba(255,255,255,0.9)',
+          padding: '8px 12px', borderRadius: 6, fontSize: 10, color: 'var(--bb-text-secondary)',
+          maxWidth: 280, zIndex: 100,
+        }}>
+          {t('whiteboardInstructions') || 'Dessinez librement \u2022 Selectionnez une forme pour la convertir en carte'}
+        </div>
+      )}
     </div>
   );
 };

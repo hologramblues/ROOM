@@ -19,8 +19,10 @@ const BeatBoardGridView = ({
 }) => {
   const [contextMenu, setContextMenu] = useState(null);
   const [gridDragId, setGridDragId] = useState(null);
-  const [gridDropId, setGridDropId] = useState(null);
+  const [gridDropIdx, setGridDropIdx] = useState(null); // index in the flat card list, not card id
+  const [gridZoom, setGridZoom] = useState(1);
   const lastClickRef = useRef({ cardId: null, time: 0 });
+  const gridRef = useRef(null);
 
   const cardColors = ['#ffffff', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
@@ -37,16 +39,19 @@ const BeatBoardGridView = ({
     return map;
   }, [elements]);
 
+  // Flat ordered list of timeline cards (for insert-between logic)
+  const orderedTimelineCards = useMemo(
+    () => beatCards.filter(c => c.timelineIndex !== null).sort((a, b) => a.timelineIndex - b.timelineIndex),
+    [beatCards]
+  );
+
   // Group cards by acts (structure beats)
   const actGroups = useMemo(() => {
-    const timelineCards = beatCards
-      .filter(c => c.timelineIndex !== null)
-      .sort((a, b) => a.timelineIndex - b.timelineIndex);
+    const timelineCards = orderedTimelineCards;
     const uncutCards = beatCards.filter(c => c.timelineIndex === null && c.type !== 'note');
     const notes = beatCards.filter(c => c.type === 'note');
 
     if (structureBeats.length === 0) {
-      // No structure beats — one single group
       const groups = [];
       if (timelineCards.length > 0) {
         groups.push({
@@ -74,14 +79,12 @@ const BeatBoardGridView = ({
       return groups;
     }
 
-    // Sort beats by first scene position
     const sortedBeats = [...structureBeats].sort((a, b) => {
       const aCard = sceneMetrics.cards.find(c => c.linkedSceneId === a.startSceneId);
       const bCard = sceneMetrics.cards.find(c => c.linkedSceneId === b.startSceneId);
       return (aCard?.startPage || 0) - (bCard?.startPage || 0);
     });
 
-    // Assign each timeline card to a beat
     const groups = sortedBeats.map((beat, beatIdx) => {
       const nextBeat = sortedBeats[beatIdx + 1];
       const beatStartCard = sceneMetrics.cards.find(c => c.linkedSceneId === beat.startSceneId);
@@ -112,7 +115,14 @@ const BeatBoardGridView = ({
     }
 
     return groups;
-  }, [beatCards, structureBeats, sceneMetrics, t]);
+  }, [beatCards, orderedTimelineCards, structureBeats, sceneMetrics, t]);
+
+  // Build a flat index map: card id -> position in the ordered timeline
+  const cardTimelineIndex = useMemo(() => {
+    const map = {};
+    orderedTimelineCards.forEach((c, i) => { map[c.id] = i; });
+    return map;
+  }, [orderedTimelineCards]);
 
   const handleCardMouseDown = useCallback((e, card) => {
     e.stopPropagation();
@@ -131,12 +141,21 @@ const BeatBoardGridView = ({
       setSelectedCards(new Set([card.id]));
     }
 
-    // Start grid drag
     setGridDragId(card.id);
   }, [selectedCards, setSelectedCards]);
 
+  // Determine drop position based on mouse position relative to card center
+  const handleCardMouseEnter = useCallback((e, card) => {
+    if (!gridDragId || gridDragId === card.id) return;
+    const dragTimeIdx = cardTimelineIndex[gridDragId];
+    const dropTimeIdx = cardTimelineIndex[card.id];
+    if (dragTimeIdx === undefined || dropTimeIdx === undefined) return;
+    // Insert before this card's position
+    setGridDropIdx(dropTimeIdx);
+  }, [gridDragId, cardTimelineIndex]);
+
   const handleCardMouseUp = useCallback((card) => {
-    if (gridDragId === card.id && !gridDropId) {
+    if (gridDragId === card.id && gridDropIdx === null) {
       // It was a click, not a drag
       const now = Date.now();
       const last = lastClickRef.current;
@@ -148,32 +167,26 @@ const BeatBoardGridView = ({
       }
     }
 
-    if (gridDragId && gridDropId && gridDragId !== gridDropId) {
-      onPushToUndo?.();
-      // Reorder: move gridDragId to position of gridDropId
-      setBeatCards(prev => {
-        const dragIdx = prev.findIndex(c => c.id === gridDragId);
-        const dropIdx = prev.findIndex(c => c.id === gridDropId);
-        if (dragIdx === -1 || dropIdx === -1) return prev;
+    if (gridDragId && gridDropIdx !== null) {
+      const dragTimeIdx = cardTimelineIndex[gridDragId];
+      if (dragTimeIdx !== undefined && dragTimeIdx !== gridDropIdx && dragTimeIdx !== gridDropIdx - 1) {
+        onPushToUndo?.();
+        // Insert-between: remove dragged card, insert at drop position
+        const ids = orderedTimelineCards.map(c => c.id);
+        const [removed] = ids.splice(dragTimeIdx, 1);
+        const insertAt = gridDropIdx > dragTimeIdx ? gridDropIdx - 1 : gridDropIdx;
+        ids.splice(insertAt, 0, removed);
 
-        const dragCard = prev[dragIdx];
-        const dropCard = prev[dropIdx];
-
-        // Swap timeline indices
-        if (dragCard.timelineIndex !== null && dropCard.timelineIndex !== null) {
-          return prev.map(c => {
-            if (c.id === gridDragId) return { ...c, timelineIndex: dropCard.timelineIndex };
-            if (c.id === gridDropId) return { ...c, timelineIndex: dragCard.timelineIndex };
-            return c;
-          });
-        }
-        return prev;
-      });
+        setBeatCards(prev => prev.map(c => {
+          const newIdx = ids.indexOf(c.id);
+          return newIdx !== -1 ? { ...c, timelineIndex: newIdx } : c;
+        }));
+      }
     }
 
     setGridDragId(null);
-    setGridDropId(null);
-  }, [gridDragId, gridDropId, onOpenEditModal, onPushToUndo, setBeatCards]);
+    setGridDropIdx(null);
+  }, [gridDragId, gridDropIdx, cardTimelineIndex, orderedTimelineCards, onOpenEditModal, onPushToUndo, setBeatCards]);
 
   const handleContextMenu = useCallback((e, card) => {
     e.preventDefault();
@@ -190,8 +203,53 @@ const BeatBoardGridView = ({
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
+  // Wheel zoom
+  const handleWheel = useCallback((e) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      setGridZoom(z => Math.min(2, Math.max(0.4, z - e.deltaY * 0.002)));
+    }
+  }, []);
+
+  // Attach wheel with passive:false for zoom
+  React.useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
+
+  const minCardWidth = Math.round(220 * gridZoom);
+
   return (
-    <div className="bb-grid" onClick={() => { setSelectedCards(new Set()); closeContextMenu(); }}>
+    <div
+      ref={gridRef}
+      className="bb-grid"
+      onClick={() => { setSelectedCards(new Set()); closeContextMenu(); }}
+      onMouseUp={() => { setGridDragId(null); setGridDropIdx(null); }}
+    >
+      {/* Zoom controls */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+        padding: '4px 0', marginBottom: 8, gap: 6,
+      }}>
+        <button
+          className="bb-canvas__zoom-btn"
+          onClick={() => setGridZoom(z => Math.max(0.4, z - 0.1))}
+          style={{ width: 24, height: 24, borderRadius: 4, background: 'var(--bb-card-bg)', border: '1px solid var(--bb-card-border)', color: 'var(--bb-text-primary)', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >{'\u2212'}</button>
+        <span style={{ fontSize: 11, color: 'var(--bb-text-secondary)', minWidth: 36, textAlign: 'center' }}>{Math.round(gridZoom * 100)}%</span>
+        <button
+          className="bb-canvas__zoom-btn"
+          onClick={() => setGridZoom(z => Math.min(2, z + 0.1))}
+          style={{ width: 24, height: 24, borderRadius: 4, background: 'var(--bb-card-bg)', border: '1px solid var(--bb-card-border)', color: 'var(--bb-text-primary)', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >+</button>
+        <button
+          onClick={() => setGridZoom(1)}
+          style={{ padding: '2px 8px', borderRadius: 4, background: 'var(--bb-card-bg)', border: '1px solid var(--bb-card-border)', color: 'var(--bb-text-secondary)', cursor: 'pointer', fontSize: 10 }}
+        >Reset</button>
+      </div>
+
       {actGroups.map((group, groupIdx) => (
         <div key={groupIdx} className="bb-grid__act">
           <div className="bb-grid__act-header">
@@ -203,29 +261,38 @@ const BeatBoardGridView = ({
               {group.pages > 0 && ` \u00B7 ${group.pages.toFixed(0)} pages`}
             </span>
           </div>
-          <div className="bb-grid__cards">
-            {group.cards.map(card => (
-              <div
-                key={card.id}
-                onMouseEnter={() => gridDragId && gridDragId !== card.id && setGridDropId(card.id)}
-                onMouseLeave={() => gridDropId === card.id && setGridDropId(null)}
-                onMouseUp={() => handleCardMouseUp(card)}
-                className={gridDropId === card.id ? 'bb-card--drop-target' : ''}
-              >
-                <BeatCard
-                  card={card}
-                  sceneNum={card.linkedSceneId ? sceneNumbers[card.linkedSceneId] : null}
-                  isSelected={selectedCards.has(card.id)}
-                  isDragging={gridDragId === card.id}
-                  onMouseDown={(e) => handleCardMouseDown(e, card)}
-                  onContextMenu={(e) => handleContextMenu(e, card)}
-                  onDoubleClick={() => onOpenEditModal(card)}
-                  onToggleCut={onToggleCut}
-                  onUpdateSynopsis={(id, synopsis) => onUpdateCard(id, { synopsis })}
-                  inlineEditing={true}
-                />
-              </div>
-            ))}
+          <div className="bb-grid__cards" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${minCardWidth}px, 1fr))` }}>
+            {group.cards.map((card) => {
+              const timeIdx = cardTimelineIndex[card.id];
+              const showDropBefore = gridDragId && gridDropIdx === timeIdx && cardTimelineIndex[gridDragId] !== timeIdx && cardTimelineIndex[gridDragId] !== timeIdx - 1;
+
+              return (
+                <React.Fragment key={card.id}>
+                  {showDropBefore && (
+                    <div className="bb-grid__drop-placeholder" style={{ minHeight: 200 * gridZoom }} />
+                  )}
+                  <div
+                    onMouseEnter={(e) => handleCardMouseEnter(e, card)}
+                    onMouseLeave={() => gridDropIdx !== null && setGridDropIdx(null)}
+                    onMouseUp={() => handleCardMouseUp(card)}
+                  >
+                    <BeatCard
+                      card={card}
+                      sceneNum={card.linkedSceneId ? sceneNumbers[card.linkedSceneId] : null}
+                      isSelected={selectedCards.has(card.id)}
+                      isDragging={gridDragId === card.id}
+                      onMouseDown={(e) => handleCardMouseDown(e, card)}
+                      onContextMenu={(e) => handleContextMenu(e, card)}
+                      onDoubleClick={() => onOpenEditModal(card)}
+                      onToggleCut={onToggleCut}
+                      onUpdateSynopsis={(id, synopsis) => onUpdateCard(id, { synopsis })}
+                      inlineEditing={true}
+                      style={{ fontSize: `${gridZoom * 100}%` }}
+                    />
+                  </div>
+                </React.Fragment>
+              );
+            })}
             {group.cards.length === 0 && (
               <div style={{ padding: 20, color: 'var(--bb-text-muted)', fontSize: 12, fontStyle: 'italic' }}>
                 {group.isUncut ? (t('noUncutScenes') || 'Aucune scene hors montage') : (t('noScenes') || 'Aucune scene')}
@@ -242,7 +309,6 @@ const BeatBoardGridView = ({
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Colors */}
           <div className="bb-context-menu__colors">
             {cardColors.map(color => (
               <button
@@ -255,7 +321,6 @@ const BeatBoardGridView = ({
           </div>
           <div className="bb-context-menu__separator" />
 
-          {/* Status */}
           <button className="bb-context-menu__item" onClick={() => { onUpdateCard(contextMenu.card.id, { status: null }); closeContextMenu(); }}>
             {'\u25CB'} {t('noStatus') || 'Aucun statut'}
           </button>
@@ -270,13 +335,11 @@ const BeatBoardGridView = ({
           </button>
           <div className="bb-context-menu__separator" />
 
-          {/* CUT/UNCUT */}
           <button className="bb-context-menu__item" onClick={() => { onToggleCut(contextMenu.card.id); closeContextMenu(); }}>
             {contextMenu.card.timelineIndex !== null ? '\u2702 UNCUT' : '\uD83C\uDFAC CUT'}
           </button>
           <div className="bb-context-menu__separator" />
 
-          {/* Delete */}
           <button className="bb-context-menu__item bb-context-menu__item--danger" onClick={() => { onDeleteCard(contextMenu.card.id); closeContextMenu(); }}>
             {'\u2716'} {t('delete') || 'Supprimer'}
           </button>

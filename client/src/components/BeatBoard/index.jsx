@@ -4,7 +4,6 @@ import BeatBoardToolbar from './BeatBoardToolbar';
 import BeatBoardSceneStrip from './BeatBoardSceneStrip';
 import BeatBoardGridView from './BeatBoardGridView';
 import BeatBoardCanvasView from './BeatBoardCanvasView';
-import BeatBoardWhiteboardView from './BeatBoardWhiteboardView';
 import BeatCardEditModal from './BeatCardEditModal';
 import './BeatBoard.css';
 
@@ -29,7 +28,11 @@ const BeatBoard = React.memo(({
   t = (k) => k,
 }) => {
   const [viewMode, setViewMode] = useState(() => {
-    try { return localStorage.getItem(STORAGE_KEY) || 'grid'; } catch { return 'grid'; }
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      // 'whiteboard' was merged into 'canvas', fall back
+      return saved === 'whiteboard' ? 'canvas' : (saved || 'grid');
+    } catch { return 'grid'; }
   });
   const [selectedCards, setSelectedCards] = useState(new Set());
   const [editModalCard, setEditModalCard] = useState(null);
@@ -368,19 +371,8 @@ const BeatBoard = React.memo(({
           onDeleteCard={deleteCard}
           onUpdateCard={updateCard}
           elements={elements}
-          t={t}
-        />
-      )}
-
-      {viewMode === 'whiteboard' && (
-        <BeatBoardWhiteboardView
           whiteboardElements={whiteboardElements}
           setWhiteboardElements={setWhiteboardElements}
-          beatCards={beatCards}
-          setBeatCards={setBeatCards}
-          selectedCards={selectedCards}
-          setSelectedCards={setSelectedCards}
-          darkMode={darkMode}
           t={t}
         />
       )}
