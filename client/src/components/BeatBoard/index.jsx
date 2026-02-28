@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { stripHtml } from '../../utils/helpers';
 import BeatBoardToolbar from './BeatBoardToolbar';
+import { STRUCTURE_PRESETS } from './BeatBoardToolbar';
 import BeatBoardSceneStrip from './BeatBoardSceneStrip';
 import BeatBoardGridView from './BeatBoardGridView';
 import BeatBoardCanvasView from './BeatBoardCanvasView';
@@ -246,6 +247,57 @@ const BeatBoard = React.memo(({
     }
   }, [sceneMetrics, beatCards, elements, setElements, setBeatCards, onPushToUndo, timelineSyncMode]);
 
+  // Apply structure preset
+  const applyStructurePreset = useCallback((presetId) => {
+    const preset = STRUCTURE_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+    onPushToUndo?.();
+
+    const totalPages = sceneMetrics.totalPages || 1;
+    const scenes = sceneMetrics.cards.filter(c => c.linkedSceneId);
+
+    const usedSceneIds = new Set();
+    const newBeats = preset.beats.map(beat => {
+      const targetPage = beat.pct * totalPages;
+      // Find the closest scene to targetPage that hasn't been used
+      let bestScene = null;
+      let bestDist = Infinity;
+      for (const scene of scenes) {
+        if (usedSceneIds.has(scene.linkedSceneId)) continue;
+        const dist = Math.abs(scene.startPage - targetPage);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestScene = scene;
+        }
+      }
+      // If no unused scene found, pick the closest overall
+      if (!bestScene) {
+        for (const scene of scenes) {
+          const dist = Math.abs(scene.startPage - targetPage);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestScene = scene;
+          }
+        }
+      }
+      if (bestScene) usedSceneIds.add(bestScene.linkedSceneId);
+      return {
+        id: 'struct_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        label: beat.label,
+        startSceneId: bestScene?.linkedSceneId || scenes[0]?.linkedSceneId || null,
+        color: beat.color,
+      };
+    });
+
+    setStructureBeats(newBeats);
+  }, [sceneMetrics, onPushToUndo, setStructureBeats]);
+
+  // Clear structure
+  const clearStructure = useCallback(() => {
+    onPushToUndo?.();
+    setStructureBeats([]);
+  }, [onPushToUndo, setStructureBeats]);
+
   // SVG Export
   const handleExportSVG = useCallback(() => {
     const cards = beatCards.filter(c => c.position);
@@ -319,6 +371,9 @@ const BeatBoard = React.memo(({
         onAddNote={addNewNote}
         onApplyToScript={applyTimelineOrder}
         onExportSVG={handleExportSVG}
+        onApplyPreset={applyStructurePreset}
+        onClearStructure={clearStructure}
+        structureBeats={structureBeats}
         timelineCards={timelineCards}
         beatCards={beatCards}
         totalPages={sceneMetrics.totalPages}

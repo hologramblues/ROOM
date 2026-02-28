@@ -301,6 +301,9 @@ const translations = {
     convertTo: "Convertir en :",
     loadingWhiteboard: "Chargement du whiteboard...",
     whiteboardInstructions: "Dessinez librement • Sélectionnez une forme pour la convertir en carte",
+    structure: "Structure",
+    clearStructure: "Supprimer la structure",
+    addStructureHint: "Ajoutez une structure pour organiser les colonnes",
   },
 
   en: {
@@ -603,6 +606,9 @@ const translations = {
     convertTo: "Convert to:",
     loadingWhiteboard: "Loading whiteboard...",
     whiteboardInstructions: "Draw freely \u2022 Select a shape to convert it to a card",
+    structure: "Structure",
+    clearStructure: "Clear structure",
+    addStructureHint: "Add a structure to organize columns",
   }
 };
 

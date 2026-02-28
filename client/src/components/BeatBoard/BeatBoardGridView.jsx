@@ -219,7 +219,7 @@ const BeatBoardGridView = ({
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
-  const minCardWidth = Math.round(220 * gridZoom);
+  const colWidth = Math.round(280 * gridZoom);
 
   return (
     <div
@@ -228,40 +228,41 @@ const BeatBoardGridView = ({
       onClick={() => { setSelectedCards(new Set()); closeContextMenu(); }}
       onMouseUp={() => { setGridDragId(null); setGridDropIdx(null); }}
     >
-      {/* Zoom controls */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-        padding: '4px 0', marginBottom: 8, gap: 6,
-      }}>
+      {/* Zoom controls overlay */}
+      <div className="bb-grid__zoom-overlay">
         <button
           className="bb-canvas__zoom-btn"
-          onClick={() => setGridZoom(z => Math.max(0.4, z - 0.1))}
-          style={{ width: 24, height: 24, borderRadius: 4, background: 'var(--bb-card-bg)', border: '1px solid var(--bb-card-border)', color: 'var(--bb-text-primary)', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={(e) => { e.stopPropagation(); setGridZoom(z => Math.max(0.4, z - 0.1)); }}
         >{'\u2212'}</button>
         <span style={{ fontSize: 11, color: 'var(--bb-text-secondary)', minWidth: 36, textAlign: 'center' }}>{Math.round(gridZoom * 100)}%</span>
         <button
           className="bb-canvas__zoom-btn"
-          onClick={() => setGridZoom(z => Math.min(2, z + 0.1))}
-          style={{ width: 24, height: 24, borderRadius: 4, background: 'var(--bb-card-bg)', border: '1px solid var(--bb-card-border)', color: 'var(--bb-text-primary)', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={(e) => { e.stopPropagation(); setGridZoom(z => Math.min(2, z + 0.1)); }}
         >+</button>
         <button
-          onClick={() => setGridZoom(1)}
+          onClick={(e) => { e.stopPropagation(); setGridZoom(1); }}
           style={{ padding: '2px 8px', borderRadius: 4, background: 'var(--bb-card-bg)', border: '1px solid var(--bb-card-border)', color: 'var(--bb-text-secondary)', cursor: 'pointer', fontSize: 10 }}
         >Reset</button>
       </div>
 
+      {actGroups.length === 0 && (
+        <div className="bb-grid__hint">
+          {t('addStructureHint') || 'Ajoutez une structure pour organiser les colonnes'}
+        </div>
+      )}
+
       {actGroups.map((group, groupIdx) => (
-        <div key={groupIdx} className="bb-grid__act">
+        <div key={groupIdx} className="bb-grid__act" style={{ flex: `0 0 ${colWidth}px`, minWidth: colWidth }}>
           <div className="bb-grid__act-header">
             <span className="bb-grid__act-title" style={group.color ? { color: group.color } : undefined}>
               {group.label}
             </span>
             <span className="bb-grid__act-stats">
               {group.cards.length} {t('scenes') || 'scenes'}
-              {group.pages > 0 && ` \u00B7 ${group.pages.toFixed(0)} pages`}
+              {group.pages > 0 && ` \u00B7 ${group.pages.toFixed(0)}p`}
             </span>
           </div>
-          <div className="bb-grid__cards" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${minCardWidth}px, 1fr))` }}>
+          <div className="bb-grid__cards">
             {group.cards.map((card) => {
               const timeIdx = cardTimelineIndex[card.id];
               const showDropBefore = gridDragId && gridDropIdx === timeIdx && cardTimelineIndex[gridDragId] !== timeIdx && cardTimelineIndex[gridDragId] !== timeIdx - 1;
@@ -269,7 +270,7 @@ const BeatBoardGridView = ({
               return (
                 <React.Fragment key={card.id}>
                   {showDropBefore && (
-                    <div className="bb-grid__drop-placeholder" style={{ minHeight: 200 * gridZoom }} />
+                    <div className="bb-grid__drop-placeholder" style={{ minHeight: 120 * gridZoom }} />
                   )}
                   <div
                     onMouseEnter={(e) => handleCardMouseEnter(e, card)}
@@ -294,7 +295,7 @@ const BeatBoardGridView = ({
               );
             })}
             {group.cards.length === 0 && (
-              <div style={{ padding: 20, color: 'var(--bb-text-muted)', fontSize: 12, fontStyle: 'italic' }}>
+              <div style={{ padding: 20, color: 'var(--bb-text-muted)', fontSize: 12, fontStyle: 'italic', textAlign: 'center' }}>
                 {group.isUncut ? (t('noUncutScenes') || 'Aucune scene hors montage') : (t('noScenes') || 'Aucune scene')}
               </div>
             )}
