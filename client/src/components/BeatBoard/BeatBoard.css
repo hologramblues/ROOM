@@ -53,7 +53,7 @@
   padding: 0 12px;
   gap: 10px;
   background: var(--bb-toolbar-bg);
-  border-bottom: 1px solid var(--bb-toolbar-border);
+  border-top: 1px solid var(--bb-toolbar-border);
   flex-shrink: 0;
   z-index: 10;
 }

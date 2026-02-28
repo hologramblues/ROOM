@@ -318,22 +318,6 @@ const BeatBoard = React.memo(({
 
   return (
     <div className="beat-board">
-      {/* Toolbar */}
-      <BeatBoardToolbar
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-        onAddCard={addNewCard}
-        onAddNote={addNewNote}
-        onExportSVG={handleExportSVG}
-        onApplyPreset={applyStructurePreset}
-        onClearStructure={clearStructure}
-        structureBeats={structureBeats}
-        timelineCards={timelineCards}
-        beatCards={beatCards}
-        totalPages={sceneMetrics.totalPages}
-        t={t}
-      />
-
       {/* Scene Strip */}
       <BeatBoardSceneStrip
         sceneMetrics={sceneMetrics}
@@ -385,6 +369,22 @@ const BeatBoard = React.memo(({
           t={t}
         />
       )}
+
+      {/* Footer toolbar */}
+      <BeatBoardToolbar
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        onAddCard={addNewCard}
+        onAddNote={addNewNote}
+        onExportSVG={handleExportSVG}
+        onApplyPreset={applyStructurePreset}
+        onClearStructure={clearStructure}
+        structureBeats={structureBeats}
+        timelineCards={timelineCards}
+        beatCards={beatCards}
+        totalPages={sceneMetrics.totalPages}
+        t={t}
+      />
 
       {/* Edit Modal */}
       {editModalCard && (
