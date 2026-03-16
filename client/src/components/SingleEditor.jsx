@@ -4,6 +4,7 @@ import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import CommentMark from '../extensions/CommentMark';
 import SuggestionMark from '../extensions/SuggestionMark';
+import ExternalSpanMark from '../extensions/ExternalSpanMark';
 import ScreenplayElement from '../extensions/ScreenplayElement';
 import { createPageBreakPlugin } from '../extensions/pageBreakPlugin';
 import { createSceneLockPlugin } from '../extensions/sceneLockPlugin';
@@ -82,6 +83,7 @@ const SingleEditor = React.memo(({
       ScreenplayElement,
       CommentMark,
       SuggestionMark,
+      ExternalSpanMark,
       PageBreakExtension,
       SceneLockExtension,
     ],
