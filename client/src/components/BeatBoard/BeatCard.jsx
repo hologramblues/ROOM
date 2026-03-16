@@ -75,7 +75,7 @@ const BeatCard = React.memo(({
         {/* Header: scene number + status */}
         <div className="bb-card__header">
           <span className="bb-card__scene-num">
-            {isNote ? '\uD83D\uDCDD' : sceneNum ? `Scene #${sceneNum}` : ''}
+            {isNote ? 'Note' : sceneNum ? `Scene #${sceneNum}` : ''}
           </span>
           <div className="bb-card__status">
             {card.status && (
@@ -108,27 +108,22 @@ const BeatCard = React.memo(({
             className="bb-card__synopsis"
             onDoubleClick={handleSynopsisDoubleClick}
           >
-            {card.synopsis || (isNote ? 'Double-clic pour editer' : 'Double-clic pour ajouter un resume')}
+            {card.synopsis || (isNote ? 'Editer la note' : 'Ajouter un resume')}
           </div>
         )}
 
         {/* Footer */}
         <div className="bb-card__footer">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            {card.linkedSceneId && <span className="bb-card__linked-icon">\uD83D\uDD17</span>}
-          </div>
-
+          <div />
           {!isNote && (
             <button
               className={`bb-card__cut-badge ${isCut ? 'bb-card__cut-badge--cut' : 'bb-card__cut-badge--uncut'}`}
               onClick={(e) => { e.stopPropagation(); onToggleCut?.(card.id); }}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {isCut ? '\uD83C\uDFAC CUT' : 'UNCUT'}
+              {isCut ? 'CUT' : 'UNCUT'}
             </button>
           )}
-
-          <div />
         </div>
       </div>
 

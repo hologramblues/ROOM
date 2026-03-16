@@ -99,7 +99,7 @@ const BeatCardEditModal = ({
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 }}
               >
-                <span>\uD83C\uDFAC</span> CUT {localCard.timelineIndex !== null && '\u2713'}
+                CUT {localCard.timelineIndex !== null && '\u2713'}
               </button>
               <button
                 onClick={() => {

@@ -86,6 +86,9 @@ export default function importFDX({ token, setShowAuthModal, setImporting, loade
         console.log('[IMPORT] Document created:', data.id, 'with', data.elementsCount, 'elements');
         loadedDocRef.current = null;
         window.location.hash = data.id;
+      } else if (res.status === 401) {
+        console.error('[IMPORT] Auth error — token expired or invalid');
+        setShowAuthModal(true);
       } else if (res.status === 413) {
         alert('Erreur import: Fichier trop volumineux. Contactez l\'admin pour augmenter la limite serveur.');
       } else {

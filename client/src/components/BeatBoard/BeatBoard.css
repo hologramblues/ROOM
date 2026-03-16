@@ -368,7 +368,7 @@
   box-shadow: var(--bb-card-shadow);
   display: flex;
   flex-direction: column;
-  min-height: 200px;
+  min-height: 120px;
   position: relative;
 }
 
@@ -491,27 +491,23 @@
 }
 
 .bb-card__cut-badge {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 1px 6px;
+  border-radius: 3px;
   border: none;
   cursor: pointer;
   transition: background 0.15s;
+  letter-spacing: 0.5px;
 }
 
 .bb-card__cut-badge--cut {
-  background: #22c55e;
-  color: white;
+  background: var(--bb-divider);
+  color: var(--bb-text-secondary);
 }
 
 .bb-card__cut-badge--uncut {
-  background: var(--bb-divider);
-  color: var(--bb-text-muted);
-}
-
-.bb-card__linked-icon {
-  font-size: 10px;
+  background: transparent;
   color: var(--bb-text-muted);
 }
 
@@ -745,7 +741,7 @@
   border: 2px dashed var(--bb-accent);
   border-radius: 8px;
   background: rgba(59, 130, 246, 0.05);
-  min-height: 200px;
+  min-height: 120px;
 }
 
 /* Structure preset menu */

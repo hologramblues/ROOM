@@ -247,7 +247,7 @@ const BeatBoardCanvasView = ({
     const element = elems.find(el => el.id === elementId);
     if (!element) return;
 
-    let title = cardType === 'note' ? '\uD83D\uDCDD Note' : 'Nouvelle scene';
+    let title = cardType === 'note' ? 'Note' : 'Nouvelle scene';
     let synopsis = '';
 
     if (element.type === 'text') {
@@ -345,7 +345,7 @@ const BeatBoardCanvasView = ({
                 <div style={{ padding: `${scaledPadding}px ${scaledPadding * 1.2}px`, display: 'flex', flexDirection: 'column', gap: 4 * canvasZoom }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: 10 * canvasZoom, color: 'var(--bb-text-muted)' }}>
-                      {isNote ? '\uD83D\uDCDD' : card.linkedSceneId ? `#${sceneNumbers[card.linkedSceneId] || ''}` : ''}
+                      {isNote ? 'Note' : card.linkedSceneId ? `#${sceneNumbers[card.linkedSceneId] || ''}` : ''}
                     </span>
                     {card.status && (
                       <span style={{ fontSize: 9 * canvasZoom, padding: `${2 * canvasZoom}px ${6 * canvasZoom}px`, borderRadius: 4 * canvasZoom, background: statusColors[card.status], color: 'white' }}>
@@ -357,19 +357,18 @@ const BeatBoardCanvasView = ({
                   <div style={{ fontSize: scaledFont * 0.9, color: 'var(--bb-text-secondary)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical' }}>
                     {card.synopsis || 'Double-clic pour editer'}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 * canvasZoom, borderTop: '1px solid var(--bb-divider)', marginTop: 'auto' }}>
-                    {card.linkedSceneId && <span style={{ fontSize: 10 * canvasZoom, color: 'var(--bb-text-muted)' }}>{'\uD83D\uDD17'}</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingTop: 6 * canvasZoom, borderTop: '1px solid var(--bb-divider)', marginTop: 'auto' }}>
                     {!isNote && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onToggleCut(card.id); }}
                         onMouseDown={(e) => e.stopPropagation()}
                         style={{
                           padding: `${2 * canvasZoom}px ${6 * canvasZoom}px`, fontSize: 8 * canvasZoom, fontWeight: 600, borderRadius: 3 * canvasZoom, border: 'none', cursor: 'pointer',
-                          background: isCut ? '#22c55e' : (darkMode ? '#555' : '#e5e7eb'),
-                          color: isCut ? 'white' : '#6b7280',
+                          background: isCut ? 'var(--bb-divider)' : 'transparent',
+                          color: isCut ? 'var(--bb-text-secondary)' : 'var(--bb-text-muted)',
                         }}
                       >
-                        {isCut ? '\uD83C\uDFAC CUT' : 'UNCUT'}
+                        {isCut ? 'CUT' : 'UNCUT'}
                       </button>
                     )}
                   </div>
@@ -395,7 +394,7 @@ const BeatBoardCanvasView = ({
           <Suspense fallback={
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--bb-text-secondary)' }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>{'\u270F\uFE0F'}</div>
+                <div style={{ fontSize: 16, marginBottom: 8 }}>Loading...</div>
                 <div>{t('loadingWhiteboard') || 'Chargement du whiteboard...'}</div>
               </div>
             </div>
@@ -430,10 +429,10 @@ const BeatBoardCanvasView = ({
             <div className="bb-whiteboard__convert-menu">
               <span className="bb-whiteboard__convert-label">{t('convertTo') || 'Convertir en :'}</span>
               <button className="bb-whiteboard__convert-btn bb-whiteboard__convert-btn--scene" onClick={() => convertExcalidrawToCard(selectedExcalidrawId, 'scene')}>
-                {'\uD83C\uDFAC'} {t('scene') || 'Scene'}
+                {t('scene') || 'Scene'}
               </button>
               <button className="bb-whiteboard__convert-btn bb-whiteboard__convert-btn--note" onClick={() => convertExcalidrawToCard(selectedExcalidrawId, 'note')}>
-                {'\uD83D\uDCDD'} Note
+                Note
               </button>
             </div>
           )}
@@ -454,7 +453,7 @@ const BeatBoardCanvasView = ({
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
           }}
         >
-          {'\u270F\uFE0F'} {drawingEnabled ? (t('drawingOn') || 'Dessin ON') : (t('draw') || 'Dessiner')}
+          {drawingEnabled ? (t('drawingOn') || 'Dessin ON') : (t('draw') || 'Dessiner')}
         </button>
       </div>
 

@@ -337,7 +337,7 @@ const BeatBoardGridView = ({
           <div className="bb-context-menu__separator" />
 
           <button className="bb-context-menu__item" onClick={() => { onToggleCut(contextMenu.card.id); closeContextMenu(); }}>
-            {contextMenu.card.timelineIndex !== null ? '\u2702 UNCUT' : '\uD83C\uDFAC CUT'}
+            {contextMenu.card.timelineIndex !== null ? 'UNCUT' : 'CUT'}
           </button>
           <div className="bb-context-menu__separator" />
 

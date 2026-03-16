@@ -155,7 +155,7 @@ const BeatBoard = React.memo(({
   const addNewNote = useCallback(() => {
     const newNote = {
       id: 'note_' + Date.now(), linkedSceneId: null, linkedSceneIndex: null,
-      title: '\uD83D\uDCDD Note', synopsis: '', color: '#fbbf24',
+      title: 'Note', synopsis: '', color: '#fbbf24',
       position: { x: 150 + Math.random() * 200, y: 150 + Math.random() * 200 },
       timelineIndex: null, status: null, isNew: true, type: 'note',
     };

@@ -90,7 +90,7 @@ const SingleEditor = React.memo(({
 
     editorProps: {
       attributes: {
-        spellcheck: 'false',
+        spellcheck: 'true',
       },
       // Handle click on comment/suggestion marks
       handleClick: (view, pos, event) => {
