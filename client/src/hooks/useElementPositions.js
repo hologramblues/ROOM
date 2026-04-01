@@ -2,37 +2,22 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 /**
  * Google Docs-style comment positioning.
- *
- * On each scroll frame, reads the viewport position of each element that has a comment
- * and directly updates comment card transforms via DOM (no React re-render).
- * Cards are aligned so they sit at the same visual height as their anchored element.
+ * Cards are positioned via direct DOM transforms synced to script scroll at 60fps.
  */
 export default function useElementPositions({ showComments, elementsRef, elementsLength, isSafari, scriptContainerRef, commentsSidebarRef }) {
   const [elementPositions, setElementPositions] = useState({});
   const rafRef = useRef(null);
-  // Cache element-id -> DOM node for fast lookup (rebuilt on content changes)
-  const elementDomCacheRef = useRef(new Map());
 
-  // Rebuild DOM cache when element count changes
-  const rebuildDomCache = useCallback(() => {
-    const script = scriptContainerRef.current;
-    if (!script) return;
-    const cache = new Map();
-    const divs = script.querySelectorAll('[data-element-id]');
-    divs.forEach(div => {
-      cache.set(div.getAttribute('data-element-id'), div);
-    });
-    elementDomCacheRef.current = cache;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Compute positions for React-based initial layout
+  // Compute positions for React-based initial layout (adjustedPositions)
   const computePositions = useCallback(() => {
     const script = scriptContainerRef.current;
     if (!script) return {};
     const positions = {};
     const scriptRect = script.getBoundingClientRect();
     const scrollTop = script.scrollTop;
-    elementDomCacheRef.current.forEach((div, elId) => {
+    const divs = script.querySelectorAll('[data-element-id]');
+    divs.forEach(div => {
+      const elId = div.getAttribute('data-element-id');
       const index = elementsRef.current.findIndex(e => e.id === elId);
       if (index !== -1) {
         positions[index] = div.getBoundingClientRect().top - scriptRect.top + scrollTop;
@@ -41,7 +26,7 @@ export default function useElementPositions({ showComments, elementsRef, element
     return positions;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Direct DOM update of comment card positions on scroll
+  // Direct DOM update of comment card positions on scroll — 60fps, no React
   const updateCardTransforms = useCallback(() => {
     const script = scriptContainerRef.current;
     const sidebar = commentsSidebarRef?.current;
@@ -54,15 +39,17 @@ export default function useElementPositions({ showComments, elementsRef, element
     const cards = sidebar.querySelectorAll('[data-comment-element-index]');
     if (cards.length === 0) return;
 
-    // Only look up DOM positions for elements that have comment cards (not ALL elements)
+    // Collect needed element indices from cards
     const neededIndices = new Set();
     cards.forEach(card => neededIndices.add(parseInt(card.getAttribute('data-comment-element-index'), 10)));
 
+    // Look up viewport Y for each needed element — direct DOM query (fast for small set)
     const elementViewportY = {};
     neededIndices.forEach(index => {
       const el = elementsRef.current[index];
       if (!el) return;
-      const div = elementDomCacheRef.current.get(el.id);
+      // Direct querySelector by element ID — precise and avoids stale cache
+      const div = script.querySelector(`[data-element-id="${el.id}"]`);
       if (div) {
         elementViewportY[index] = div.getBoundingClientRect().top - scriptRect.top;
       }
@@ -82,7 +69,7 @@ export default function useElementPositions({ showComments, elementsRef, element
       const viewportY = elementViewportY[elemIdx];
 
       if (viewportY == null) {
-        card.style.visibility = 'hidden';
+        // Element not found — keep card at current position, don't hide
         return;
       }
 
@@ -98,7 +85,6 @@ export default function useElementPositions({ showComments, elementsRef, element
       card.style.top = '0';
       card.style.left = '0';
       card.style.right = '0';
-      card.style.visibility = 'visible';
 
       lastBottom = idealY + cardHeight;
     });
@@ -108,9 +94,6 @@ export default function useElementPositions({ showComments, elementsRef, element
     if (!showComments) return;
     const script = scriptContainerRef.current;
     if (!script) return;
-
-    // Build initial DOM cache
-    rebuildDomCache();
 
     const onScroll = () => {
       if (rafRef.current) return;
@@ -124,7 +107,7 @@ export default function useElementPositions({ showComments, elementsRef, element
     const positions = computePositions();
     setElementPositions(positions);
 
-    // Wait for React to render cards, then position them
+    // Wait for cards to render, then position them
     requestAnimationFrame(() => {
       requestAnimationFrame(() => updateCardTransforms());
     });
@@ -132,16 +115,14 @@ export default function useElementPositions({ showComments, elementsRef, element
     script.addEventListener('scroll', onScroll, { passive: true });
 
     const onResize = () => {
-      rebuildDomCache();
       const positions = computePositions();
       setElementPositions(positions);
       requestAnimationFrame(() => updateCardTransforms());
     };
     window.addEventListener('resize', onResize);
 
-    // Periodic refresh for content changes (rebuild DOM cache + reposition)
+    // Periodic refresh for content changes (reposition cards)
     const interval = setInterval(() => {
-      rebuildDomCache();
       const positions = computePositions();
       setElementPositions(positions);
       requestAnimationFrame(() => updateCardTransforms());
@@ -153,7 +134,7 @@ export default function useElementPositions({ showComments, elementsRef, element
       clearInterval(interval);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [showComments, elementsLength, isSafari, computePositions, updateCardTransforms, rebuildDomCache]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showComments, elementsLength, isSafari, computePositions, updateCardTransforms]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { elementPositions };
 }

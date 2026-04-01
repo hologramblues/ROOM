@@ -452,13 +452,22 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
 
       {/* Content area — no own scroll, wheel events forwarded to script container */}
       <div
-        ref={sidebarRef}
-        className="comments-sidebar-scroll-container"
-        onWheel={(e) => {
-          // Forward wheel scroll to script container so comments scroll in sync
-          const sc = scriptContainerRef?.current;
-          if (sc) sc.scrollTop += e.deltaY;
+        ref={(el) => {
+          // Assign to sidebarRef
+          if (typeof sidebarRef === 'function') sidebarRef(el);
+          else if (sidebarRef) sidebarRef.current = el;
+          // Attach non-passive wheel listener so we can preventDefault
+          if (el && !el._wheelAttached) {
+            el._wheelAttached = true;
+            el.addEventListener('wheel', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const sc = scriptContainerRef?.current;
+              if (sc) sc.scrollTop += e.deltaY;
+            }, { passive: false });
+          }
         }}
+        className="comments-sidebar-scroll-container"
         style={{
           flex: 1,
           overflow: 'clip',
