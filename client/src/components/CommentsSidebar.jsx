@@ -456,10 +456,9 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
         className="comments-sidebar-scroll-container"
         style={{
           flex: 1,
-          overflowY: 'hidden',
-          overflowX: 'hidden',
+          overflow: 'clip', /* Clip without creating scroll container — cards positioned by transforms */
           position: 'relative',
-          padding: '8px 12px'
+          padding: '0 12px'
         }}
       >
         <div>
