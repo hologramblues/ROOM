@@ -43,11 +43,11 @@ const ScreenplayElement = Node.create({
 
         const currentType = node.attrs.elementType;
         const atStart = $from.parentOffset === 0;
-        const atEnd = $from.parentOffset >= node.content.size;
+        let atEnd = $from.parentOffset >= node.content.size;
         const isEmpty = node.content.size === 0;
         const nodeStart = $from.before();
 
-        // Auto-close parenthetical
+        // Auto-close parenthetical — then force atEnd so Enter creates dialogue below
         if (currentType === 'parenthetical' && !isEmpty) {
           const text = node.textContent;
           let fixed = text;
@@ -57,6 +57,8 @@ const ScreenplayElement = Node.create({
             tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
             tr.insertText(fixed, nodeStart + 1);
           }
+          // After auto-close, treat as atEnd (cursor was at/near end of content)
+          atEnd = true;
         }
 
         if (isEmpty) {

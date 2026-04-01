@@ -1377,9 +1377,10 @@ export default function ScreenplayEditor() {
       </Suspense>
 
       {/* MAIN CONTENT AREA - Flex layout with sidebars */}
-      <div style={{ 
+      <div style={{
         flex: 1,
-        display: activeView === 'script' ? 'flex' : 'none', 
+        minHeight: 0, /* Prevent flex overflow — allows footer to stay visible */
+        display: activeView === 'script' ? 'flex' : 'none',
         overflow: 'auto',
         position: 'relative'
       }}>

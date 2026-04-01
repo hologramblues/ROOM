@@ -561,7 +561,8 @@ const SingleEditor = React.memo(({
           {autoState.items.map((s, i) => (
             <div
               key={s}
-              onClick={() => handleAutoSelect(s)}
+              onMouseDown={(e) => { e.preventDefault(); handleAutoSelect(s); }}
+              onMouseEnter={() => setAutoState(prev => ({ ...prev, idx: i }))}
               style={{
                 padding: '8px 12px',
                 cursor: 'pointer',
@@ -595,7 +596,8 @@ const SingleEditor = React.memo(({
           {autoState.items.map((s, i) => (
             <div
               key={s}
-              onClick={() => handleAutoSelect(s)}
+              onMouseDown={(e) => { e.preventDefault(); handleAutoSelect(s); }}
+              onMouseEnter={() => setAutoState(prev => ({ ...prev, idx: i }))}
               style={{
                 padding: '8px 12px',
                 cursor: 'pointer',
