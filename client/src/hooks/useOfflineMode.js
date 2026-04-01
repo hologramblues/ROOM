@@ -114,7 +114,7 @@ export default function useOfflineMode({
     } catch (err) {
       console.error('[OFFLINE] Push error:', err);
     }
-  }, [offlineDocId, offlineSnapshot, token, connected, socketRef, titleRef, elementsRef, setLastSaved]);
+  }, [offlineDocId, offlineSnapshot, token, connected, socketRef, titleRef, elementsRef, setLastSaved, lastEmittedRef]);
 
   // Discard offline copy
   const discardOfflineCopy = useCallback(() => {

@@ -14,7 +14,6 @@ export default function useElementPositions({ showComments, elementsRef, element
   // We still expose elementPositions for initial render and for the anti-overlap logic
   const [elementPositions, setElementPositions] = useState({});
   const rafRef = useRef(null);
-  const isScrollingRef = useRef(false);
 
   // Compute positions from DOM — called on scroll and on mount
   const computePositions = useCallback(() => {
@@ -48,7 +47,6 @@ export default function useElementPositions({ showComments, elementsRef, element
 
     const scriptRect = script.getBoundingClientRect();
     const sidebarScrollContainer = sidebar;
-    const sidebarRect = sidebarScrollContainer.getBoundingClientRect();
 
     // Get all comment cards in the sidebar
     const cards = sidebarScrollContainer.querySelectorAll('[data-comment-element-index]');
@@ -145,5 +143,5 @@ export default function useElementPositions({ showComments, elementsRef, element
     };
   }, [showComments, elementsLength, isSafari, computePositions, updateCardTransforms]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { elementPositions, updateCardTransforms };
+  return { elementPositions };
 }

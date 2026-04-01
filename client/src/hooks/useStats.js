@@ -28,7 +28,7 @@ export default function useStats(elements, characters, elementsRef, pageFormat =
       setStats({ words, chars, scenes, dialogueWords, actionWords, dialogueRatio, readingTimeMin, screenTimeMin, pageCount: totalPages });
     }, 300);
     return () => { if (statsTimerRef.current) clearTimeout(statsTimerRef.current); };
-  }, [elements, elementsRef]);
+  }, [elements, elementsRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Compute page break positions and page numbers for each element
   const computePageInfo = (els) => {

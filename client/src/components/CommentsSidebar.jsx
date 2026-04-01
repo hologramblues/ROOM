@@ -311,28 +311,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
     return positions;
   }, [sortedIndices, elementPositions, cardHeights]);
 
-  // Calculate max content height for scroll spacer - must be at least as tall as script
-  const maxContentHeight = useMemo(() => {
-    let maxBottom = 0;
-    sortedIndices.forEach(idx => {
-      const top = adjustedPositions[idx] || 0;
-      const height = cardHeights[idx] || 150;
-      maxBottom = Math.max(maxBottom, top + height + 50);
-    });
-    // Also consider pending forms
-    if (pendingInlineComment) {
-      const pendingIdx = pendingInlineComment.elementIndex;
-      const pendingTop = elementPositions[pendingIdx] || (pendingIdx * 30);
-      maxBottom = Math.max(maxBottom, pendingTop + 200);
-    }
-    if (pendingSuggestion) {
-      const pendingIdx = pendingSuggestion.elementIndex;
-      const pendingTop = elementPositions[pendingIdx] || (pendingIdx * 30);
-      maxBottom = Math.max(maxBottom, pendingTop + 200);
-    }
-    // Ensure at least as tall as script for 1:1 scroll sync
-    return Math.max(maxBottom, scriptScrollHeight || 0);
-  }, [sortedIndices, adjustedPositions, cardHeights, pendingInlineComment, pendingSuggestion, elementPositions, scriptScrollHeight]);
+  // maxContentHeight removed — scroll sync now handled by useElementPositions rAF transforms
 
   // Navigation functions
   // Get filtered indices based on current filter

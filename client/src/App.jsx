@@ -677,7 +677,7 @@ export default function ScreenplayEditor() {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
   }, []);
 
-  const { elementPositions, updateCardTransforms } = useElementPositions({ showComments, elementsRef, elementsLength: elements.length, isSafari, scriptContainerRef, commentsSidebarRef });
+  const { elementPositions } = useElementPositions({ showComments, elementsRef, elementsLength: elements.length, isSafari, scriptContainerRef, commentsSidebarRef });
 
   // Pre-compute highlights per element (memoized for performance)
   const { highlightsByElement } = useHighlights({ comments, suggestions, pendingInlineComment, currentUser });
