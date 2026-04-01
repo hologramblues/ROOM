@@ -59,12 +59,12 @@ export default function importFDX({ token, setShowAuthModal, setImporting, loade
 
         if (content.trim() || newElements.length === 0) {
           const id = generateId();
-          newElements.push({ id, type, content: content.trim() });
+          newElements.push({ id, type, content: content.trim(), v: 0 });
         }
       });
 
       if (newElements.length === 0) {
-        newElements.push({ id: generateId(), type: 'scene', content: '' });
+        newElements.push({ id: generateId(), type: 'scene', content: '', v: 0 });
       }
 
       // Get title from filename

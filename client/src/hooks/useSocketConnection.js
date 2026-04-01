@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { SERVER_URL } from '../constants/config';
 
@@ -10,7 +10,12 @@ export default function useSocketConnection({
   setChatMessages, setUnreadMessages,
   playChatNotification,
   serverUrl,
+  elementVersionsRef, // Map<elementId, version> for optimistic concurrency
 }) {
+  // Stabilize callback ref to avoid reconnecting when callback identity changes
+  const playChatNotificationRef = useRef(playChatNotification);
+  useEffect(() => { playChatNotificationRef.current = playChatNotification; });
+
   useEffect(() => {
     if (docId === 'local') return; // Don't connect socket in local mode
     let isStale = false; // Guard against stale updates after cleanup
@@ -19,9 +24,12 @@ export default function useSocketConnection({
     const socket = io(effectiveUrl, { transports: ['websocket', 'polling'], auth: { token }, reconnectionAttempts: 10, timeout: 30000 });
     socketRef.current = socket;
 
-    socket.on('connect', () => { if (isStale) return; setConnected(true); setMyId(socket.id); if (docId && docId !== 'local') socket.emit('join-document', { docId }); });
-    socket.on('disconnect', () => { if (isStale) return; setConnected(false); });
-    socket.on('document-state', data => {
+    // ============ CONNECTION ============
+    const onConnect = () => { if (isStale) return; setConnected(true); setMyId(socket.id); if (docId && docId !== 'local') socket.emit('join-document', { docId }); };
+    const onDisconnect = () => { if (isStale) return; setConnected(false); };
+
+    // ============ DOCUMENT STATE ============
+    const onDocumentState = (data) => {
       if (isStale) return;
       setUsers(data.users || []);
       if (data.role) setMyRole(data.role);
@@ -29,95 +37,186 @@ export default function useSocketConnection({
       if (data.collaborators && data.collaborators.length > 0) {
         setCollaborators(data.collaborators);
       }
-      // Always sync comments and suggestions regardless of offline mode
       if (data.comments) setComments(data.comments);
-      // Re-sync document content on reconnect (only if NOT in offline mode)
       if (!offlineDocIdRef.current && data.elements) {
         setElements(data.elements);
         if (data.title) setTitle(data.title);
+        if (elementVersionsRef) {
+          const vMap = new Map();
+          data.elements.forEach(el => vMap.set(el.id, el.v || 0));
+          elementVersionsRef.current = vMap;
+        }
         console.log('[SYNC] Document re-synced from server on reconnect');
       }
-    });
-    // Listen for full-sync from other clients (undo/redo/drag)
-    socket.on('full-sync-applied', ({ elements: newElements }) => {
+    };
+
+    // ============ FULL SYNC ============
+    const onFullSyncApplied = ({ elements: newElements }) => {
       if (!isStale && !offlineDocIdRef.current) {
         setElements(newElements);
+        if (elementVersionsRef) {
+          const vMap = new Map();
+          newElements.forEach(el => vMap.set(el.id, el.v || 0));
+          elementVersionsRef.current = vMap;
+        }
         console.log('[SYNC] Full sync received from another client');
       }
-    });
-    socket.on('title-updated', ({ title }) => { if (!isStale) setTitle(title); });
-    socket.on('element-updated', ({ index, element }) => {
+    };
+
+    // ============ ELEMENT UPDATES ============
+    const onTitleUpdated = ({ title }) => { if (!isStale) setTitle(title); };
+
+    const onElementUpdated = ({ index, element }) => {
       if (isStale) return;
+      if (elementVersionsRef && element?.id) {
+        elementVersionsRef.current.set(element.id, element.v || 0);
+      }
       setElements(p => {
         const u = [...p];
-        // Match by element ID first (reliable), fallback to index
         const matchIdx = element?.id ? u.findIndex(el => el.id === element.id) : -1;
         const targetIdx = matchIdx >= 0 ? matchIdx : index;
         if (targetIdx >= 0 && targetIdx < u.length) u[targetIdx] = element;
         return u;
       });
-    });
-    socket.on('element-type-updated', ({ index, type, elementId }) => {
+    };
+
+    const onElementConflict = ({ elementId, serverElement }) => {
+      if (isStale) return;
+      console.warn('[CONFLICT] Element', elementId, '— accepting server version');
+      if (elementVersionsRef && serverElement) {
+        elementVersionsRef.current.set(elementId, serverElement.v || 0);
+      }
+      setElements(p => {
+        const u = [...p];
+        const idx = u.findIndex(el => el.id === elementId);
+        if (idx >= 0) u[idx] = serverElement;
+        return u;
+      });
+    };
+
+    const onElementTypeUpdated = ({ index, type, elementId }) => {
       if (isStale) return;
       setElements(p => {
         const u = [...p];
-        // ID-based matching first, fallback to index
         const matchIdx = elementId ? u.findIndex(el => el.id === elementId) : -1;
         const targetIdx = matchIdx >= 0 ? matchIdx : index;
         if (targetIdx >= 0 && targetIdx < u.length) u[targetIdx] = { ...u[targetIdx], type };
         return u;
       });
-    });
-    socket.on('element-inserted', ({ afterIndex, afterElementId, element }) => {
+    };
+
+    const onElementInserted = ({ afterIndex, afterElementId, element }) => {
       if (isStale) return;
+      if (elementVersionsRef && element?.id) {
+        elementVersionsRef.current.set(element.id, element.v || 0);
+      }
       setElements(p => {
         const u = [...p];
-        // ID-based positioning first, fallback to index
         const matchIdx = afterElementId ? u.findIndex(el => el.id === afterElementId) : -1;
         const insertAfter = matchIdx >= 0 ? matchIdx : afterIndex;
         u.splice(insertAfter + 1, 0, element);
         return u;
       });
-    });
-    socket.on('element-deleted', ({ index, elementId }) => {
+    };
+
+    const onElementDeleted = ({ index, elementId }) => {
       if (isStale) return;
+      if (elementVersionsRef && elementId) {
+        elementVersionsRef.current.delete(elementId);
+      }
       setElements(p => {
-        // ID-based delete first, fallback to index
         if (elementId) return p.filter(el => el.id !== elementId);
         return p.filter((_, i) => i !== index);
       });
-    });
-    socket.on('user-joined', ({ users }) => { if (!isStale) setUsers(users); });
-    socket.on('user-left', ({ users }) => { if (!isStale) setUsers(users); });
-    socket.on('cursor-updated', ({ userId, cursor }) => { if (!isStale) setUsers(p => p.map(u => u.id === userId ? { ...u, cursor } : u)); });
-    socket.on('document-restored', ({ title, elements }) => { if (!isStale) { setTitle(title); setElements(elements); } });
-    socket.on('comment-added', ({ comment }) => { if (!isStale) setComments(p => [...p, comment]); });
-    socket.on('comment-reply-added', ({ commentId, reply }) => { if (!isStale) setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, replies: [...(c.replies || []), reply] } : c)); });
-    socket.on('comment-resolved', ({ commentId, resolved }) => { if (!isStale) setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, resolved } : c)); });
-    socket.on('comment-deleted', ({ commentId }) => { if (!isStale) setComments(p => p.filter(c => c.id !== commentId && c._id !== commentId)); });
-    socket.on('comment-updated', ({ commentId, content }) => { if (!isStale) setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, content } : c)); });
+    };
 
-    // Suggestion socket listeners
-    socket.on('suggestion-added', ({ suggestion }) => { if (!isStale) setSuggestions(p => [...p, suggestion]); });
-    socket.on('suggestion-accepted', ({ suggestionId }) => { if (!isStale) setSuggestions(p => p.filter(s => s.id !== suggestionId)); });
-    socket.on('suggestion-rejected', ({ suggestionId }) => { if (!isStale) setSuggestions(p => p.filter(s => s.id !== suggestionId)); });
+    // ============ USERS ============
+    const onUserJoined = ({ users }) => { if (!isStale) setUsers(users); };
+    const onUserLeft = ({ users }) => { if (!isStale) setUsers(users); };
+    const onCursorUpdated = ({ userId, cursor }) => { if (!isStale) setUsers(p => p.map(u => u.id === userId ? { ...u, cursor } : u)); };
+    const onDocumentRestored = ({ title, elements }) => { if (!isStale) { setTitle(title); setElements(elements); } };
 
-    // Chat messages
-    socket.on('chat-message', (message) => {
+    // ============ COMMENTS ============
+    const onCommentAdded = ({ comment }) => { if (!isStale) setComments(p => [...p, comment]); };
+    const onCommentReplyAdded = ({ commentId, reply }) => { if (!isStale) setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, replies: [...(c.replies || []), reply] } : c)); };
+    const onCommentResolved = ({ commentId, resolved }) => { if (!isStale) setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, resolved } : c)); };
+    const onCommentDeleted = ({ commentId }) => { if (!isStale) setComments(p => p.filter(c => c.id !== commentId && c._id !== commentId)); };
+    const onCommentUpdated = ({ commentId, content }) => { if (!isStale) setComments(p => p.map(c => (c.id === commentId || c._id === commentId) ? { ...c, content } : c)); };
+
+    // ============ SUGGESTIONS ============
+    const onSuggestionAdded = ({ suggestion }) => { if (!isStale) setSuggestions(p => [...p, suggestion]); };
+    const onSuggestionAccepted = ({ suggestionId }) => { if (!isStale) setSuggestions(p => p.filter(s => s.id !== suggestionId)); };
+    const onSuggestionRejected = ({ suggestionId }) => { if (!isStale) setSuggestions(p => p.filter(s => s.id !== suggestionId)); };
+
+    // ============ CHAT ============
+    const onChatMessage = (message) => {
       if (isStale) return;
-      // Deduplicate - don't add if already exists
       setChatMessages(prev => {
         if (prev.some(m => m.id === message.id)) return prev;
         return [...prev, message];
       });
-      // Increment unread if chat is closed and message is from someone else
       if (message.senderId !== socket.id) {
         setUnreadMessages(prev => prev + 1);
-        playChatNotification();
+        playChatNotificationRef.current?.();
       }
-    });
-    socket.on('chat-history', (messages) => { if (!isStale) setChatMessages(messages); });
+    };
+    const onChatHistory = (messages) => { if (!isStale) setChatMessages(messages); };
 
-    return () => { isStale = true; socket.disconnect(); };
-  }, [docId, token, playChatNotification, serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+    // ============ REGISTER ALL LISTENERS ============
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('document-state', onDocumentState);
+    socket.on('full-sync-applied', onFullSyncApplied);
+    socket.on('title-updated', onTitleUpdated);
+    socket.on('element-updated', onElementUpdated);
+    socket.on('element-conflict', onElementConflict);
+    socket.on('element-type-updated', onElementTypeUpdated);
+    socket.on('element-inserted', onElementInserted);
+    socket.on('element-deleted', onElementDeleted);
+    socket.on('user-joined', onUserJoined);
+    socket.on('user-left', onUserLeft);
+    socket.on('cursor-updated', onCursorUpdated);
+    socket.on('document-restored', onDocumentRestored);
+    socket.on('comment-added', onCommentAdded);
+    socket.on('comment-reply-added', onCommentReplyAdded);
+    socket.on('comment-resolved', onCommentResolved);
+    socket.on('comment-deleted', onCommentDeleted);
+    socket.on('comment-updated', onCommentUpdated);
+    socket.on('suggestion-added', onSuggestionAdded);
+    socket.on('suggestion-accepted', onSuggestionAccepted);
+    socket.on('suggestion-rejected', onSuggestionRejected);
+    socket.on('chat-message', onChatMessage);
+    socket.on('chat-history', onChatHistory);
+
+    // ============ CLEANUP: Deregister ALL listeners + disconnect ============
+    return () => {
+      isStale = true;
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('document-state', onDocumentState);
+      socket.off('full-sync-applied', onFullSyncApplied);
+      socket.off('title-updated', onTitleUpdated);
+      socket.off('element-updated', onElementUpdated);
+      socket.off('element-conflict', onElementConflict);
+      socket.off('element-type-updated', onElementTypeUpdated);
+      socket.off('element-inserted', onElementInserted);
+      socket.off('element-deleted', onElementDeleted);
+      socket.off('user-joined', onUserJoined);
+      socket.off('user-left', onUserLeft);
+      socket.off('cursor-updated', onCursorUpdated);
+      socket.off('document-restored', onDocumentRestored);
+      socket.off('comment-added', onCommentAdded);
+      socket.off('comment-reply-added', onCommentReplyAdded);
+      socket.off('comment-resolved', onCommentResolved);
+      socket.off('comment-deleted', onCommentDeleted);
+      socket.off('comment-updated', onCommentUpdated);
+      socket.off('suggestion-added', onSuggestionAdded);
+      socket.off('suggestion-accepted', onSuggestionAccepted);
+      socket.off('suggestion-rejected', onSuggestionRejected);
+      socket.off('chat-message', onChatMessage);
+      socket.off('chat-history', onChatHistory);
+      socket.disconnect();
+    };
+  }, [docId, token, serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Note: playChatNotification removed from deps (uses ref) to prevent socket reconnection on callback identity change
 }

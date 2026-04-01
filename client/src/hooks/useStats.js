@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { stripHtml } from '../utils/helpers';
-import { LINES_PER_PAGE } from '../constants/elementTypes';
+import { PAGE_FORMATS } from '../constants/elementTypes';
 
-export default function useStats(elements, characters, elementsRef) {
+export default function useStats(elements, characters, elementsRef, pageFormat = 'us-letter') {
   // Stats calculation - deferred to avoid blocking Enter key
   const [stats, setStats] = useState({ words: 0, chars: 0, scenes: 0, dialogueWords: 0, actionWords: 0, dialogueRatio: 0, readingTimeMin: 0, screenTimeMin: 0 });
   const statsTimerRef = useRef(null);
@@ -24,7 +24,8 @@ export default function useStats(elements, characters, elementsRef) {
       const dialogueRatio = words > 0 ? Math.round((dialogueWords / words) * 100) : 0;
       const readingTimeMin = Math.ceil(words / 200);
       const screenTimeMin = Math.round(words / 150);
-      setStats({ words, chars, scenes, dialogueWords, actionWords, dialogueRatio, readingTimeMin, screenTimeMin });
+      const { totalPages } = computePageInfo(elementsRef.current);
+      setStats({ words, chars, scenes, dialogueWords, actionWords, dialogueRatio, readingTimeMin, screenTimeMin, pageCount: totalPages });
     }, 300);
     return () => { if (statsTimerRef.current) clearTimeout(statsTimerRef.current); };
   }, [elements, elementsRef]);
@@ -36,16 +37,18 @@ export default function useStats(elements, characters, elementsRef) {
     let currentPage = 1;
     let h = 0;
     const getLines = el => {
-      const cpl = { scene: 58, action: 58, character: 20, dialogue: 34, parenthetical: 24, transition: 58 };
-      const c = cpl[el.type] || 58;
+      // Chars per line from page format preset
+      const fmt = PAGE_FORMATS[pageFormat] || PAGE_FORMATS['us-letter'];
+      const c = fmt.cpl[el.type] || 60;
       const l = el.content ? Math.ceil(stripHtml(el.content).length / c) : 1;
-      const e = { scene: 2.5, action: 1, character: 1, dialogue: 0, parenthetical: 0, transition: 1 };
-      const lh = (el.type === 'action' || el.type === 'dialogue') ? 1.1 : 1;
-      return (l * lh) + (e[el.type] || 0);
+      // Extra lines for spacing (margin-top in em units)
+      const e = { scene: 2, action: 1, character: 1, dialogue: 0, parenthetical: 0, transition: 1 };
+      return l + (e[el.type] || 0);
     };
     const pageElements = [];
     els.forEach((el, idx) => {
       const lines = getLines(el);
+      const LINES_PER_PAGE = (PAGE_FORMATS[pageFormat] || PAGE_FORMATS['us-letter']).linesPerPage;
       if (h + lines > LINES_PER_PAGE && pageElements.length > 0) {
         let orphanCount = 0;
         const last = pageElements[pageElements.length - 1];

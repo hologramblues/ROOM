@@ -7,7 +7,7 @@ export default function useDocumentLoader({
   setElements, setTitle, setCharacters, setComments, setSuggestions,
   setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
   setWhiteboardElements, setIsOwner, setMyRole, setPublicAccessState,
-  setLoading,
+  setLoading, setToken,
   serverUrl,
 }) {
   // Load document via REST API
@@ -21,14 +21,23 @@ export default function useDocumentLoader({
         return;
       }
       if (loadedDocRef.current === docId) return;
-      // Skip loading if no token — wait for user to login first
-      // (the effect will re-trigger when token changes)
+      // Auth required — wait for login (effect re-triggers when token changes)
       if (!token) return;
 
       setLoading(true);
       try {
         const headers = { Authorization: 'Bearer ' + token };
         const res = await fetch(effectiveUrl + '/api/documents/' + docId, { headers });
+
+        // Clear expired/invalid token on 401
+        if (res.status === 401) {
+          console.warn('[LOAD] Token expired or invalid — clearing');
+          localStorage.removeItem('screenplay-token');
+          if (setToken) setToken(null);
+          setLoading(false);
+          return;
+        }
+
         if (res.ok) {
           const data = await res.json();
           console.log('[LOAD] Document loaded with', data.elements?.length, 'elements');

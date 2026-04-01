@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { IS_DESKTOP } from '../constants/config';
+import { IS_DESKTOP, ENABLE_BEATBOARD } from '../constants/config';
+import { PAGE_FORMATS } from '../constants/elementTypes';
 import { FONT_OPTIONS } from '../constants/fonts';
 import Logo from './Logo';
 import UserAvatar from './UserAvatar';
@@ -28,6 +29,7 @@ function HeaderBar({
   // Menus state (from App: characters panel, font)
   showCharactersPanel, setShowCharactersPanel,
   scriptFont, setScriptFont,
+  pageFormat, setPageFormat,
   chatNotificationSound, setChatNotificationSound,
   language, setLanguage,
   token,
@@ -185,6 +187,14 @@ function HeaderBar({
                   {label} {scriptFont === key && '✓'}
                 </button>
               ))}
+              {/* Page format selector */}
+              <div style={{ height: 1, background: darkMode ? '#484848' : '#e5e7eb', margin: '4px 0' }} />
+              {Object.entries(PAGE_FORMATS).map(([key, { label }]) => (
+                <button key={key} onClick={() => { setPageFormat(key); localStorage.setItem('rooms-page-format', key); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: pageFormat === key ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  {label} {pageFormat === key && '✓'}
+                </button>
+              ))}
               <div style={{ height: 1, background: darkMode ? '#484848' : '#e5e7eb', margin: '4px 0' }} />
               <button onClick={() => { setChatNotificationSound(!chatNotificationSound); setShowToolsMenu(false); }} style={{ width: '100%', padding: '10px 14px', background: chatNotificationSound ? (darkMode ? '#484848' : '#f3f4f6') : 'transparent', border: 'none', borderBottom: `1px solid ${darkMode ? '#484848' : '#e5e7eb'}`, color: darkMode ? 'white' : 'black', cursor: 'pointer', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -247,6 +257,7 @@ function HeaderBar({
             </svg>
             Script
           </button>
+          {ENABLE_BEATBOARD && (
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setActiveView('beatboard'); }}
@@ -267,6 +278,7 @@ function HeaderBar({
             </svg>
             Beat Board
           </button>
+          )}
         </div>
 
         {/* ELEMENT TYPE SELECTOR */}

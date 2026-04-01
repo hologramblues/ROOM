@@ -477,7 +477,8 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
         className="comments-sidebar-scroll-container"
         style={{
           flex: 1,
-          overflowY: 'auto',
+          overflowY: 'hidden',
+          overflowX: 'hidden',
           position: 'relative',
           padding: '8px 12px'
         }}
@@ -502,7 +503,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             }
 
             return (
-              <div style={{
+              <div data-comment-element-index={pendingIdx} style={{
                 position: 'absolute',
                 top: 0,
                 left: 8,
@@ -713,7 +714,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             }
 
             return (
-              <div style={{
+              <div data-comment-element-index={pendingIdx} style={{
                 position: 'absolute',
                 top: 0,
                 left: 8,
@@ -1024,8 +1025,7 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             })
           ) : null}
 
-          {/* Spacer to ensure sidebar can scroll to full document height */}
-          <div style={{ height: maxContentHeight, pointerEvents: 'none' }} />
+          {/* Spacer removed — comment positions are now managed by useElementPositions rAF transforms */}
         </div>
       </div>
     </div>

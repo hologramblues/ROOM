@@ -117,4 +117,53 @@ const renderWithMentions = (text, darkMode) => {
   });
 };
 
-export { escapeHtml, stripHtml, generateId, buildDocFromElements, extractElementsFromDoc, elementsEqual, getInitials, formatTime, renderWithMentions };
+/**
+ * Compute granular diffs between two element arrays.
+ * Returns { updates, inserts, deletes } using element IDs for reliable matching.
+ *
+ * @param {Array} oldEls - Previous elements array
+ * @param {Array} newEls - New elements array
+ * @returns {{ updates: Array, inserts: Array, deletes: Array }}
+ */
+function computeElementDiffs(oldEls, newEls) {
+  const updates = [];
+  const inserts = [];
+  const deletes = [];
+
+  if (!oldEls || !newEls) return { updates, inserts, deletes };
+
+  // Build lookup maps by ID
+  const oldMap = new Map();
+  oldEls.forEach((el, i) => oldMap.set(el.id, { el, index: i }));
+
+  const newMap = new Map();
+  newEls.forEach((el, i) => newMap.set(el.id, { el, index: i }));
+
+  // Detect updates and inserts by walking newEls
+  for (let i = 0; i < newEls.length; i++) {
+    const el = newEls[i];
+    const old = oldMap.get(el.id);
+    if (old) {
+      // Element exists in both — check if content or type changed
+      if (old.el.content !== el.content || old.el.type !== el.type) {
+        updates.push({ index: i, element: el });
+      }
+    } else {
+      // New element — find the preceding element ID for afterElementId
+      const afterElementId = i > 0 ? newEls[i - 1].id : null;
+      inserts.push({ afterIndex: i - 1, afterElementId, element: el });
+    }
+  }
+
+  // Detect deletes by walking oldEls
+  for (let i = 0; i < oldEls.length; i++) {
+    const el = oldEls[i];
+    if (!newMap.has(el.id)) {
+      deletes.push({ index: i, elementId: el.id });
+    }
+  }
+
+  return { updates, inserts, deletes };
+}
+
+export { escapeHtml, stripHtml, generateId, buildDocFromElements, extractElementsFromDoc, elementsEqual, computeElementDiffs, getInitials, formatTime, renderWithMentions };

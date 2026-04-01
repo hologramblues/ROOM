@@ -12,7 +12,7 @@ const { router: authRouter, authMiddleware, optionalAuthMiddleware, socketAuthMi
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
+const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] }, pingTimeout: 10000, pingInterval: 5000 });
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/screenplay-collab';
 mongoose.connect(MONGODB_URI).then(() => console.log('Connected to MongoDB')).catch(err => console.error('MongoDB connection error:', err));
@@ -465,20 +465,20 @@ app.get('/api/documents', authMiddleware, async (req, res) => {
 });
 
 // Lightweight meta endpoint for conflict detection (offline mode)
-app.get('/api/documents/:shortId/meta', optionalAuthMiddleware, async (req, res) => {
+app.get('/api/documents/:shortId/meta', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc) return res.status(404).json({ error: 'Document non trouve' });
-    if (!checkDocumentAccess(doc, req.user, 'viewer')) return res.status(403).json({ error: 'Acces refuse' });
     res.json({ updatedAt: doc.updatedAt, title: doc.title });
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });
 
-app.get('/api/documents/:shortId', optionalAuthMiddleware, async (req, res) => {
+app.get('/api/documents/:shortId', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc) return res.status(404).json({ error: 'Document non trouve' });
-    if (!checkDocumentAccess(doc, req.user, 'viewer')) return res.status(403).json({ error: 'Acces refuse' });
+    // Auth required. Any authenticated user with the shortId (shared link) can access.
+    // They will be auto-added as collaborator when they join via socket.
     res.json({ 
       id: doc.shortId, 
       title: doc.title, 
@@ -791,26 +791,39 @@ io.on('connection', (socket) => {
       if (currentDocId) { const room = activeRooms.get(currentDocId); if (room) { room.delete(socket.id); socket.to(currentDocId).emit('user-left', { id: socket.id, users: Array.from(room.values()) }); } socket.leave(currentDocId); }
       const doc = await Document.findOne({ shortId: docId });
       if (!doc) return socket.emit('error', { message: 'Document non trouve' });
-      if (!doc.publicAccess?.enabled && !socket.user) return socket.emit('error', { message: 'Authentification requise' });
+      // Auth always required — no anonymous mode
+      if (!socket.user) return socket.emit('error', { message: 'Authentification requise' });
       if (!checkDocumentAccess(doc, socket.user, 'viewer')) return socket.emit('error', { message: 'Acces refuse' });
       let role = 'viewer';
-      if (socket.user) { if (doc.ownerId.equals(socket.user._id)) role = 'editor'; else { const c = doc.collaborators.find(c => c.userId.equals(socket.user._id)); if (c) role = c.role; } }
-      // Apply public access role (use the highest between current role and public role)
-      if (doc.publicAccess.enabled) {
-        const h = { viewer: 0, commenter: 1, editor: 2 };
-        if (h[doc.publicAccess.role] > h[role]) role = doc.publicAccess.role;
+      if (doc.ownerId.equals(socket.user._id)) {
+        role = 'editor';
+      } else {
+        const c = doc.collaborators.find(c => c.userId.equals(socket.user._id));
+        if (c) {
+          role = c.role;
+        } else {
+          // New user accessing via shared link — auto-add as editor collaborator
+          await Document.updateOne(
+            { shortId: docId, 'collaborators.userId': { $ne: socket.user._id } },
+            { $push: { collaborators: { userId: socket.user._id, role: 'editor' } } }
+          );
+          role = 'editor';
+          console.log(`[COLLAB] Auto-added ${socket.user.name} as editor to ${docId}`);
+        }
       }
       currentDocId = docId; socket.join(docId);
       if (!activeRooms.has(docId)) activeRooms.set(docId, new Map());
-      const userInfo = { id: socket.id, name: socket.user?.name || 'Anonyme-' + socket.id.slice(0,4), color: socket.user?.color || getRandomColor(), role, cursor: null };
+      const userInfo = { id: socket.id, name: socket.user.name, color: socket.user.color || getRandomColor(), role, cursor: null };
       activeRooms.get(docId).set(socket.id, userInfo);
       
-      // Get collaborators with their user info
+      // Re-read doc to get fresh collaborators list (includes auto-added user)
+      const freshDoc = await Document.findOne({ shortId: docId }).select('collaborators ownerId');
+      const docCollaborators = freshDoc?.collaborators || doc.collaborators || [];
       let collaboratorsList = [];
-      if (doc.collaborators && doc.collaborators.length > 0) {
-        const collabUserIds = doc.collaborators.map(c => c.userId);
+      if (docCollaborators.length > 0) {
+        const collabUserIds = docCollaborators.map(c => c.userId);
         const collabUsers = await User.find({ _id: { $in: collabUserIds } }).select('name color');
-        collaboratorsList = doc.collaborators.map(c => {
+        collaboratorsList = docCollaborators.map(c => {
           const user = collabUsers.find(u => u._id.equals(c.userId));
           return { userId: c.userId, name: user?.name || 'Inconnu', color: user?.color || '#6b7280', role: c.role };
         });
@@ -821,17 +834,18 @@ io.on('connection', (socket) => {
         collaboratorsList.unshift({ userId: doc.ownerId, name: owner.name, color: owner.color, role: 'owner' });
       }
       
-      socket.emit('document-state', { 
-        id: doc.shortId, 
-        title: doc.title, 
-        elements: doc.elements, 
-        characters: doc.characters, 
-        locations: doc.locations, 
-        comments: doc.comments, 
+      socket.emit('document-state', {
+        id: doc.shortId,
+        title: doc.title,
+        elements: doc.elements,
+        characters: doc.characters,
+        locations: doc.locations,
+        comments: doc.comments,
         suggestions: doc.suggestions || [],
-        users: Array.from(activeRooms.get(docId).values()), 
+        users: Array.from(activeRooms.get(docId).values()),
         role,
-        collaborators: collaboratorsList
+        collaborators: collaboratorsList,
+        docVersion: doc.version || 0
       });
       socket.to(docId).emit('user-joined', { user: userInfo, users: Array.from(activeRooms.get(docId).values()) });
     } catch (error) { console.error('Join error:', error); }
@@ -851,17 +865,39 @@ io.on('connection', (socket) => {
     } catch (error) { console.error('Title error:', error); }
   });
 
-  socket.on('element-change', async ({ index, element }) => {
+  socket.on('element-change', async ({ index, element, baseVersion }) => {
     if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
     try {
       if (!validateElement(element)) return;
-      // Use ID-based update instead of positional index (prevents drift in concurrent edits)
-      const result = await Document.updateOne(
-        { shortId: currentDocId, 'elements.id': element.id },
-        { $set: { 'elements.$': element } }
-      );
-      if (result.modifiedCount > 0) {
-        socket.to(currentDocId).emit('element-updated', { index, element });
+      const elementWithVersion = { ...element, v: (baseVersion != null ? baseVersion + 1 : 0) };
+
+      if (baseVersion != null) {
+        // Optimistic concurrency: only update if server version matches baseVersion
+        const result = await Document.updateOne(
+          { shortId: currentDocId, 'elements.id': element.id, 'elements.v': baseVersion },
+          { $set: { 'elements.$.content': element.content, 'elements.$.type': element.type, 'elements.$.v': baseVersion + 1 } }
+        );
+        if (result.modifiedCount > 0) {
+          socket.to(currentDocId).emit('element-updated', { index, element: elementWithVersion });
+        } else {
+          // Version mismatch — concurrent edit detected. Send server state back to sender.
+          const doc = await Document.findOne({ shortId: currentDocId }).select('elements');
+          if (doc) {
+            const serverElement = doc.elements.find(el => el.id === element.id);
+            if (serverElement) {
+              socket.emit('element-conflict', { elementId: element.id, serverElement: serverElement.toObject() });
+            }
+          }
+        }
+      } else {
+        // No version sent (legacy client) — fall back to last-write-wins
+        const result = await Document.updateOne(
+          { shortId: currentDocId, 'elements.id': element.id },
+          { $set: { 'elements.$': elementWithVersion } }
+        );
+        if (result.modifiedCount > 0) {
+          socket.to(currentDocId).emit('element-updated', { index, element: elementWithVersion });
+        }
       }
     } catch (error) { console.error('Element error:', error); }
   });
@@ -891,25 +927,33 @@ io.on('connection', (socket) => {
     if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
     if (!validateElement(element)) return;
     try {
+      // Ensure element has version field
+      const versionedElement = { ...element, v: element.v || 0 };
+
+      // Guard: prevent duplicate insert (idempotency) — check if element ID already exists
+      const existing = await Document.findOne({ shortId: currentDocId, 'elements.id': element.id });
+      if (existing) return; // Already inserted (concurrent duplicate)
+
       if (afterElementId) {
         // ID-based insert: find position of afterElementId, insert after it
+        // Use findOneAndUpdate to get fresh doc and insert atomically
         const doc = await Document.findOne({ shortId: currentDocId }).select('elements');
         if (!doc) return;
         const pos = doc.elements.findIndex(el => el.id === afterElementId);
         const insertPos = pos >= 0 ? pos + 1 : doc.elements.length;
         await Document.updateOne(
           { shortId: currentDocId },
-          { $push: { elements: { $each: [element], $position: insertPos } } }
+          { $push: { elements: { $each: [versionedElement], $position: insertPos } }, $inc: { version: 1 } }
         );
       } else {
         // Fallback to index-based
-        const insertPos = afterIndex + 1;
+        const insertPos = Math.max(0, afterIndex + 1);
         await Document.updateOne(
           { shortId: currentDocId },
-          { $push: { elements: { $each: [element], $position: insertPos } } }
+          { $push: { elements: { $each: [versionedElement], $position: insertPos } }, $inc: { version: 1 } }
         );
       }
-      socket.to(currentDocId).emit('element-inserted', { afterIndex, afterElementId, element });
+      socket.to(currentDocId).emit('element-inserted', { afterIndex, afterElementId, element: versionedElement });
     } catch (error) { console.error('Insert error:', error); }
   });
 
@@ -926,7 +970,7 @@ io.on('connection', (socket) => {
       if (!targetId) return;
       const result = await Document.updateOne(
         { shortId: currentDocId, 'elements.1': { $exists: true } }, // ensure >1 element
-        { $pull: { elements: { id: targetId } } }
+        { $pull: { elements: { id: targetId } }, $inc: { version: 1 } }
       );
       if (result.modifiedCount > 0) {
         socket.to(currentDocId).emit('element-deleted', { index, elementId: targetId });
@@ -937,7 +981,7 @@ io.on('connection', (socket) => {
   // ============ COMMENT SOCKET HANDLERS ============
 
   socket.on('comment-add', async ({ comment }) => {
-    if (!currentDocId || !canComment()) return;
+    if (!currentDocId || !canComment() || !checkSocketRate(socket.id)) return;
     try {
       // Check access BEFORE pushing
       const doc = await Document.findOne({ shortId: currentDocId });
@@ -968,7 +1012,7 @@ io.on('connection', (socket) => {
   // ============ SUGGESTION SOCKET HANDLERS ============
 
   socket.on('suggestion-add', async ({ suggestion }) => {
-    if (!currentDocId || !canComment()) return;
+    if (!currentDocId || !canComment() || !checkSocketRate(socket.id)) return;
     try {
       // Check access BEFORE pushing
       const doc = await Document.findOne({ shortId: currentDocId });
@@ -1000,22 +1044,28 @@ io.on('connection', (socket) => {
   socket.on('suggestion-accept', async ({ suggestionId }) => {
     if (!currentDocId || !canWrite()) return;
     try {
-      // Atomically remove the suggestion (prevents double-accept race)
-      const pullResult = await Document.findOneAndUpdate(
-        { shortId: currentDocId, 'suggestions.id': suggestionId },
-        { $pull: { suggestions: { id: suggestionId } } },
-        { new: false } // return doc BEFORE pull so we can read the suggestion
+      // First, read the suggestion before removing it
+      const docBefore = await Document.findOne(
+        { shortId: currentDocId, 'suggestions.id': suggestionId }
       );
-      if (!pullResult) return;
-      if (!checkDocumentAccess(pullResult, socket.user, 'editor')) return;
+      if (!docBefore) return; // suggestion doesn't exist or doc not found
+      if (!checkDocumentAccess(docBefore, socket.user, 'editor')) return;
 
-      const suggestion = pullResult.suggestions?.find(s => s.id === suggestionId);
-      if (!suggestion) return; // already removed by another user
+      const suggestion = docBefore.suggestions?.find(s => s.id === suggestionId);
+      if (!suggestion) return;
+
+      // Atomically remove the suggestion — only one concurrent caller succeeds
+      const pullResult = await Document.updateOne(
+        { shortId: currentDocId, 'suggestions.id': suggestionId },
+        { $pull: { suggestions: { id: suggestionId } } }
+      );
+      // If modifiedCount is 0, another user already removed it (double-accept prevented)
+      if (!pullResult.modifiedCount) return;
 
       // Now apply the text change atomically
-      const elementIndex = pullResult.elements.findIndex(el => el.id === suggestion.elementId);
+      const elementIndex = docBefore.elements.findIndex(el => el.id === suggestion.elementId);
       if (elementIndex !== -1) {
-        const element = pullResult.elements[elementIndex];
+        const element = docBefore.elements[elementIndex];
         const content = element.content || '';
 
         if (suggestion.startOffset >= 0 && suggestion.endOffset <= content.length &&
@@ -1064,16 +1114,19 @@ io.on('connection', (socket) => {
 
   // ============ FULL SYNC (undo/redo/drag/offline push) ============
 
-  socket.on('full-sync', async ({ elements }) => {
+  socket.on('full-sync', async ({ elements, docVersion }) => {
     if (!currentDocId || !canWrite() || !checkSocketRate(socket.id) || !elements || !Array.isArray(elements)) return;
     try {
       const doc = await Document.findOne({ shortId: currentDocId });
       if (!doc) return;
-      doc.elements = elements;
+      // Ensure all elements have a version field
+      const versionedElements = elements.map(el => ({ ...el, v: el.v || 0 }));
+      doc.elements = versionedElements;
+      doc.version = (doc.version || 0) + 1;
       doc.markModified('elements');
       await doc.save();
-      socket.to(currentDocId).emit('full-sync-applied', { elements });
-      console.log('[FULL-SYNC] Applied', elements.length, 'elements to', currentDocId);
+      socket.to(currentDocId).emit('full-sync-applied', { elements: versionedElements, docVersion: doc.version });
+      console.log('[FULL-SYNC] Applied', elements.length, 'elements to', currentDocId, 'v' + doc.version);
     } catch (err) {
       console.error('[FULL-SYNC] Error:', err);
     }
@@ -1092,7 +1145,7 @@ io.on('connection', (socket) => {
   // ============ CURSOR & DISCONNECT ============
 
   socket.on('cursor-move', ({ index, position }) => {
-    if (!currentDocId) return;
+    if (!currentDocId || !checkSocketRate(socket.id)) return;
     const room = activeRooms.get(currentDocId);
     if (room) { const user = room.get(socket.id); if (user) { user.cursor = { index, position }; socket.to(currentDocId).emit('cursor-updated', { userId: socket.id, cursor: { index, position } }); } }
   });

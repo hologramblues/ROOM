@@ -1,7 +1,38 @@
-const SP_NEXT_TYPE = { scene: 'action', action: 'action', character: 'dialogue', dialogue: 'character', parenthetical: 'dialogue', transition: 'scene' };
+// ============ FINAL DRAFT TYPING FLOW ============
+// Enter: what element type is created after the current one
+const SP_NEXT_TYPE = {
+  scene: 'action',           // Scene Heading → Action
+  action: 'action',          // Action → Action
+  character: 'dialogue',     // Character → Dialogue
+  dialogue: 'character',     // Dialogue → Character (ping-pong)
+  parenthetical: 'dialogue', // Parenthetical → Dialogue
+  transition: 'action',      // Transition → Action (was 'scene' — FD creates Action)
+};
+
+// Enter on empty element: convert to this type, or null = create new action below
 const SP_EMPTY_ENTER = (t) => (t === 'action' ? null : 'action');
-const SP_TAB_FWD = { scene: 'action', action: 'character', character: 'parenthetical', parenthetical: 'dialogue', dialogue: 'transition', transition: 'scene' };
-const SP_TAB_REV = { scene: 'transition', transition: 'dialogue', dialogue: 'parenthetical', parenthetical: 'character', character: 'action', action: 'scene' };
+
+// Tab forward cycling (Final Draft standard)
+// In Dialogue/Parenthetical: Tab toggles between them (handled in ScreenplayElement.js)
+// For all others: this is the cycle
+const SP_TAB_FWD = {
+  scene: 'action',           // Scene → Action
+  action: 'character',       // Action → Character
+  character: 'dialogue',     // Character → Dialogue (was 'parenthetical')
+  parenthetical: 'dialogue', // Parenthetical → Dialogue (toggle)
+  dialogue: 'parenthetical', // Dialogue → Parenthetical (toggle)
+  transition: 'scene',       // Transition → Scene
+};
+
+// Shift-Tab reverse cycling
+const SP_TAB_REV = {
+  scene: 'transition',
+  transition: 'dialogue',
+  dialogue: 'parenthetical', // toggle
+  parenthetical: 'dialogue', // toggle
+  character: 'action',
+  action: 'scene',
+};
 
 const ELEMENT_TYPES = [
   { id: 'scene', label: 'Séquence', shortcut: '1' },
@@ -14,6 +45,28 @@ const ELEMENT_TYPES = [
 
 const TYPE_TO_FDX = { scene: 'Scene Heading', action: 'Action', character: 'Character', dialogue: 'Dialogue', parenthetical: 'Parenthetical', transition: 'Transition' };
 const FDX_TO_TYPE = { 'Scene Heading': 'scene', 'Action': 'action', 'Character': 'character', 'Dialogue': 'dialogue', 'Parenthetical': 'parenthetical', 'Transition': 'transition', 'General': 'action' };
-const LINES_PER_PAGE = 63; // A4 content area: 297mm - 13mm top margin - 15mm bottom margin = 269mm ÷ 4.23mm/line ≈ 63
 
-export { SP_NEXT_TYPE, SP_EMPTY_ENTER, SP_TAB_FWD, SP_TAB_REV, ELEMENT_TYPES, TYPE_TO_FDX, FDX_TO_TYPE, LINES_PER_PAGE };
+// Page format presets
+const PAGE_FORMATS = {
+  'us-letter': {
+    label: 'US Letter',
+    width: '215.9mm',
+    height: '279.4mm',
+    padding: '25.4mm 25.4mm 25.4mm 38.1mm', // 1" top/bottom/right, 1.5" left
+    linesPerPage: 55,
+    contentWidthMm: 152.4, // 215.9 - 38.1 - 25.4
+    // Chars per line (Courier 12pt, 1 char ≈ 2.54mm)
+    cpl: { scene: 60, action: 60, character: 38, dialogue: 37, parenthetical: 25, transition: 60 },
+  },
+  'a4': {
+    label: 'A4',
+    width: '210mm',
+    height: '297mm',
+    padding: '20mm 25mm 25mm 38mm',
+    linesPerPage: 63,
+    contentWidthMm: 147, // 210 - 38 - 25
+    cpl: { scene: 58, action: 58, character: 36, dialogue: 36, parenthetical: 24, transition: 58 },
+  },
+};
+
+export { SP_NEXT_TYPE, SP_EMPTY_ENTER, SP_TAB_FWD, SP_TAB_REV, ELEMENT_TYPES, TYPE_TO_FDX, FDX_TO_TYPE, PAGE_FORMATS };

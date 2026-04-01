@@ -8,6 +8,7 @@ import ExternalSpanMark from '../extensions/ExternalSpanMark';
 import ScreenplayElement from '../extensions/ScreenplayElement';
 import { createPageBreakPlugin } from '../extensions/pageBreakPlugin';
 import { createSceneLockPlugin } from '../extensions/sceneLockPlugin';
+import { createRemoteCursorPlugin } from '../extensions/remoteCursorPlugin';
 import { buildDocFromElements, extractElementsFromDoc, elementsEqual, stripHtml } from '../utils/helpers';
 import { getFontFamily } from '../constants/fonts';
 
@@ -28,6 +29,7 @@ const SingleEditor = React.memo(({
   onEditorFocus,
   onActiveElementChange,
   remoteCursors,
+  onCursorMove,
   computePageInfoFn,
   highlightsByElement,
   lockedScenes,
@@ -42,6 +44,8 @@ const SingleEditor = React.memo(({
   darkModeRef.current = darkMode;
   const lockedScenesRef = useRef(lockedScenes);
   lockedScenesRef.current = lockedScenes;
+  const remoteCursorsRef = useRef(remoteCursors);
+  remoteCursorsRef.current = remoteCursors;
   const [autoState, setAutoState] = useState({ show: false, items: [], idx: 0, type: null, nodePos: null });
 
   // Create page break extension that wraps ProseMirror plugin
@@ -60,6 +64,16 @@ const SingleEditor = React.memo(({
     const plugin = createSceneLockPlugin(lockedScenesRef);
     return Extension.create({
       name: 'sceneLockHelper',
+      addProseMirrorPlugins() { return [plugin]; },
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Remote cursors extension — shows other users' cursor positions
+  const RemoteCursorExtension = useMemo(() => {
+    const plugin = createRemoteCursorPlugin(remoteCursorsRef);
+    return Extension.create({
+      name: 'remoteCursorHelper',
       addProseMirrorPlugins() { return [plugin]; },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,6 +100,7 @@ const SingleEditor = React.memo(({
       ExternalSpanMark,
       PageBreakExtension,
       SceneLockExtension,
+      RemoteCursorExtension,
     ],
     content: buildDocFromElements(elements),
     editable: canEdit,
@@ -143,14 +158,16 @@ const SingleEditor = React.memo(({
         const node = $from.parent;
         if (node.type.name !== 'screenplayElement') return;
 
-        // Notify parent of active element index
-        let elemIdx = 0;
-        editor.state.doc.forEach((child, offset, index) => {
-          if (offset <= $from.pos && offset + child.nodeSize > $from.pos) {
-            elemIdx = index;
-          }
-        });
+        // Compute element index ONCE using ProseMirror's resolved position (O(1), no doc walk)
+        const elemIdx = $from.index(0);
+
         if (onActiveElementChange) onActiveElementChange(elemIdx);
+
+        // Emit cursor position for remote users
+        if (onCursorMove) {
+          const offsetInElement = from - $from.before() - 1;
+          onCursorMove(elemIdx, Math.max(0, offsetInElement));
+        }
 
         // Text selection → comment/suggestion creation
         if (from !== to && onTextSelect) {
@@ -158,13 +175,6 @@ const SingleEditor = React.memo(({
           if (selectedText.trim()) {
             const nodeStart = $from.before();
             const coords = editor.view.coordsAtPos(from);
-            // Compute element index by walking the doc
-            let elemIdx = 0;
-            editor.state.doc.forEach((child, offset, index) => {
-              if (offset <= $from.pos && offset + child.nodeSize > $from.pos) {
-                elemIdx = index;
-              }
-            });
             onTextSelect({
               elementId: node.attrs.elementId,
               elementIndex: elemIdx,
@@ -186,12 +196,7 @@ const SingleEditor = React.memo(({
           let cyclingSuggestion = null;
           if (text.length === 0) {
             const doc = editor.state.doc;
-            let currentIndex = -1;
-            doc.forEach((child, offset, index) => {
-              if (offset <= $from.pos && offset + child.nodeSize > $from.pos) {
-                currentIndex = index;
-              }
-            });
+            const currentIndex = elemIdx; // Already computed above via $from.index(0)
             // Scan backward through elements to find scene characters
             const recentChars = [];
             for (let i = currentIndex - 1; i >= 0; i--) {
@@ -261,52 +266,88 @@ const SingleEditor = React.memo(({
   });
 
   // Sync external changes (socket, import, undo) into the editor
+  // V272-fix: Surgical per-element updates instead of full setContent
+  // This preserves the local cursor and allows remote changes to appear while user is typing
   useEffect(() => {
     if (!editor || isEditorOriginRef.current) return;
     const currentEls = extractElementsFromDoc(editor.state.doc);
     if (elementsEqual(currentEls, elements)) return;
 
-    // Check if only element types changed (not content) — apply type changes without full setContent
-    if (editor.isFocused && currentEls.length === elements.length) {
-      // Check if only types differ (content is the same)
-      let onlyTypeDiff = true;
-      const typeChanges = [];
+    // Determine which element the local cursor is in (to avoid disrupting active typing)
+    let cursorElementIndex = -1;
+    if (editor.isFocused) {
+      try {
+        const { $from } = editor.state.selection;
+        editor.state.doc.forEach((child, offset, index) => {
+          if (offset <= $from.pos && offset + child.nodeSize > $from.pos) {
+            cursorElementIndex = index;
+          }
+        });
+      } catch (_) {}
+    }
+
+    // Build ID maps for current editor state
+    const currentMap = new Map();
+    currentEls.forEach((el, i) => currentMap.set(el.id, { el, index: i }));
+    const newMap = new Map();
+    elements.forEach((el, i) => newMap.set(el.id, { el, index: i }));
+
+    // Detect if structure changed (different IDs or different order)
+    const structureChanged = currentEls.length !== elements.length ||
+      currentEls.some((el, i) => el.id !== elements[i].id);
+
+    if (!structureChanged) {
+      // Same structure — apply surgical per-element updates via a single transaction
+      const { tr } = editor.state;
+      let changed = false;
+
       for (let i = 0; i < elements.length; i++) {
-        if (currentEls[i].content !== elements[i].content || currentEls[i].id !== elements[i].id) {
-          onlyTypeDiff = false;
-          break;
+        const cur = currentEls[i];
+        const next = elements[i];
+        if (cur.type === next.type && cur.content === next.content) continue;
+
+        // Skip the element the user is actively typing in
+        if (i === cursorElementIndex) continue;
+
+        // Calculate position of this node in the doc
+        let pos = 0;
+        for (let j = 0; j < i; j++) pos += editor.state.doc.child(j).nodeSize;
+        const node = editor.state.doc.child(i);
+
+        // Apply type change
+        if (cur.type !== next.type) {
+          tr.setNodeMarkup(pos, null, { ...node.attrs, elementType: next.type });
+          changed = true;
         }
-        if (currentEls[i].type !== elements[i].type) {
-          typeChanges.push({ index: i, type: elements[i].type });
+
+        // Apply content change
+        if (cur.content !== next.content) {
+          const nodeStart = pos + 1; // +1 to enter the node
+          const nodeEnd = pos + node.nodeSize - 1; // -1 to stay inside
+          // Replace node content
+          if (next.content) {
+            tr.replaceWith(nodeStart, nodeEnd, editor.state.schema.text(next.content));
+          } else {
+            tr.delete(nodeStart, nodeEnd);
+          }
+          changed = true;
         }
       }
-      if (onlyTypeDiff && typeChanges.length > 0) {
-        // Apply type changes via setNodeMarkup (preserves cursor & content)
-        const { tr } = editor.state;
-        typeChanges.forEach(({ index, type }) => {
-          const child = editor.state.doc.child(index);
-          let pos = 0;
-          for (let j = 0; j < index; j++) pos += editor.state.doc.child(j).nodeSize;
-          tr.setNodeMarkup(pos, null, { ...child.attrs, elementType: type });
-        });
+
+      if (changed) {
         tr.setMeta('addToHistory', false);
         editor.view.dispatch(tr);
-        lastElementsRef.current = elements;
-        return;
       }
-      if (onlyTypeDiff) return; // No type changes either, skip
-      // Content changed while typing with same length — skip to avoid disrupting input
-      return;
+    } else {
+      // Structure changed (insert/delete/reorder) — full content replace required
+      const savedPos = editor.state.selection.from;
+      editor.commands.setContent(buildDocFromElements(elements), false);
+      try {
+        const maxPos = editor.state.doc.content.size - 1;
+        editor.commands.setTextSelection(Math.min(savedPos, Math.max(0, maxPos)));
+      } catch (_) {}
     }
-    // Not focused or structure changed — full content replace
-    // Save cursor
-    const savedPos = editor.state.selection.from;
-    editor.commands.setContent(buildDocFromElements(elements), false);
-    // Restore cursor position
-    try {
-      const maxPos = editor.state.doc.content.size - 1;
-      editor.commands.setTextSelection(Math.min(savedPos, maxPos));
-    } catch (_) {}
+
     lastElementsRef.current = elements;
   }, [elements, editor]);
 
@@ -319,6 +360,24 @@ const SingleEditor = React.memo(({
       }
     }
   }, [editor, canEdit]);
+
+  // Force decoration update when remote cursors change (coalesced via rAF)
+  const cursorRafRef = useRef(null);
+  useEffect(() => {
+    if (!editor || !editor.view) return;
+    if (cursorRafRef.current) cancelAnimationFrame(cursorRafRef.current);
+    cursorRafRef.current = requestAnimationFrame(() => {
+      cursorRafRef.current = null;
+      if (!editor || editor.isDestroyed) return;
+      try {
+        const { tr } = editor.state;
+        tr.setMeta('remoteCursorsUpdate', true);
+        tr.setMeta('addToHistory', false);
+        editor.view.dispatch(tr);
+      } catch (_) {}
+    });
+    return () => { if (cursorRafRef.current) cancelAnimationFrame(cursorRafRef.current); };
+  }, [editor, remoteCursors]);
 
   // Cleanup
   useEffect(() => {
@@ -406,7 +465,8 @@ const SingleEditor = React.memo(({
       }
     }, 200);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, highlightsByElement, elements]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, highlightsByElement]); // No 'elements' dep — marks only reapply when comments/suggestions change, not on every keystroke
 
   // Handle autocomplete selection
   const handleAutoSelect = useCallback((item) => {
@@ -418,16 +478,23 @@ const SingleEditor = React.memo(({
 
     if (autoState.type === 'character') {
       // Replace entire node content with selected character name
+      // Then create a dialogue element below — all in one transaction chain
       const tr = editor.state.tr;
       if (node.content.size > 0) {
         tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
       }
       tr.insertText(item, nodeStart + 1);
+      // Move cursor to end of inserted text so splitScreenplayElement detects "atEnd"
+      const endPos = nodeStart + 1 + item.length;
+      tr.setSelection(editor.state.selection.constructor.near(tr.doc.resolve(endPos)));
       editor.view.dispatch(tr);
-      // Then insert a dialogue element after
-      setTimeout(() => {
-        editor.commands.splitScreenplayElement();
-      }, 10);
+
+      // Use requestAnimationFrame to ensure the transaction is fully applied before splitting
+      requestAnimationFrame(() => {
+        if (editor && !editor.isDestroyed) {
+          editor.commands.splitScreenplayElement();
+        }
+      });
     } else if (autoState.type === 'location') {
       const text = node.textContent;
       const match = text.match(/^(INT\.|EXT\.|INT\/EXT\.?)\s*/i);
@@ -457,7 +524,7 @@ const SingleEditor = React.memo(({
         event.preventDefault();
         event.stopPropagation();
         setAutoState(prev => ({ ...prev, idx: (prev.idx - 1 + prev.items.length) % prev.items.length }));
-      } else if (event.key === 'Enter') {
+      } else if (event.key === 'Enter' || event.key === 'Tab') {
         event.preventDefault();
         event.stopPropagation();
         handleAutoSelect(autoState.items[autoState.idx]);

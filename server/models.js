@@ -38,12 +38,13 @@ const userSchema = new mongoose.Schema({
 // Document Element Schema (subdocument)
 const elementSchema = new mongoose.Schema({
   id: { type: String, required: true },
-  type: { 
-    type: String, 
+  type: {
+    type: String,
     enum: ['scene', 'action', 'character', 'dialogue', 'parenthetical', 'transition'],
     required: true,
   },
   content: { type: String, default: '' },
+  v: { type: Number, default: 0 }, // Per-element version for optimistic concurrency
 }, { _id: false });
 
 // Comment Schema (subdocument)
@@ -193,8 +194,9 @@ const documentSchema = new mongoose.Schema({
     type: Array,
     default: [],
   },
-  ownerId: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  version: { type: Number, default: 0 }, // Document-level version for structural ops (insert/delete/full-sync)
+  ownerId: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
   },

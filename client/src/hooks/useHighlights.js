@@ -5,10 +5,11 @@ import { useMemo, useEffect } from 'react';
  * Returns a map of elementId -> array of highlight entries, used by SingleEditor
  * to render TipTap marks (CommentMark / SuggestionMark).
  *
- * Also cleans up any leftover CSS Highlight API entries (V272 migration).
+ * NOTE: Offset clamping is done at mark-application time in SingleEditor (not here)
+ * to avoid recalculating on every keystroke. This memo only depends on
+ * comments/suggestions changes, NOT on elements content changes.
  */
 export default function useHighlights({ comments, suggestions, pendingInlineComment, currentUser }) {
-  // Pre-compute highlights per element (memoized for performance)
   const highlightsByElement = useMemo(() => {
     const map = {};
 
@@ -17,7 +18,6 @@ export default function useHighlights({ comments, suggestions, pendingInlineComm
       if (c.resolved) return;
       const commentId = String(c.id || c._id);
       if (c.spans && c.spans.length > 0) {
-        // Multi-element comment: add a highlight entry for each spanned element
         c.spans.forEach(span => {
           if (!span.elementId) return;
           if (!map[span.elementId]) map[span.elementId] = [];
@@ -30,7 +30,6 @@ export default function useHighlights({ comments, suggestions, pendingInlineComm
           });
         });
       } else if (c.elementId && c.highlight) {
-        // Single-element comment (backward compat)
         if (!map[c.elementId]) map[c.elementId] = [];
         map[c.elementId].push({
           startOffset: c.highlight.startOffset,
@@ -58,7 +57,7 @@ export default function useHighlights({ comments, suggestions, pendingInlineComm
       }
     });
 
-    // Show pending comment highlight immediately (before comment is submitted)
+    // Show pending comment highlight immediately
     if (pendingInlineComment && pendingInlineComment.elementId) {
       if (pendingInlineComment.spans && pendingInlineComment.spans.length > 0) {
         pendingInlineComment.spans.forEach(span => {
@@ -91,9 +90,9 @@ export default function useHighlights({ comments, suggestions, pendingInlineComm
 
     return map;
   }, [comments, suggestions, pendingInlineComment, currentUser]);
+  // ↑ NO 'elements' dep — recalculates only when comments/suggestions change, not on every keystroke
 
-  // V272: CSS Highlight API replaced by TipTap marks (applied in SingleEditor)
-  // Clean up any leftover CSS highlights
+  // Clean up any leftover CSS highlights (V272 migration)
   useEffect(() => {
     if (typeof CSS !== 'undefined' && CSS.highlights) {
       CSS.highlights.delete('comment-highlight');

@@ -3,7 +3,7 @@ import { useState, useCallback } from 'react';
 export default function useUndoRedo({
   elementsRef, beatCardsRef, structureBeatsRef, sceneSynopsisRef, sceneStatusRef,
   setElements, setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
-  socketRef
+  socketRef, lastEmittedRef
 }) {
   const [, setUndoStack] = useState([]);
   const [, setRedoStack] = useState([]);
@@ -42,6 +42,7 @@ export default function useUndoRedo({
         setElements(previous);
         if (socketRef.current) {
           socketRef.current.emit('full-sync', { elements: previous });
+          if (lastEmittedRef) lastEmittedRef.current = previous;
         }
       } else {
         if (previous.elements) setElements(previous.elements);
@@ -49,8 +50,10 @@ export default function useUndoRedo({
         if (previous.structureBeats) setStructureBeats(previous.structureBeats);
         if (previous.sceneSynopsis) setSceneSynopsis(previous.sceneSynopsis);
         if (previous.sceneStatus) setSceneStatus(previous.sceneStatus);
+        const els = previous.elements || elementsRef.current;
         if (socketRef.current) {
-          socketRef.current.emit('full-sync', { elements: previous.elements || elementsRef.current });
+          socketRef.current.emit('full-sync', { elements: els });
+          if (lastEmittedRef) lastEmittedRef.current = els;
         }
       }
 
@@ -78,6 +81,7 @@ export default function useUndoRedo({
         setElements(next);
         if (socketRef.current) {
           socketRef.current.emit('full-sync', { elements: next });
+          if (lastEmittedRef) lastEmittedRef.current = next;
         }
       } else {
         if (next.elements) setElements(next.elements);
@@ -85,8 +89,10 @@ export default function useUndoRedo({
         if (next.structureBeats) setStructureBeats(next.structureBeats);
         if (next.sceneSynopsis) setSceneSynopsis(next.sceneSynopsis);
         if (next.sceneStatus) setSceneStatus(next.sceneStatus);
+        const els = next.elements || elementsRef.current;
         if (socketRef.current) {
-          socketRef.current.emit('full-sync', { elements: next.elements || elementsRef.current });
+          socketRef.current.emit('full-sync', { elements: els });
+          if (lastEmittedRef) lastEmittedRef.current = els;
         }
       }
 

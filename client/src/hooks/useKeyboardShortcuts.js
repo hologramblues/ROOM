@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { ENABLE_BEATBOARD } from '../constants/config';
 
 export default function useKeyboardShortcuts({
   showSearch, setShowSearch, showOutline, setShowOutline,
@@ -88,13 +89,13 @@ export default function useKeyboardShortcuts({
           duplicateScene(sceneIdx);
         }
       }
-      // Cmd+B = Toggle Beat Board view
-      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+      // Cmd+B = Toggle Beat Board view (when enabled)
+      if (ENABLE_BEATBOARD && (e.metaKey || e.ctrlKey) && e.key === 'b') {
         e.preventDefault();
         setActiveView(v => v === 'script' ? 'beatboard' : 'script');
       }
-      // B alone = Open Beat Board (only if not in input/textarea)
-      if (e.key === 'b' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // B alone = Open Beat Board (only if not in input/textarea, when enabled)
+      if (ENABLE_BEATBOARD && e.key === 'b' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const activeEl2 = document.activeElement;
         const isInInput = activeEl2 && (
           activeEl2.tagName === 'INPUT' ||

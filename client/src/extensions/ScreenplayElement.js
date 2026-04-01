@@ -121,27 +121,18 @@ const ScreenplayElement = Node.create({
         const currentType = node.attrs.elementType;
         const nodeStart = $from.before();
 
+        // Determine target type
+        let newType;
         if (currentType === 'dialogue' || currentType === 'parenthetical') {
-          const newType = currentType === 'dialogue' ? 'parenthetical' : 'dialogue';
-          if (currentType === 'parenthetical' && node.content.size > 0) {
-            const text = node.textContent;
-            let fixed = text;
-            if (!fixed.startsWith('(')) fixed = '(' + fixed;
-            if (!fixed.endsWith(')')) fixed = fixed + ')';
-            if (fixed !== text) {
-              tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
-              tr.insertText(fixed, nodeStart + 1);
-            }
-          }
-          tr.setNodeMarkup(nodeStart, null, { ...node.attrs, elementType: newType });
-          if (dispatch) dispatch(tr);
-          return true;
+          // Toggle between dialogue and parenthetical (Final Draft behavior)
+          newType = currentType === 'dialogue' ? 'parenthetical' : 'dialogue';
+        } else {
+          const cycle = reverse ? SP_TAB_REV : SP_TAB_FWD;
+          newType = cycle[currentType] || 'action';
         }
 
-        const cycle = reverse ? SP_TAB_REV : SP_TAB_FWD;
-        const newType = cycle[currentType] || 'action';
-
-        if (currentType === 'parenthetical' && node.content.size > 0) {
+        // When LEAVING parenthetical: auto-close parentheses
+        if (currentType === 'parenthetical' && newType !== 'parenthetical' && node.content.size > 0) {
           const text = node.textContent;
           let fixed = text;
           if (!fixed.startsWith('(')) fixed = '(' + fixed;
@@ -149,6 +140,28 @@ const ScreenplayElement = Node.create({
           if (fixed !== text) {
             tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
             tr.insertText(fixed, nodeStart + 1);
+          }
+        }
+
+        // When ENTERING parenthetical: add () if empty, or wrap existing text
+        if (newType === 'parenthetical' && currentType !== 'parenthetical') {
+          if (node.content.size === 0) {
+            // Empty element → insert "()" and place cursor between them
+            tr.setNodeMarkup(nodeStart, null, { ...node.attrs, elementType: newType });
+            tr.insertText('()', nodeStart + 1);
+            // Place cursor between the parentheses
+            tr.setSelection(state.selection.constructor.near(tr.doc.resolve(nodeStart + 2)));
+            if (dispatch) dispatch(tr);
+            return true;
+          } else {
+            const text = node.textContent;
+            if (!text.startsWith('(') || !text.endsWith(')')) {
+              let fixed = text;
+              if (!fixed.startsWith('(')) fixed = '(' + fixed;
+              if (!fixed.endsWith(')')) fixed = fixed + ')';
+              tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
+              tr.insertText(fixed, nodeStart + 1);
+            }
           }
         }
 

@@ -13,7 +13,7 @@ function startLocalServer() {
   return new Promise((resolve, reject) => {
     const app = express();
     const server = http.createServer(app);
-    const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] } });
+    const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] }, pingTimeout: 10000, pingInterval: 5000 });
 
     app.use(cors());
     app.use(express.json({ limit: '50mb' }));
@@ -558,15 +558,16 @@ function startLocalServer() {
         }
       });
 
-      socket.on('element-change', async ({ index, element }) => {
+      socket.on('element-change', async ({ index, element, baseVersion }) => {
         if (!currentDocId || !element?.id || !checkSocketRate(socket.id)) return;
         if (!validateElement(element)) return;
         try {
+          const elementWithVersion = { ...element, v: (baseVersion != null ? baseVersion + 1 : 0) };
           await Document.updateOne(
             { shortId: currentDocId, 'elements.id': element.id },
-            { $set: { 'elements.$': element } }
+            { $set: { 'elements.$': elementWithVersion } }
           );
-          socket.to(currentDocId).emit('element-updated', { index, element });
+          socket.to(currentDocId).emit('element-updated', { index, element: elementWithVersion });
         } catch (error) {
           console.error('Element error:', error);
         }
@@ -758,9 +759,10 @@ function startLocalServer() {
         try {
           const doc = await Document.findOne({ shortId: currentDocId });
           if (!doc) return;
-          doc.elements = elements;
+          const versionedElements = elements.map(el => ({ ...el, v: el.v || 0 }));
+          doc.elements = versionedElements;
           await doc.save();
-          socket.to(currentDocId).emit('full-sync-applied', { elements });
+          socket.to(currentDocId).emit('full-sync-applied', { elements: versionedElements });
         } catch (err) {
           console.error('[FULL-SYNC] Error:', err);
         }

@@ -3,13 +3,14 @@ import './App.css';
 import '@excalidraw/excalidraw/index.css';
 
 // Constants
-import { IS_DESKTOP, SERVER_URL, CLOUD_URL } from './constants/config';
+import { IS_DESKTOP, SERVER_URL, CLOUD_URL, ENABLE_BEATBOARD } from './constants/config';
+import { PAGE_FORMATS } from './constants/elementTypes';
 import { translations } from './constants/translations';
 import { SCRIPT_TEMPLATES } from './constants/templates';
 import { getFontFamily } from './constants/fonts';
 
 // Utilities
-import { stripHtml, generateId } from './utils/helpers';
+import { stripHtml, generateId, computeElementDiffs } from './utils/helpers';
 import importFDX from './utils/importFDX';
 
 // Hooks
@@ -106,6 +107,7 @@ export default function ScreenplayEditor() {
   const [importing, setImporting] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const [scriptFont, setScriptFont] = useState(() => localStorage.getItem('rooms-script-font') || 'courier-prime');
+  const [pageFormat, setPageFormat] = useState(() => localStorage.getItem('rooms-page-format') || 'us-letter');
   const [scriptZoom, setScriptZoom] = useState(() => {
     const saved = localStorage.getItem('rooms-script-zoom');
     return saved ? parseFloat(saved) : 1;
@@ -211,6 +213,9 @@ export default function ScreenplayEditor() {
   const [isDraggingTimer, setIsDraggingTimer] = useState(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const socketRef = useRef(null);
+  const elementVersionsRef = useRef(new Map()); // Map<elementId, version> for optimistic concurrency
+  const lastEmittedRef = useRef(null); // Track last state sent to server for diffing
+  const isRemoteSyncRef = useRef(false); // Guard: true when applying remote socket updates
   const loadedDocRef = useRef(null);
   const scriptContainerRef = useRef(null);
   const pageWrapperRef = useRef(null);
@@ -230,15 +235,13 @@ export default function ScreenplayEditor() {
     return () => window.removeEventListener('hashchange', handleHash);
   }, [docId]);
 
-  // If trying to access a document without being logged in, show auth modal
-  // but KEEP the docId/hash so it loads after login
+  // No anonymous mode — auth is always required.
+  // If user clicks a shared link without being logged in, show auth modal immediately.
   const pendingDocIdRef = useRef(null);
   useEffect(() => {
     if (docId && docId !== 'local' && !token) {
       pendingDocIdRef.current = docId;
       setShowAuthModal(true);
-      // Don't let loadDocument run without auth — it would fail with 403
-      // and potentially set stale state. The loadDocument effect checks token too.
     }
   }, [docId, token]);
 
@@ -287,7 +290,7 @@ export default function ScreenplayEditor() {
   useScrollSync({ scriptContainerRef, outlineSidebarRef, commentsSidebarRef, elementsRef, showComments, showOutline, setScriptScrollHeight });
 
   // Stats hook (stats, outline, characters, locations, pageInfo)
-  const { stats, extractedCharacters, extractedLocations, characterStats, outline, computePageInfo } = useStats(elements, characters, elementsRef);
+  const { stats, extractedCharacters, extractedLocations, characterStats, outline, computePageInfo } = useStats(elements, characters, elementsRef, pageFormat);
 
   // Timer hook (chrono + sprint modes)
   const {
@@ -314,7 +317,7 @@ export default function ScreenplayEditor() {
     activateOfflineMode, pushOfflineChanges, discardOfflineCopy
   } = useOfflineMode({
     docId, token, connected, socketRef, elementsRef, titleRef, lastSaved,
-    setElements, setTitle, setLastSaved, loadedDocRef
+    setElements, setTitle, setLastSaved, loadedDocRef, lastEmittedRef
   });
 
   // Cloud sync hook (desktop only) — must be before hooks that use effectiveDocId
@@ -354,19 +357,32 @@ export default function ScreenplayEditor() {
     setElements, setTitle, setCharacters, setComments, setSuggestions,
     setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
     setWhiteboardElements, setIsOwner, setMyRole, setPublicAccessState,
-    setLoading,
+    setLoading, setToken,
     serverUrl: effectiveServerUrl,
   });
+
+  // Wrapped setElements that activates anti-echo guard for remote changes
+  const setElementsFromRemote = useCallback((elementsOrUpdater) => {
+    isRemoteSyncRef.current = true;
+    setElements(prev => {
+      const newEls = typeof elementsOrUpdater === 'function' ? elementsOrUpdater(prev) : elementsOrUpdater;
+      // Update baseline so diff doesn't re-emit remote changes
+      lastEmittedRef.current = newEls;
+      return newEls;
+    });
+    requestAnimationFrame(() => { isRemoteSyncRef.current = false; });
+  }, []);
 
   // Socket connection hook
   useSocketConnection({
     docId: effectiveDocId, token: effectiveToken,
     socketRef, offlineDocIdRef,
     setConnected, setMyId, setMyRole, setUsers,
-    setElements, setTitle, setComments, setSuggestions, setCollaborators,
+    setElements: setElementsFromRemote, setTitle, setComments, setSuggestions, setCollaborators,
     setChatMessages, setUnreadMessages,
     playChatNotification,
     serverUrl: effectiveServerUrl,
+    elementVersionsRef,
   });
 
   const [showSyncConfirm, setShowSyncConfirm] = useState(null); // 'push' | 'pull' | null
@@ -469,31 +485,29 @@ export default function ScreenplayEditor() {
 
 
   // Apply pending template after document loads
+  const templateAppliedRef = useRef(false);
   useEffect(() => {
+    if (templateAppliedRef.current) return; // Only apply once
     const pendingTemplate = localStorage.getItem('pendingTemplate');
-    if (pendingTemplate && socketRef.current && elements.length <= 2) {
+    if (pendingTemplate && socketRef.current && connected && elements.length <= 2) {
       const template = SCRIPT_TEMPLATES[pendingTemplate];
       if (template) {
+        templateAppliedRef.current = true;
         // Clear the pending template
         localStorage.removeItem('pendingTemplate');
-        
-        // Apply template elements
+
+        // Apply template elements using generateId for proper UUIDs
         const templateElements = template.elements.map(el => ({
-          id: 'el-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+          id: generateId(),
           type: el.type,
           content: el.content
         }));
-        
+
         setElements(templateElements);
-        
-        // Sync to server
-        templateElements.forEach((el, idx) => {
-          if (idx === 0) {
-            socketRef.current.emit('element-change', { index: 0, element: el });
-          } else {
-            socketRef.current.emit('element-insert', { afterIndex: idx - 1, afterElementId: templateElements[idx - 1]?.id, element: el });
-          }
-        });
+        lastEmittedRef.current = templateElements;
+
+        // Sync to server via full-sync (structural change — many elements at once)
+        socketRef.current.emit('full-sync', { elements: templateElements });
         
         // Set title based on template
         const newTitle = `Nouveau script - ${template.name}`;
@@ -663,7 +677,7 @@ export default function ScreenplayEditor() {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
   }, []);
 
-  const { elementPositions } = useElementPositions({ showComments, elementsRef, elementsLength: elements.length, isSafari, scriptContainerRef });
+  const { elementPositions, updateCardTransforms } = useElementPositions({ showComments, elementsRef, elementsLength: elements.length, isSafari, scriptContainerRef, commentsSidebarRef });
 
   // Pre-compute highlights per element (memoized for performance)
   const { highlightsByElement } = useHighlights({ comments, suggestions, pendingInlineComment, currentUser });
@@ -674,7 +688,7 @@ export default function ScreenplayEditor() {
   const { pushToUndo, undo, redo } = useUndoRedo({
     elementsRef, beatCardsRef, structureBeatsRef, sceneSynopsisRef, sceneStatusRef,
     setElements, setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
-    socketRef
+    socketRef, lastEmittedRef
   });
 
   // Duplicate scene function (moved here for proper hoisting)
@@ -696,20 +710,29 @@ export default function ScreenplayEditor() {
       ...sceneElements,
       ...elements.slice(nextSceneIndex)
     ];
-    
+
     setElements(newElements);
     setLastSaved(new Date());
-    
+
     if (socketRef.current && connected && canEdit) {
       socketRef.current.emit('full-sync', { elements: newElements });
+      lastEmittedRef.current = newElements;
     }
   }, [elements, connected, canEdit, pushToUndo]);
 
   const updateElement = useCallback((i, el, skipUndo = false) => {
     if (!canEditNow) return;
     if (!skipUndo) pushToUndo();
-    setElements(p => { const u = [...p]; u[i] = el; return u; });
-    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-change', { index: i, element: el });
+    setElements(p => {
+      const u = [...p]; u[i] = el;
+      lastEmittedRef.current = u; // Keep diff baseline in sync
+      return u;
+    });
+    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
+      const baseVersion = elementVersionsRef.current.get(el.id);
+      socketRef.current.emit('element-change', { index: i, element: el, baseVersion: baseVersion ?? null });
+      if (baseVersion != null) elementVersionsRef.current.set(el.id, baseVersion + 1);
+    }
     setLastSaved(new Date());
     setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
   }, [connected, canEdit, canEditNow, pushToUndo, currentUser, offlineDocIdRef]);
@@ -738,7 +761,11 @@ export default function ScreenplayEditor() {
     if (!canEditNow) return;
     pushToUndo();
     const el = { id: generateId(), type, content: '' };
-    setElements(p => { const u = [...p]; u.splice(after + 1, 0, el); return u; });
+    setElements(p => {
+      const u = [...p]; u.splice(after + 1, 0, el);
+      lastEmittedRef.current = u;
+      return u;
+    });
     setActiveIndex(after + 1);
     const afterElementId = elementsRef.current[after]?.id;
     if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-insert', { afterIndex: after, afterElementId, element: el });
@@ -750,28 +777,77 @@ export default function ScreenplayEditor() {
     if (elementsRef.current.length === 1) return;
     pushToUndo();
     const elementId = elementsRef.current[i]?.id;
-    setElements(p => p.filter((_, idx) => idx !== i));
+    setElements(p => {
+      const u = p.filter((_, idx) => idx !== i);
+      lastEmittedRef.current = u;
+      return u;
+    });
     setActiveIndex(Math.max(0, i - 1));
     if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-delete', { index: i, elementId });
     setLastSaved(new Date());
   }, [connected, canEdit, canEditNow, pushToUndo, offlineDocIdRef]);
-  const changeType = useCallback((i, t) => { if (!canEditNow) return; const elementId = elementsRef.current[i]?.id; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t, elementId }); }, [connected, canEdit, canEditNow, offlineDocIdRef]);
-  // V272: handleCursor supprimé (curseurs distants à réimplémenter via décorations ProseMirror)
+  const changeType = useCallback((i, t) => { if (!canEditNow) return; const elementId = elementsRef.current[i]?.id; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; lastEmittedRef.current = u; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t, elementId }); }, [connected, canEdit, canEditNow, offlineDocIdRef]);
+  // V272-fix: Cursor emission for remote cursor display
+  const cursorTimeoutRef = useRef(null);
+  const handleCursorMove = useCallback((elementIndex, offsetInElement) => {
+    if (cursorTimeoutRef.current) clearTimeout(cursorTimeoutRef.current);
+    cursorTimeoutRef.current = setTimeout(() => {
+      if (socketRef.current && connected && !offlineDocIdRef.current) {
+        socketRef.current.emit('cursor-move', { index: elementIndex, position: offsetInElement });
+      }
+    }, 50); // 50ms debounce
+  }, [connected, offlineDocIdRef]);
 
-  // V272: Single editor → elements change callback (replaces individual CRUD for typing)
-  const fullSyncTimeoutRef = useRef(null);
+  // V272: Single editor → elements change callback
+  // Uses granular diffs instead of full-sync to avoid overwriting other users' edits
+  const diffTimeoutRef = useRef(null);
   const handleElementsChange = useCallback((newElements) => {
     if (!newElements || newElements.length === 0) return;
+    // Skip emission if this change originated from a remote socket event
+    if (isRemoteSyncRef.current) {
+      setElements(newElements);
+      return;
+    }
     setElements(newElements);
     setLastSaved(new Date());
     setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
-    // Debounced full-sync to server
-    if (fullSyncTimeoutRef.current) clearTimeout(fullSyncTimeoutRef.current);
-    fullSyncTimeoutRef.current = setTimeout(() => {
-      if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-        socketRef.current.emit('full-sync', { elements: elementsRef.current });
+    // Debounced granular diff to server
+    if (diffTimeoutRef.current) clearTimeout(diffTimeoutRef.current);
+    diffTimeoutRef.current = setTimeout(() => {
+      if (!socketRef.current || !connected || !canEdit || offlineDocIdRef.current) return;
+      const currentElements = elementsRef.current;
+      const baseline = lastEmittedRef.current;
+      if (!baseline) {
+        // First emission after load — send full-sync as baseline
+        socketRef.current.emit('full-sync', { elements: currentElements });
+        lastEmittedRef.current = currentElements;
+        return;
       }
-    }, 500);
+      const { updates, inserts, deletes } = computeElementDiffs(baseline, currentElements);
+      // Emit granular events using existing server handlers
+      deletes.forEach(d => socketRef.current.emit('element-delete', d));
+      updates.forEach(u => {
+        const baseEl = baseline.find(el => el.id === u.element.id);
+        if (u.element.type !== baseEl?.type) {
+          socketRef.current.emit('element-type-change', { index: u.index, type: u.element.type, elementId: u.element.id });
+        }
+        if (u.element.content !== baseEl?.content) {
+          // Send baseVersion for optimistic concurrency
+          const baseVersion = elementVersionsRef.current.get(u.element.id);
+          socketRef.current.emit('element-change', { index: u.index, element: u.element, baseVersion: baseVersion ?? null });
+          // Optimistically increment local version
+          if (baseVersion != null) {
+            elementVersionsRef.current.set(u.element.id, baseVersion + 1);
+          }
+        }
+      });
+      inserts.forEach(ins => {
+        socketRef.current.emit('element-insert', ins);
+        // New elements start at version 0
+        elementVersionsRef.current.set(ins.element.id, 0);
+      });
+      lastEmittedRef.current = currentElements;
+    }, 50);
   }, [connected, canEdit, currentUser, offlineDocIdRef]);
 
   const handleSelectChar = useCallback((i, name) => { updateElement(i, { ...elements[i], content: name }); setTimeout(() => insertElement(i, 'dialogue'), 50); }, [elements, updateElement, insertElement]);
@@ -838,12 +914,13 @@ export default function ScreenplayEditor() {
     
     // Insert at new position
     newElements = [...newElements.slice(0, insertAt), ...sceneElements, ...newElements.slice(insertAt)];
-    
+
     setElements(newElements);
     setLastSaved(new Date());
-    
+
     if (socketRef.current && connected && canEdit) {
       socketRef.current.emit('full-sync', { elements: newElements });
+      lastEmittedRef.current = newElements;
     }
   }, [elements, connected, canEdit, pushToUndo]);
 
@@ -967,6 +1044,7 @@ export default function ScreenplayEditor() {
 
     if (socketRef.current && connected && canEdit) {
       socketRef.current.emit('full-sync', { elements: newElements });
+      lastEmittedRef.current = newElements;
     }
   };
 
@@ -1119,6 +1197,7 @@ export default function ScreenplayEditor() {
         showSceneNumbers={showSceneNumbers} setShowSceneNumbers={setShowSceneNumbers}
         showCharactersPanel={showCharactersPanel} setShowCharactersPanel={setShowCharactersPanel}
         scriptFont={scriptFont} setScriptFont={setScriptFont}
+        pageFormat={pageFormat} setPageFormat={setPageFormat}
         chatNotificationSound={chatNotificationSound} setChatNotificationSound={setChatNotificationSound}
         language={language} setLanguage={setLanguage}
         token={token}
@@ -1381,9 +1460,9 @@ export default function ScreenplayEditor() {
             /* No background/boxShadow here — per-page backgrounds are created
                dynamically as absolute-positioned divs (see page-bg useEffect) */
             color: darkMode ? '#e0e0e0' : '#111',
-            width: '210mm',
-            minHeight: '297mm',
-            padding: '20mm 25mm 25mm 38mm',
+            width: (PAGE_FORMATS[pageFormat] || PAGE_FORMATS['us-letter']).width,
+            minHeight: (PAGE_FORMATS[pageFormat] || PAGE_FORMATS['us-letter']).height,
+            padding: (PAGE_FORMATS[pageFormat] || PAGE_FORMATS['us-letter']).padding,
             boxSizing: 'border-box',
             position: 'relative',
             zIndex: 0, /* creates stacking context so z-index:-1 backgrounds work */
@@ -1407,6 +1486,7 @@ export default function ScreenplayEditor() {
               onSuggestionClick={handleSuggestionClickCb}
               onEditorFocus={() => setScriptHasFocus(true)}
               onActiveElementChange={setActiveIndex}
+              onCursorMove={handleCursorMove}
               remoteCursors={remoteCursors}
               computePageInfoFn={computePageInfo}
               highlightsByElement={highlightsByElement}
@@ -1551,16 +1631,22 @@ export default function ScreenplayEditor() {
       )}
       </div>
 
-      {/* FOOTER — Zoom slider, full-width bar matching header */}
+      {/* FOOTER — Page count (left) + Zoom slider (right), like Final Draft */}
       {activeView === 'script' && (
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           gap: 8, padding: '4px 16px',
           background: darkMode ? '#333333' : 'white',
           borderTop: `1px solid ${darkMode ? '#484848' : '#d1d5db'}`,
           fontSize: 12, color: darkMode ? '#aaa' : '#666',
           flexShrink: 0, height: 28,
         }}>
+          {/* Page count — left side */}
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {stats.pageCount || 1} {stats.pageCount === 1 ? 'page' : 'pages'}
+          </span>
+          {/* Zoom — right side */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={() => { const z = Math.max(0.5, Math.round((scriptZoom - 0.1) * 10) / 10); setScriptZoom(z); localStorage.setItem('rooms-script-zoom', String(z)); }}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'inherit', padding: '0 4px', lineHeight: 1 }}
@@ -1580,10 +1666,12 @@ export default function ScreenplayEditor() {
           <span style={{ minWidth: 38, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
             {Math.round(scriptZoom * 100)}%
           </span>
+          </div>
         </div>
       )}
 
-      {/* Beat Board - Always mounted, hidden when not active */}
+      {/* Beat Board - Only mounted when feature is enabled */}
+      {ENABLE_BEATBOARD && (
       <div style={{ flex: 1, display: activeView === 'beatboard' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
         <BeatBoard
           elements={elements}
@@ -1604,6 +1692,7 @@ export default function ScreenplayEditor() {
           t={t}
         />
       </div>
+      )}
       
       {/* Characters Panel */}
       {showCharactersPanel && (

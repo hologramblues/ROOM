@@ -38,6 +38,7 @@
 }
 
 /* ============ SCREENPLAY EDITOR (Single TipTap V272) ============ */
+/* Final Draft standard formatting — fixed mm indents, Courier 12pt, single-spaced */
 
 /* Base styles for all screenplay elements */
 .ProseMirror div[data-screenplay-element] {
@@ -51,55 +52,53 @@
   white-space: pre-wrap;
 }
 
-/* Type-specific styles — use attribute selectors for high specificity matching base rule */
-/* Scene heading */
+/* Scene Heading — full width, UPPERCASE, bold, 2 lines above */
 .ProseMirror div[data-element-type="scene"] {
   text-transform: uppercase;
   font-weight: bold;
   margin-top: 2em;
-  margin-bottom: 0.5em;
+  margin-bottom: 0;
 }
 
-/* Action */
+/* Action — full width, 1 line above */
 .ProseMirror div[data-element-type="action"] {
   margin-top: 1em;
   margin-bottom: 0;
-  line-height: 1.1;
 }
 
-/* Character name — centered per Final Draft (33% left offset, 35% width) */
+/* Character name — Final Draft: 3.7" from page left = ~56mm from content left */
 .ProseMirror div[data-element-type="character"] {
   text-transform: uppercase;
   font-weight: normal;
-  margin-left: 33%;
-  width: 35%;
+  margin-left: 56mm;
+  width: auto;
   margin-top: 1em;
   margin-bottom: 0;
 }
 
-/* Dialogue — indented per Final Draft (17% left offset, 58% width) */
+/* Dialogue — Final Draft: 2.5" from page left = ~25mm from content left, ~95mm wide */
 .ProseMirror div[data-element-type="dialogue"] {
-  margin-left: 17%;
-  width: 58%;
+  margin-left: 25mm;
+  width: 95mm;
   margin-top: 0;
   margin-bottom: 0;
-  line-height: 1.1;
 }
 
-/* Parenthetical — indented per Final Draft (25% left offset, 42% width) */
+/* Parenthetical — Final Draft: 3.1" from page left = ~36mm from content left, ~65mm wide */
 .ProseMirror div[data-element-type="parenthetical"] {
-  margin-left: 25%;
-  width: 42%;
+  margin-left: 36mm;
+  width: 65mm;
   font-style: italic;
   margin-top: 0;
   margin-bottom: 0;
 }
 
-/* Transition — right aligned */
+/* Transition — right aligned, UPPERCASE, 1 line above */
 .ProseMirror div[data-element-type="transition"] {
   text-transform: uppercase;
   text-align: right;
   margin-top: 1em;
+  margin-bottom: 0;
 }
 
 /* Page break visual — spacer between pages */
@@ -111,7 +110,7 @@
 /* Editor focus styles */
 .screenplay-editor-wrapper .ProseMirror {
   outline: none;
-  min-height: 250mm;
+  min-height: 228mm; /* US Letter content area: 279.4mm - 25.4mm top - 25.4mm bottom */
 }
 
 .screenplay-editor-wrapper .ProseMirror:focus {
