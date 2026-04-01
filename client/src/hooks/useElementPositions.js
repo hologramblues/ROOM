@@ -10,29 +10,38 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 export default function useElementPositions({ showComments, elementsRef, elementsLength, isSafari, scriptContainerRef, commentsSidebarRef }) {
   const [elementPositions, setElementPositions] = useState({});
   const rafRef = useRef(null);
+  // Cache element-id -> DOM node for fast lookup (rebuilt on content changes)
+  const elementDomCacheRef = useRef(new Map());
 
-  // Compute positions for React-based initial layout (adjustedPositions in CommentsSidebar)
+  // Rebuild DOM cache when element count changes
+  const rebuildDomCache = useCallback(() => {
+    const script = scriptContainerRef.current;
+    if (!script) return;
+    const cache = new Map();
+    const divs = script.querySelectorAll('[data-element-id]');
+    divs.forEach(div => {
+      cache.set(div.getAttribute('data-element-id'), div);
+    });
+    elementDomCacheRef.current = cache;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Compute positions for React-based initial layout
   const computePositions = useCallback(() => {
     const script = scriptContainerRef.current;
     if (!script) return {};
-
     const positions = {};
     const scriptRect = script.getBoundingClientRect();
     const scrollTop = script.scrollTop;
-
-    const elementDivs = script.querySelectorAll('[data-element-id]');
-    elementDivs.forEach(div => {
-      const elId = div.getAttribute('data-element-id');
+    elementDomCacheRef.current.forEach((div, elId) => {
       const index = elementsRef.current.findIndex(e => e.id === elId);
       if (index !== -1) {
-        positions[index] = rect_topRelative(div, scriptRect, scrollTop);
+        positions[index] = div.getBoundingClientRect().top - scriptRect.top + scrollTop;
       }
     });
-
     return positions;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Direct DOM update of comment card positions on scroll — bypasses React for performance
+  // Direct DOM update of comment card positions on scroll
   const updateCardTransforms = useCallback(() => {
     const script = scriptContainerRef.current;
     const sidebar = commentsSidebarRef?.current;
@@ -40,34 +49,31 @@ export default function useElementPositions({ showComments, elementsRef, element
 
     const scriptRect = script.getBoundingClientRect();
     const sidebarRect = sidebar.getBoundingClientRect();
-
-    // Offset between script viewport top and sidebar content area top
-    // This ensures cards align with their script elements
     const yOffset = scriptRect.top - sidebarRect.top;
 
-    // Get all comment cards in the sidebar
     const cards = sidebar.querySelectorAll('[data-comment-element-index]');
     if (cards.length === 0) return;
 
-    // Build a map of element index -> viewport Y relative to script container
+    // Only look up DOM positions for elements that have comment cards (not ALL elements)
+    const neededIndices = new Set();
+    cards.forEach(card => neededIndices.add(parseInt(card.getAttribute('data-comment-element-index'), 10)));
+
     const elementViewportY = {};
-    const elementDivs = script.querySelectorAll('[data-element-id]');
-    elementDivs.forEach(div => {
-      const elId = div.getAttribute('data-element-id');
-      const index = elementsRef.current.findIndex(e => e.id === elId);
-      if (index !== -1) {
-        // Position relative to script container viewport (not document)
+    neededIndices.forEach(index => {
+      const el = elementsRef.current[index];
+      if (!el) return;
+      const div = elementDomCacheRef.current.get(el.id);
+      if (div) {
         elementViewportY[index] = div.getBoundingClientRect().top - scriptRect.top;
       }
     });
 
-    // Sort cards by element index so anti-overlap works top-to-bottom
-    const sortedCards = Array.from(cards).sort((a, b) => {
-      return parseInt(a.getAttribute('data-comment-element-index'), 10) -
-             parseInt(b.getAttribute('data-comment-element-index'), 10);
-    });
+    // Sort cards top-to-bottom for anti-overlap
+    const sortedCards = Array.from(cards).sort((a, b) =>
+      parseInt(a.getAttribute('data-comment-element-index'), 10) -
+      parseInt(b.getAttribute('data-comment-element-index'), 10)
+    );
 
-    // Position each card, applying the yOffset so it aligns with the script element
     let lastBottom = -Infinity;
     const GAP = 12;
 
@@ -76,15 +82,12 @@ export default function useElementPositions({ showComments, elementsRef, element
       const viewportY = elementViewportY[elemIdx];
 
       if (viewportY == null) {
-        // Element not in viewport — hide card
         card.style.visibility = 'hidden';
         return;
       }
 
-      // Ideal Y = element's viewport position + offset to convert from script coords to sidebar coords
       let idealY = viewportY + yOffset;
 
-      // Anti-overlap: push down if overlapping with previous card
       const cardHeight = card.offsetHeight || 120;
       if (idealY < lastBottom + GAP) {
         idealY = lastBottom + GAP;
@@ -101,11 +104,13 @@ export default function useElementPositions({ showComments, elementsRef, element
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Scroll listener — uses rAF for 60fps updates
   useEffect(() => {
     if (!showComments) return;
     const script = scriptContainerRef.current;
     if (!script) return;
+
+    // Build initial DOM cache
+    rebuildDomCache();
 
     const onScroll = () => {
       if (rafRef.current) return;
@@ -115,32 +120,32 @@ export default function useElementPositions({ showComments, elementsRef, element
       });
     };
 
-    // Initial position calculation
+    // Initial positions
     const positions = computePositions();
     setElementPositions(positions);
 
-    // Initial DOM transform update after React renders the cards
+    // Wait for React to render cards, then position them
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        updateCardTransforms();
-      });
+      requestAnimationFrame(() => updateCardTransforms());
     });
 
     script.addEventListener('scroll', onScroll, { passive: true });
 
     const onResize = () => {
+      rebuildDomCache();
       const positions = computePositions();
       setElementPositions(positions);
       requestAnimationFrame(() => updateCardTransforms());
     };
     window.addEventListener('resize', onResize);
 
-    // Periodic refresh for content changes
+    // Periodic refresh for content changes (rebuild DOM cache + reposition)
     const interval = setInterval(() => {
+      rebuildDomCache();
       const positions = computePositions();
       setElementPositions(positions);
       requestAnimationFrame(() => updateCardTransforms());
-    }, isSafari ? 3000 : 1500);
+    }, isSafari ? 3000 : 2000);
 
     return () => {
       script.removeEventListener('scroll', onScroll);
@@ -148,12 +153,7 @@ export default function useElementPositions({ showComments, elementsRef, element
       clearInterval(interval);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [showComments, elementsLength, isSafari, computePositions, updateCardTransforms]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showComments, elementsLength, isSafari, computePositions, updateCardTransforms, rebuildDomCache]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { elementPositions };
-}
-
-// Helper: element top relative to script container scroll origin
-function rect_topRelative(div, scriptRect, scrollTop) {
-  return div.getBoundingClientRect().top - scriptRect.top + scrollTop;
 }

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { SERVER_URL } from '../constants/config';
 import InlineComment from './InlineComment';
 
-const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollContainerRef, scriptScrollHeight, token, docId, canComment, onClose, darkMode, t = (k) => k, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
+const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selectedCommentIndex, elementPositions, scrollContainerRef, scriptContainerRef, scriptScrollHeight, token, docId, canComment, onClose, darkMode, t = (k) => k, onNavigateToElement, onAddComment, pendingInlineComment, onSubmitInlineComment, onCancelInlineComment, pendingSuggestion, onSubmitSuggestion, onCancelSuggestion, onAcceptSuggestion, onRejectSuggestion, selectedCommentId, onSelectComment, selectedSuggestionId, onSelectSuggestion, users, collaborators }) => {
   const [replyTo, setReplyTo] = useState(null);
   const [replyContent, setReplyContent] = useState('');
   const [, setNewCommentFor] = useState(null);
@@ -450,13 +450,18 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
         </div>
       </div>
 
-      {/* Content area - allow scrolling */}
+      {/* Content area — no own scroll, wheel events forwarded to script container */}
       <div
         ref={sidebarRef}
         className="comments-sidebar-scroll-container"
+        onWheel={(e) => {
+          // Forward wheel scroll to script container so comments scroll in sync
+          const sc = scriptContainerRef?.current;
+          if (sc) sc.scrollTop += e.deltaY;
+        }}
         style={{
           flex: 1,
-          overflow: 'clip', /* Clip without creating scroll container — cards positioned by transforms */
+          overflow: 'clip',
           position: 'relative',
           padding: '0 12px'
         }}

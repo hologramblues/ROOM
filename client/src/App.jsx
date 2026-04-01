@@ -1520,6 +1520,7 @@ export default function ScreenplayEditor() {
             onSelectComment={(id) => { setSelectedCommentId(id); if (id) setSelectedSuggestionId(null); }}
             elementPositions={elementPositions}
             scrollContainerRef={commentsSidebarRef}
+            scriptContainerRef={scriptContainerRef}
             scriptScrollHeight={scriptScrollHeight}
             token={token} 
             docId={docId} 
