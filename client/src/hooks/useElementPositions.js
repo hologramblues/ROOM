@@ -2,13 +2,18 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 /**
  * Google Docs-style comment positioning.
- * Cards are positioned via direct DOM transforms synced to script scroll at 60fps.
+ *
+ * Strategy: the sidebar is a scroll container with a spacer matching the script height.
+ * Its scrollTop is synced to the script's scrollTop on every frame.
+ * Cards are positioned with position:absolute + transform:translateY based on
+ * their element's position in the document (not viewport), so they naturally
+ * scroll with the sidebar.
  */
 export default function useElementPositions({ showComments, elementsRef, elementsLength, isSafari, scriptContainerRef, commentsSidebarRef }) {
   const [elementPositions, setElementPositions] = useState({});
   const rafRef = useRef(null);
 
-  // Compute positions for React-based initial layout (adjustedPositions)
+  // Compute positions relative to script scroll origin (for React initial layout)
   const computePositions = useCallback(() => {
     const script = scriptContainerRef.current;
     if (!script) return {};
@@ -26,36 +31,44 @@ export default function useElementPositions({ showComments, elementsRef, element
     return positions;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Direct DOM update of comment card positions on scroll — 60fps, no React
+  // Sync sidebar scrollTop with script + update card positions
   const updateCardTransforms = useCallback(() => {
     const script = scriptContainerRef.current;
     const sidebar = commentsSidebarRef?.current;
     if (!script || !sidebar) return;
 
-    const scriptRect = script.getBoundingClientRect();
-    const sidebarRect = sidebar.getBoundingClientRect();
-    const yOffset = scriptRect.top - sidebarRect.top;
+    // 1. Sync sidebar scroll with script scroll
+    sidebar.scrollTop = script.scrollTop;
 
+    // 2. Update spacer height to match script
+    const spacer = sidebar.querySelector('[data-comments-spacer]');
+    if (spacer) {
+      spacer.style.height = script.scrollHeight + 'px';
+    }
+
+    // 3. Position cards at their element's document position (absolute, not viewport)
     const cards = sidebar.querySelectorAll('[data-comment-element-index]');
     if (cards.length === 0) return;
 
-    // Collect needed element indices from cards
+    const scriptRect = script.getBoundingClientRect();
+    const scrollTop = script.scrollTop;
+
+    // Collect needed indices
     const neededIndices = new Set();
     cards.forEach(card => neededIndices.add(parseInt(card.getAttribute('data-comment-element-index'), 10)));
 
-    // Look up viewport Y for each needed element — direct DOM query (fast for small set)
-    const elementViewportY = {};
+    // Get document-position (scroll origin relative) for each needed element
+    const elementDocY = {};
     neededIndices.forEach(index => {
       const el = elementsRef.current[index];
       if (!el) return;
-      // Direct querySelector by element ID — precise and avoids stale cache
       const div = script.querySelector(`[data-element-id="${el.id}"]`);
       if (div) {
-        elementViewportY[index] = div.getBoundingClientRect().top - scriptRect.top;
+        elementDocY[index] = div.getBoundingClientRect().top - scriptRect.top + scrollTop;
       }
     });
 
-    // Sort cards top-to-bottom for anti-overlap
+    // Sort cards top-to-bottom
     const sortedCards = Array.from(cards).sort((a, b) =>
       parseInt(a.getAttribute('data-comment-element-index'), 10) -
       parseInt(b.getAttribute('data-comment-element-index'), 10)
@@ -66,16 +79,12 @@ export default function useElementPositions({ showComments, elementsRef, element
 
     sortedCards.forEach(card => {
       const elemIdx = parseInt(card.getAttribute('data-comment-element-index'), 10);
-      const viewportY = elementViewportY[elemIdx];
+      const docY = elementDocY[elemIdx];
+      if (docY == null) return;
 
-      if (viewportY == null) {
-        // Element not found — keep card at current position, don't hide
-        return;
-      }
-
-      let idealY = viewportY + yOffset;
-
+      let idealY = docY;
       const cardHeight = card.offsetHeight || 120;
+
       if (idealY < lastBottom + GAP) {
         idealY = lastBottom + GAP;
       }
@@ -103,11 +112,9 @@ export default function useElementPositions({ showComments, elementsRef, element
       });
     };
 
-    // Initial positions
+    // Initial
     const positions = computePositions();
     setElementPositions(positions);
-
-    // Wait for cards to render, then position them
     requestAnimationFrame(() => {
       requestAnimationFrame(() => updateCardTransforms());
     });
@@ -121,7 +128,7 @@ export default function useElementPositions({ showComments, elementsRef, element
     };
     window.addEventListener('resize', onResize);
 
-    // Periodic refresh for content changes (reposition cards)
+    // Periodic refresh for content changes
     const interval = setInterval(() => {
       const positions = computePositions();
       setElementPositions(positions);

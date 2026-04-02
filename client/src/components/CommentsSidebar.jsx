@@ -450,13 +450,12 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
         </div>
       </div>
 
-      {/* Content area — no own scroll, wheel events forwarded to script container */}
+      {/* Content area — scrolls in sync with script via useElementPositions */}
       <div
         ref={(el) => {
-          // Assign to sidebarRef
           if (typeof sidebarRef === 'function') sidebarRef(el);
           else if (sidebarRef) sidebarRef.current = el;
-          // Attach non-passive wheel listener so we can preventDefault
+          // Forward wheel to script container (non-passive so we can preventDefault)
           if (el && !el._wheelAttached) {
             el._wheelAttached = true;
             el.addEventListener('wheel', (e) => {
@@ -470,9 +469,13 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
         className="comments-sidebar-scroll-container"
         style={{
           flex: 1,
-          overflow: 'clip',
+          overflowY: 'scroll',
+          overflowX: 'hidden',
           position: 'relative',
-          padding: '0 12px'
+          padding: '0 12px',
+          /* Hide scrollbar — scroll is controlled by script sync */
+          scrollbarWidth: 'none', /* Firefox */
+          msOverflowStyle: 'none', /* IE */
         }}
       >
         <div>
@@ -1017,7 +1020,8 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
             })
           ) : null}
 
-          {/* Spacer removed — comment positions are now managed by useElementPositions rAF transforms */}
+          {/* Spacer — matches script scrollHeight so sidebar can scroll in sync */}
+          <div data-comments-spacer="true" style={{ pointerEvents: 'none' }} />
         </div>
       </div>
     </div>

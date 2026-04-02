@@ -117,6 +117,11 @@
   outline: none;
 }
 
+/* Hide scrollbar on comments sidebar — scroll controlled by script sync */
+.comments-sidebar-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
 /* Placeholder for empty elements */
 .ProseMirror div[data-screenplay-element].is-empty::before {
   content: attr(data-placeholder);
