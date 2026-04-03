@@ -364,12 +364,18 @@ export default function ScreenplayEditor() {
   // Wrapped setElements that activates anti-echo guard for remote changes
   const setElementsFromRemote = useCallback((elementsOrUpdater) => {
     isRemoteSyncRef.current = true;
-    setElements(prev => {
-      const newEls = typeof elementsOrUpdater === 'function' ? elementsOrUpdater(prev) : elementsOrUpdater;
-      // Update baseline so diff doesn't re-emit remote changes
-      lastEmittedRef.current = newEls;
-      return newEls;
-    });
+    if (typeof elementsOrUpdater === 'function') {
+      setElements(prev => {
+        const newEls = elementsOrUpdater(prev);
+        // Sync baseline after functional update resolves
+        queueMicrotask(() => { lastEmittedRef.current = elementsRef.current; });
+        return newEls;
+      });
+    } else {
+      // Direct value — update baseline immediately
+      lastEmittedRef.current = elementsOrUpdater;
+      setElements(elementsOrUpdater);
+    }
     requestAnimationFrame(() => { isRemoteSyncRef.current = false; });
   }, []);
 

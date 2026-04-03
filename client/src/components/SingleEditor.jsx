@@ -36,6 +36,7 @@ const SingleEditor = React.memo(({
   t = (k) => k,
 }) => {
   const isEditorOriginRef = useRef(false);
+  const isApplyingSyncRef = useRef(false); // True during sync effect dispatches — prevents onUpdate re-emission
   const isApplyingMarksRef = useRef(false);
   const lastElementsRef = useRef(elements);
   const syncTimeoutRef = useRef(null);
@@ -133,22 +134,22 @@ const SingleEditor = React.memo(({
 
     onUpdate: ({ editor }) => {
       if (!editor || !editor.view) return;
-      // Skip state sync when we're just applying highlight marks
-      if (isApplyingMarksRef.current) return;
+      if (isApplyingMarksRef.current || isApplyingSyncRef.current) return;
       try {
         isEditorOriginRef.current = true;
-        const newElements = extractElementsFromDoc(editor.state.doc);
-        // Debounce the elements state update
+        // Debounce: extract elements AND propagate at the same time
+        // to avoid stale data from early extraction
         if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
         syncTimeoutRef.current = setTimeout(() => {
+          if (!editor || editor.isDestroyed) { isEditorOriginRef.current = false; return; }
+          const newElements = extractElementsFromDoc(editor.state.doc);
           if (!elementsEqual(newElements, lastElementsRef.current)) {
             lastElementsRef.current = newElements;
             onElementsChange(newElements);
           }
-          // Reset flag after state propagation
           requestAnimationFrame(() => { isEditorOriginRef.current = false; });
-        }, 100);
-      } catch (_) {}
+        }, 80);
+      } catch (_) { isEditorOriginRef.current = false; }
     },
 
     onSelectionUpdate: ({ editor }) => {
@@ -266,89 +267,77 @@ const SingleEditor = React.memo(({
   });
 
   // Sync external changes (socket, import, undo) into the editor
-  // V272-fix: Surgical per-element updates instead of full setContent
-  // This preserves the local cursor and allows remote changes to appear while user is typing
+  // Applies remote changes without disrupting local typing
   useEffect(() => {
     if (!editor || isEditorOriginRef.current) return;
     const currentEls = extractElementsFromDoc(editor.state.doc);
     if (elementsEqual(currentEls, elements)) return;
 
-    // Determine which element the local cursor is in (to avoid disrupting active typing)
+    // Determine which element the local cursor is in
     let cursorElementIndex = -1;
     if (editor.isFocused) {
       try {
-        const { $from } = editor.state.selection;
-        editor.state.doc.forEach((child, offset, index) => {
-          if (offset <= $from.pos && offset + child.nodeSize > $from.pos) {
-            cursorElementIndex = index;
-          }
-        });
+        cursorElementIndex = editor.state.selection.$from.index(0);
       } catch (_) {}
     }
-
-    // Build ID maps for current editor state
-    const currentMap = new Map();
-    currentEls.forEach((el, i) => currentMap.set(el.id, { el, index: i }));
-    const newMap = new Map();
-    elements.forEach((el, i) => newMap.set(el.id, { el, index: i }));
 
     // Detect if structure changed (different IDs or different order)
     const structureChanged = currentEls.length !== elements.length ||
       currentEls.some((el, i) => el.id !== elements[i].id);
 
     if (!structureChanged) {
-      // Same structure — apply surgical per-element updates via a single transaction
-      const { tr } = editor.state;
-      let changed = false;
+      // Same structure — apply one transaction per changed element
+      // (separate transactions avoid position corruption from content size changes)
+      isApplyingSyncRef.current = true;
+      let anyChanged = false;
 
       for (let i = 0; i < elements.length; i++) {
         const cur = currentEls[i];
         const next = elements[i];
         if (cur.type === next.type && cur.content === next.content) continue;
+        if (i === cursorElementIndex) continue; // Don't disrupt active typing
 
-        // Skip the element the user is actively typing in
-        if (i === cursorElementIndex) continue;
-
-        // Calculate position of this node in the doc
+        // Fresh transaction per element (positions are correct after previous dispatch)
+        const { tr } = editor.state;
         let pos = 0;
         for (let j = 0; j < i; j++) pos += editor.state.doc.child(j).nodeSize;
         const node = editor.state.doc.child(i);
 
-        // Apply type change
         if (cur.type !== next.type) {
           tr.setNodeMarkup(pos, null, { ...node.attrs, elementType: next.type });
-          changed = true;
         }
-
-        // Apply content change
         if (cur.content !== next.content) {
-          const nodeStart = pos + 1; // +1 to enter the node
-          const nodeEnd = pos + node.nodeSize - 1; // -1 to stay inside
-          // Replace node content
+          const nodeStart = pos + 1;
+          const nodeEnd = pos + node.nodeSize - 1;
           if (next.content) {
             tr.replaceWith(nodeStart, nodeEnd, editor.state.schema.text(next.content));
-          } else {
+          } else if (nodeEnd > nodeStart) {
             tr.delete(nodeStart, nodeEnd);
           }
-          changed = true;
         }
-      }
 
-      if (changed) {
         tr.setMeta('addToHistory', false);
         editor.view.dispatch(tr);
+        anyChanged = true;
+      }
+
+      isApplyingSyncRef.current = false;
+      // Re-extract after all dispatches to keep lastElementsRef in sync
+      if (anyChanged) {
+        lastElementsRef.current = extractElementsFromDoc(editor.state.doc);
       }
     } else {
-      // Structure changed (insert/delete/reorder) — full content replace required
+      // Structure changed (insert/delete/reorder) — full content replace
+      isApplyingSyncRef.current = true;
       const savedPos = editor.state.selection.from;
       editor.commands.setContent(buildDocFromElements(elements), false);
       try {
         const maxPos = editor.state.doc.content.size - 1;
         editor.commands.setTextSelection(Math.min(savedPos, Math.max(0, maxPos)));
       } catch (_) {}
+      isApplyingSyncRef.current = false;
+      lastElementsRef.current = elements;
     }
-
-    lastElementsRef.current = elements;
   }, [elements, editor]);
 
   // Update editable state
