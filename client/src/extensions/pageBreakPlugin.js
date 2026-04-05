@@ -16,8 +16,8 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkModeRef) {
         const decorations = [];
         let nodeIndex = 0;
 
-        const dm = darkModeRef.current;
-        const numColor = dm ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
+        // Read darkMode at decoration-render time (not creation time)
+        // so color updates when theme changes
 
         state.doc.forEach((node, pos) => {
           if (node.type.name === 'screenplayElement' && pageBreaks.has(nodeIndex)) {
@@ -49,6 +49,8 @@ function createPageBreakPlugin(computePageInfoFn, stripHtmlFn, darkModeRef) {
               `;
               const num = document.createElement('span');
               num.textContent = pageNum + '.';
+              const dm = darkModeRef.current;
+              const numColor = dm ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
               num.style.cssText = `
                 font-family: 'Courier Prime', 'Courier New', monospace;
                 font-size: 10pt; color: ${numColor};

@@ -58,14 +58,23 @@ export default function usePageBackgrounds({ darkMode, pageWrapperRef, pageBgTim
       });
     }
 
-    // Double rAF to ensure ProseMirror decorations have rendered
+    // Retry until page-break-gap decorations are rendered by ProseMirror
+    // (they may not exist on first render — TipTap needs a few frames)
     let cancelled = false;
+    let retries = 0;
+    const tryUpdate = () => {
+      if (cancelled) return;
+      updatePageBgs();
+      // If no gaps found yet and we haven't retried too many times, keep trying
+      const gaps = wrapper.querySelectorAll('.page-break-gap');
+      if (gaps.length === 0 && retries < 10) {
+        retries++;
+        setTimeout(tryUpdate, 200);
+      }
+    };
     requestAnimationFrame(() => {
       if (cancelled) return;
-      requestAnimationFrame(() => {
-        if (cancelled) return;
-        updatePageBgs();
-      });
+      requestAnimationFrame(tryUpdate);
     });
 
     // Also watch for DOM mutations (content edits that change page breaks)
