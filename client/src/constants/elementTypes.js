@@ -4,7 +4,7 @@ const SP_NEXT_TYPE = {
   scene: 'action',           // Scene Heading → Action
   action: 'action',          // Action → Action
   character: 'dialogue',     // Character → Dialogue
-  dialogue: 'character',     // Dialogue → Character (ping-pong)
+  dialogue: 'action',        // Dialogue → Action (Tab to get Character)
   parenthetical: 'dialogue', // Parenthetical → Dialogue
   transition: 'action',      // Transition → Action (was 'scene' — FD creates Action)
 };
