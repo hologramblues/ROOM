@@ -1,24 +1,26 @@
 // ============ FINAL DRAFT TYPING FLOW ============
+// Verified against Final Draft, Fade In, Arc Studio, KIT Scenarist, Fountain spec
+//
 // Enter: what element type is created after the current one
 const SP_NEXT_TYPE = {
   scene: 'action',           // Scene Heading → Action
   action: 'action',          // Action → Action
   character: 'dialogue',     // Character → Dialogue
-  dialogue: 'action',        // Dialogue → Action (Tab to get Character)
+  dialogue: 'action',        // Dialogue → Action (FD default; Tab to get Character)
   parenthetical: 'dialogue', // Parenthetical → Dialogue
-  transition: 'action',      // Transition → Action (was 'scene' — FD creates Action)
+  transition: 'scene',       // Transition → Scene Heading (transitions lead to new scenes)
 };
 
 // Enter on empty element: convert to this type, or null = create new action below
 const SP_EMPTY_ENTER = (t) => (t === 'action' ? null : 'action');
 
 // Tab forward cycling (Final Draft standard)
-// In Dialogue/Parenthetical: Tab toggles between them (handled in ScreenplayElement.js)
-// For all others: this is the cycle
+// Dialogue/Parenthetical: Tab toggles between them (handled in ScreenplayElement.js)
+// For all others: context-appropriate jumps
 const SP_TAB_FWD = {
   scene: 'action',           // Scene → Action
-  action: 'character',       // Action → Character
-  character: 'dialogue',     // Character → Dialogue (was 'parenthetical')
+  action: 'character',       // Action → Character (main Tab shortcut)
+  character: 'parenthetical',// Character → Parenthetical (Enter already does Character→Dialogue)
   parenthetical: 'dialogue', // Parenthetical → Dialogue (toggle)
   dialogue: 'parenthetical', // Dialogue → Parenthetical (toggle)
   transition: 'scene',       // Transition → Scene
