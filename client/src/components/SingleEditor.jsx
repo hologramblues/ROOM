@@ -47,7 +47,7 @@ const SingleEditor = React.memo(({
   lockedScenesRef.current = lockedScenes;
   const remoteCursorsRef = useRef(remoteCursors);
   remoteCursorsRef.current = remoteCursors;
-  const [autoState, setAutoState] = useState({ show: false, items: [], idx: 0, type: null, nodePos: null });
+  const [autoState, setAutoState] = useState({ show: false, items: [], idx: -1, type: null, nodePos: null, userNavigated: false });
 
   // Create page break extension that wraps ProseMirror plugin
   // Uses darkModeRef so the plugin always reads current darkMode value
@@ -223,7 +223,7 @@ const SingleEditor = React.memo(({
             const f = (characters || []).filter(c => c.toUpperCase().startsWith(q) && c.toUpperCase() !== q);
             if (f.length > 0) {
               const coords = editor.view.coordsAtPos(from);
-              setAutoState({ show: true, items: f, idx: 0, type: 'character', coords });
+              setAutoState({ show: true, items: f, idx: -1, type: 'character', coords, userNavigated: false });
             } else {
               setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
             }
@@ -232,7 +232,7 @@ const SingleEditor = React.memo(({
             const coords = editor.view.coordsAtPos(from);
             // Find the full name from characters list (preserve original casing)
             const fullName = (characters || []).find(c => c.toUpperCase() === cyclingSuggestion) || cyclingSuggestion;
-            setAutoState({ show: true, items: [fullName], idx: 0, type: 'character', coords });
+            setAutoState({ show: true, items: [fullName], idx: -1, type: 'character', coords, userNavigated: false });
           } else {
             setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
           }
@@ -243,7 +243,7 @@ const SingleEditor = React.memo(({
             const f = (locations || []).filter(l => l.startsWith(q) && l !== q);
             if (f.length > 0) {
               const coords = editor.view.coordsAtPos(from);
-              setAutoState({ show: true, items: f, idx: 0, type: 'location', coords });
+              setAutoState({ show: true, items: f, idx: -1, type: 'location', coords, userNavigated: false });
             } else {
               setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
             }
@@ -508,15 +508,28 @@ const SingleEditor = React.memo(({
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         event.stopPropagation();
-        setAutoState(prev => ({ ...prev, idx: (prev.idx + 1) % prev.items.length }));
+        setAutoState(prev => ({ ...prev, idx: prev.idx < prev.items.length - 1 ? prev.idx + 1 : 0, userNavigated: true }));
       } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         event.stopPropagation();
-        setAutoState(prev => ({ ...prev, idx: (prev.idx - 1 + prev.items.length) % prev.items.length }));
-      } else if (event.key === 'Enter' || event.key === 'Tab') {
+        setAutoState(prev => ({ ...prev, idx: prev.idx > 0 ? prev.idx - 1 : prev.items.length - 1, userNavigated: true }));
+      } else if (event.key === 'Tab' && autoState.userNavigated && autoState.idx >= 0) {
+        // Tab selects only if user explicitly navigated with arrows
         event.preventDefault();
         event.stopPropagation();
         handleAutoSelect(autoState.items[autoState.idx]);
+      } else if (event.key === 'Enter') {
+        if (autoState.userNavigated && autoState.idx >= 0) {
+          // User explicitly chose from list — select it
+          event.preventDefault();
+          event.stopPropagation();
+          handleAutoSelect(autoState.items[autoState.idx]);
+        } else {
+          // User typed a name and hit Enter — let TipTap handle it normally
+          // (splitScreenplayElement will fire, creating dialogue below)
+          setAutoState(prev => ({ ...prev, show: false }));
+          // Don't preventDefault — let the Enter key through to TipTap
+        }
       } else if (event.key === 'Escape') {
         event.preventDefault();
         setAutoState(prev => ({ ...prev, show: false }));
@@ -532,31 +545,33 @@ const SingleEditor = React.memo(({
     <div style={{ position: 'relative' }}>
       <EditorContent editor={editor} />
 
-      {/* Character autocomplete dropdown */}
+      {/* Character autocomplete dropdown — positioned below text, centered like Final Draft SmartType */}
       {autoState.show && autoState.type === 'character' && autoState.coords && (
         <div style={{
           position: 'fixed',
-          top: (autoState.coords.bottom || 0) + 4,
-          left: (autoState.coords.left || 0),
-          background: '#1e1e1e',
-          border: '1px solid #555',
+          top: (autoState.coords.bottom || 0) + 12,
+          left: (autoState.coords.left || 0) - 20,
+          background: darkMode ? '#1e1e1e' : '#ffffff',
+          border: `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
           borderRadius: 6,
           maxHeight: 150,
           overflowY: 'auto',
           zIndex: 1000,
           minWidth: 200,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+          boxShadow: darkMode ? '0 4px 16px rgba(0,0,0,0.6)' : '0 4px 16px rgba(0,0,0,0.15)',
         }}>
           {autoState.items.map((s, i) => (
             <div
               key={s}
               onMouseDown={(e) => { e.preventDefault(); handleAutoSelect(s); }}
-              onMouseEnter={() => setAutoState(prev => ({ ...prev, idx: i }))}
+              onMouseEnter={() => setAutoState(prev => ({ ...prev, idx: i, userNavigated: true }))}
               style={{
                 padding: '8px 12px',
                 cursor: 'pointer',
-                background: i === autoState.idx ? '#3a3a3a' : '#1e1e1e',
-                color: '#e0e0e0',
+                background: (i === autoState.idx && autoState.idx >= 0)
+                  ? (darkMode ? '#3a3a3a' : '#e5e7eb')
+                  : (darkMode ? '#1e1e1e' : '#ffffff'),
+                color: darkMode ? '#e0e0e0' : '#111',
                 fontFamily: getFontFamily(scriptFont),
                 fontSize: '12pt',
               }}
@@ -571,27 +586,29 @@ const SingleEditor = React.memo(({
       {autoState.show && autoState.type === 'location' && autoState.coords && (
         <div style={{
           position: 'fixed',
-          top: (autoState.coords.bottom || 0) + 4,
-          left: (autoState.coords.left || 0),
-          background: '#1e1e1e',
-          border: '1px solid #555',
+          top: (autoState.coords.bottom || 0) + 12,
+          left: (autoState.coords.left || 0) - 20,
+          background: darkMode ? '#1e1e1e' : '#ffffff',
+          border: `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
           borderRadius: 6,
           maxHeight: 150,
           overflowY: 'auto',
           zIndex: 1000,
           minWidth: 250,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+          boxShadow: darkMode ? '0 4px 16px rgba(0,0,0,0.6)' : '0 4px 16px rgba(0,0,0,0.15)',
         }}>
           {autoState.items.map((s, i) => (
             <div
               key={s}
               onMouseDown={(e) => { e.preventDefault(); handleAutoSelect(s); }}
-              onMouseEnter={() => setAutoState(prev => ({ ...prev, idx: i }))}
+              onMouseEnter={() => setAutoState(prev => ({ ...prev, idx: i, userNavigated: true }))}
               style={{
                 padding: '8px 12px',
                 cursor: 'pointer',
-                background: i === autoState.idx ? '#3a3a3a' : '#1e1e1e',
-                color: '#e0e0e0',
+                background: (i === autoState.idx && autoState.idx >= 0)
+                  ? (darkMode ? '#3a3a3a' : '#e5e7eb')
+                  : (darkMode ? '#1e1e1e' : '#ffffff'),
+                color: darkMode ? '#e0e0e0' : '#111',
                 fontFamily: getFontFamily(scriptFont),
                 fontSize: '12pt',
               }}
