@@ -11,6 +11,8 @@ export default function useSocketConnection({
   playChatNotification,
   serverUrl,
   elementVersionsRef, // Map<elementId, version> for optimistic concurrency
+  documentLoadedRef, // Set true once document-state received — gates emissions
+  docVersionRef, // Server doc version — for stale full-sync rejection
 }) {
   // Stabilize callback ref to avoid reconnecting when callback identity changes
   const playChatNotificationRef = useRef(playChatNotification);
@@ -46,12 +48,15 @@ export default function useSocketConnection({
           data.elements.forEach(el => vMap.set(el.id, el.v || 0));
           elementVersionsRef.current = vMap;
         }
-        console.log('[SYNC] Document re-synced from server on reconnect');
+        // Mark document as loaded — emissions are now safe
+        if (documentLoadedRef) documentLoadedRef.current = true;
+        if (docVersionRef && data.docVersion != null) docVersionRef.current = data.docVersion;
+        console.log('[SYNC] Document re-synced from server v' + (data.docVersion || 0));
       }
     };
 
     // ============ FULL SYNC ============
-    const onFullSyncApplied = ({ elements: newElements }) => {
+    const onFullSyncApplied = ({ elements: newElements, docVersion }) => {
       if (!isStale && !offlineDocIdRef.current) {
         setElements(newElements);
         if (elementVersionsRef) {
@@ -59,7 +64,8 @@ export default function useSocketConnection({
           newElements.forEach(el => vMap.set(el.id, el.v || 0));
           elementVersionsRef.current = vMap;
         }
-        console.log('[SYNC] Full sync received from another client');
+        if (docVersionRef && docVersion != null) docVersionRef.current = docVersion;
+        console.log('[SYNC] Full sync received v' + (docVersion || '?'));
       }
     };
 

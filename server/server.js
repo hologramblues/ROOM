@@ -1119,10 +1119,20 @@ io.on('connection', (socket) => {
     try {
       const doc = await Document.findOne({ shortId: currentDocId });
       if (!doc) return;
-      // Ensure all elements have a version field
+
+      // CRITICAL: Reject stale full-sync if client's version is behind server
+      // This prevents a tab left open from overwriting newer changes on refresh
+      const serverVersion = doc.version || 0;
+      if (docVersion != null && docVersion < serverVersion) {
+        console.warn(`[FULL-SYNC] REJECTED stale sync from client (client v${docVersion} < server v${serverVersion}) for ${currentDocId}`);
+        // Send the current server state back to the stale client
+        socket.emit('full-sync-applied', { elements: doc.elements, docVersion: serverVersion });
+        return;
+      }
+
       const versionedElements = elements.map(el => ({ ...el, v: el.v || 0 }));
       doc.elements = versionedElements;
-      doc.version = (doc.version || 0) + 1;
+      doc.version = serverVersion + 1;
       doc.markModified('elements');
       await doc.save();
       socket.to(currentDocId).emit('full-sync-applied', { elements: versionedElements, docVersion: doc.version });

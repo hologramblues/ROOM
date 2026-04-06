@@ -216,6 +216,8 @@ export default function ScreenplayEditor() {
   const elementVersionsRef = useRef(new Map()); // Map<elementId, version> for optimistic concurrency
   const lastEmittedRef = useRef(null); // Track last state sent to server for diffing
   const isRemoteSyncRef = useRef(false); // Guard: true when applying remote socket updates
+  const docVersionRef = useRef(0); // Server document version — prevents stale overwrites
+  const documentLoadedRef = useRef(false); // True once document-state received — gates emissions
   const loadedDocRef = useRef(null);
   const scriptContainerRef = useRef(null);
   const pageWrapperRef = useRef(null);
@@ -228,6 +230,8 @@ export default function ScreenplayEditor() {
       const newDocId = window.location.hash.slice(1) || null;
       if (newDocId !== docId) {
         loadedDocRef.current = null;
+        documentLoadedRef.current = false; // Reset — don't emit until new doc loaded
+        lastEmittedRef.current = null;
         setDocId(newDocId);
       }
     };
@@ -317,7 +321,7 @@ export default function ScreenplayEditor() {
     activateOfflineMode, pushOfflineChanges, discardOfflineCopy
   } = useOfflineMode({
     docId, token, connected, socketRef, elementsRef, titleRef, lastSaved,
-    setElements, setTitle, setLastSaved, loadedDocRef, lastEmittedRef
+    setElements, setTitle, setLastSaved, loadedDocRef, lastEmittedRef, docVersionRef
   });
 
   // Cloud sync hook (desktop only) — must be before hooks that use effectiveDocId
@@ -388,7 +392,7 @@ export default function ScreenplayEditor() {
     setChatMessages, setUnreadMessages,
     playChatNotification,
     serverUrl: effectiveServerUrl,
-    elementVersionsRef,
+    elementVersionsRef, documentLoadedRef, docVersionRef,
   });
 
   const [showSyncConfirm, setShowSyncConfirm] = useState(null); // 'push' | 'pull' | null
@@ -513,7 +517,7 @@ export default function ScreenplayEditor() {
         lastEmittedRef.current = templateElements;
 
         // Sync to server via full-sync (structural change — many elements at once)
-        socketRef.current.emit('full-sync', { elements: templateElements });
+        socketRef.current.emit('full-sync', { elements: templateElements, docVersion: docVersionRef.current });
         
         // Set title based on template
         const newTitle = `Nouveau script - ${template.name}`;
@@ -694,7 +698,7 @@ export default function ScreenplayEditor() {
   const { pushToUndo, undo, redo } = useUndoRedo({
     elementsRef, beatCardsRef, structureBeatsRef, sceneSynopsisRef, sceneStatusRef,
     setElements, setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
-    socketRef, lastEmittedRef
+    socketRef, lastEmittedRef, docVersionRef
   });
 
   // Duplicate scene function (moved here for proper hoisting)
@@ -721,7 +725,7 @@ export default function ScreenplayEditor() {
     setLastSaved(new Date());
 
     if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: newElements });
+      socketRef.current.emit('full-sync', { elements: newElements, docVersion: docVersionRef.current });
       lastEmittedRef.current = newElements;
     }
   }, [elements, connected, canEdit, pushToUndo]);
@@ -814,6 +818,12 @@ export default function ScreenplayEditor() {
       setElements(newElements);
       return;
     }
+    // CRITICAL: Don't emit anything until we've received document-state from server
+    // This prevents stale data (e.g. from a tab left open overnight) from overwriting the server
+    if (!documentLoadedRef.current) {
+      setElements(newElements);
+      return;
+    }
     setElements(newElements);
     setLastSaved(new Date());
     setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
@@ -824,8 +834,8 @@ export default function ScreenplayEditor() {
       const currentElements = elementsRef.current;
       const baseline = lastEmittedRef.current;
       if (!baseline) {
-        // First emission after load — send full-sync as baseline
-        socketRef.current.emit('full-sync', { elements: currentElements });
+        // No baseline yet — set it from current state but DON'T full-sync
+        // (document-state already set the server's version as truth)
         lastEmittedRef.current = currentElements;
         return;
       }
@@ -925,7 +935,7 @@ export default function ScreenplayEditor() {
     setLastSaved(new Date());
 
     if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: newElements });
+      socketRef.current.emit('full-sync', { elements: newElements, docVersion: docVersionRef.current });
       lastEmittedRef.current = newElements;
     }
   }, [elements, connected, canEdit, pushToUndo]);
@@ -997,7 +1007,7 @@ export default function ScreenplayEditor() {
   useMultiBlockClipboard({
     selectedRange, setSelectedRange, elementsRef, canEditNow,
     pushToUndo, setElements, setActiveIndex,
-    copiedBlocksRef, socketRef, connected, canEdit, offlineDocIdRef
+    copiedBlocksRef, socketRef, connected, canEdit, offlineDocIdRef, docVersionRef
   });
 
   useDragSelect({ elementsRef, dragStartIndexRef, isDragSelecting, setIsDragSelecting, selectedRange, setSelectedRange, copiedBlocksRef });
@@ -1049,7 +1059,7 @@ export default function ScreenplayEditor() {
     });
 
     if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: newElements });
+      socketRef.current.emit('full-sync', { elements: newElements, docVersion: docVersionRef.current });
       lastEmittedRef.current = newElements;
     }
   };

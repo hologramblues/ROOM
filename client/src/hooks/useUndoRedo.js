@@ -3,7 +3,7 @@ import { useState, useCallback } from 'react';
 export default function useUndoRedo({
   elementsRef, beatCardsRef, structureBeatsRef, sceneSynopsisRef, sceneStatusRef,
   setElements, setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
-  socketRef, lastEmittedRef
+  socketRef, lastEmittedRef, docVersionRef
 }) {
   const [, setUndoStack] = useState([]);
   const [, setRedoStack] = useState([]);
@@ -41,7 +41,7 @@ export default function useUndoRedo({
       if (Array.isArray(previous)) {
         setElements(previous);
         if (socketRef.current) {
-          socketRef.current.emit('full-sync', { elements: previous });
+          socketRef.current.emit('full-sync', { elements: previous, docVersion: docVersionRef?.current });
           if (lastEmittedRef) lastEmittedRef.current = previous;
         }
       } else {
@@ -52,7 +52,7 @@ export default function useUndoRedo({
         if (previous.sceneStatus) setSceneStatus(previous.sceneStatus);
         const els = previous.elements || elementsRef.current;
         if (socketRef.current) {
-          socketRef.current.emit('full-sync', { elements: els });
+          socketRef.current.emit('full-sync', { elements: els, docVersion: docVersionRef?.current });
           if (lastEmittedRef) lastEmittedRef.current = els;
         }
       }
@@ -80,7 +80,7 @@ export default function useUndoRedo({
       if (Array.isArray(next)) {
         setElements(next);
         if (socketRef.current) {
-          socketRef.current.emit('full-sync', { elements: next });
+          socketRef.current.emit('full-sync', { elements: next, docVersion: docVersionRef?.current });
           if (lastEmittedRef) lastEmittedRef.current = next;
         }
       } else {
@@ -91,7 +91,7 @@ export default function useUndoRedo({
         if (next.sceneStatus) setSceneStatus(next.sceneStatus);
         const els = next.elements || elementsRef.current;
         if (socketRef.current) {
-          socketRef.current.emit('full-sync', { elements: els });
+          socketRef.current.emit('full-sync', { elements: els, docVersion: docVersionRef?.current });
           if (lastEmittedRef) lastEmittedRef.current = els;
         }
       }
