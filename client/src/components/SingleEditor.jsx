@@ -545,12 +545,12 @@ const SingleEditor = React.memo(({
     <div style={{ position: 'relative' }}>
       <EditorContent editor={editor} />
 
-      {/* Character autocomplete dropdown — positioned below text, centered like Final Draft SmartType */}
+      {/* Character autocomplete dropdown — positioned well below the typed name */}
       {autoState.show && autoState.type === 'character' && autoState.coords && (
         <div style={{
           position: 'fixed',
-          top: (autoState.coords.bottom || 0) + 12,
-          left: (autoState.coords.left || 0) - 20,
+          top: (autoState.coords.bottom || 0) + 28,
+          left: (autoState.coords.left || 0) - 40,
           background: darkMode ? '#1e1e1e' : '#ffffff',
           border: `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
           borderRadius: 6,
@@ -586,8 +586,8 @@ const SingleEditor = React.memo(({
       {autoState.show && autoState.type === 'location' && autoState.coords && (
         <div style={{
           position: 'fixed',
-          top: (autoState.coords.bottom || 0) + 12,
-          left: (autoState.coords.left || 0) - 20,
+          top: (autoState.coords.bottom || 0) + 28,
+          left: (autoState.coords.left || 0) - 40,
           background: darkMode ? '#1e1e1e' : '#ffffff',
           border: `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
           borderRadius: 6,
