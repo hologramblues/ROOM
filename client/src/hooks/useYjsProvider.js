@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import { SERVER_URL } from '../constants/config';
 
 /**
  * Creates and manages a Yjs document + WebSocket provider per document.
@@ -21,9 +22,9 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
       return;
     }
 
-    const wsUrl = serverUrl
-      ? serverUrl.replace(/^http/, 'ws')
-      : (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host;
+    // Always use the API server URL for Yjs WebSocket (not the frontend host)
+    const baseUrl = serverUrl || SERVER_URL;
+    const wsUrl = baseUrl.replace(/^http/, 'ws');
 
     const doc = new Y.Doc();
     const wsProvider = new WebsocketProvider(
