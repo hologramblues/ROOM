@@ -8,7 +8,8 @@ const { v4: uuidv4 } = require('uuid');
 const Anthropic = require('@anthropic-ai/sdk');
 const { User, Document, HistoryEntry } = require('./models');
 const rateLimit = require('express-rate-limit');
-const { router: authRouter, authMiddleware, optionalAuthMiddleware, socketAuthMiddleware } = require('./auth');
+const { router: authRouter, authMiddleware, optionalAuthMiddleware, socketAuthMiddleware, JWT_SECRET } = require('./auth');
+const attachYjsServer = require('./yjs-server');
 
 const app = express();
 const server = http.createServer(app);
@@ -16,6 +17,9 @@ const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'] },
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/screenplay-collab';
 mongoose.connect(MONGODB_URI).then(() => console.log('Connected to MongoDB')).catch(err => console.error('MongoDB connection error:', err));
+
+// Attach Yjs CRDT WebSocket server on /yjs/* path (coexists with Socket.io on /socket.io/)
+attachYjsServer(server, MONGODB_URI, JWT_SECRET);
 
 // ============ WAITLIST SCHEMA ============
 const waitlistSchema = new mongoose.Schema({

@@ -4,7 +4,7 @@ import { stripHtml, generateId } from '../utils/helpers';
 export default function useMultiBlockClipboard({
   selectedRange, setSelectedRange, elementsRef, canEditNow,
   pushToUndo, setElements, setActiveIndex,
-  copiedBlocksRef, socketRef, connected, canEdit, offlineDocIdRef, docVersionRef
+  copiedBlocksRef, socketRef, connected, canEdit, offlineDocIdRef
 }) {
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
@@ -53,9 +53,6 @@ export default function useMultiBlockClipboard({
             const newEls = prev.filter((_, i) => i < start || i > end);
             return newEls.length === 0 ? [{ id: generateId(), type: 'action', content: '' }] : newEls;
           });
-          if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-            setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current, docVersion: docVersionRef?.current }); }, 100);
-          }
           setActiveIndex(Math.min(start, elementsRef.current.length - 1));
           setSelectedRange(null);
         }
@@ -78,9 +75,6 @@ export default function useMultiBlockClipboard({
           });
           setSelectedRange(null);
           setActiveIndex(end + 1);
-          if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-            setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current, docVersion: docVersionRef?.current }); }, 100);
-          }
         };
 
         if (copiedBlocksRef.current) {
@@ -107,9 +101,6 @@ export default function useMultiBlockClipboard({
           const newEls = prev.filter((_, i) => i < start || i > end);
           return newEls.length === 0 ? [{ id: generateId(), type: 'action', content: '' }] : newEls;
         });
-        if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-          setTimeout(() => { socketRef.current.emit('full-sync', { elements: elementsRef.current, docVersion: docVersionRef?.current }); }, 100);
-        }
         setActiveIndex(Math.min(start, elementsRef.current.length - 1));
         setSelectedRange(null);
         return;
@@ -122,5 +113,5 @@ export default function useMultiBlockClipboard({
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown, true);
     };
-  }, [selectedRange, canEdit, canEditNow, connected, pushToUndo, setSelectedRange, elementsRef, copiedBlocksRef, socketRef, offlineDocIdRef, setElements, setActiveIndex, docVersionRef]);
+  }, [selectedRange, canEdit, canEditNow, connected, pushToUndo, setSelectedRange, elementsRef, copiedBlocksRef, socketRef, offlineDocIdRef, setElements, setActiveIndex]);
 }

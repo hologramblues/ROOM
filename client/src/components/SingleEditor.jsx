@@ -2,20 +2,22 @@ import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import CommentMark from '../extensions/CommentMark';
 import SuggestionMark from '../extensions/SuggestionMark';
 import ExternalSpanMark from '../extensions/ExternalSpanMark';
 import ScreenplayElement from '../extensions/ScreenplayElement';
 import { createPageBreakPlugin } from '../extensions/pageBreakPlugin';
 import { createSceneLockPlugin } from '../extensions/sceneLockPlugin';
-import { createRemoteCursorPlugin } from '../extensions/remoteCursorPlugin';
-import { buildDocFromElements, extractElementsFromDoc, elementsEqual, stripHtml } from '../utils/helpers';
+import { extractElementsFromDoc, stripHtml } from '../utils/helpers';
 import { getFontFamily } from '../constants/fonts';
 
-// ============ SCREENPLAY EDITOR (Single TipTap V272) ============
+// ============ SCREENPLAY EDITOR (Yjs Collaborative V3) ============
 const SingleEditor = React.memo(({
-  elements,
-  onElementsChange,
+  ydoc,
+  provider,
+  currentUser,
   canEdit,
   scriptFont,
   darkMode,
@@ -28,29 +30,22 @@ const SingleEditor = React.memo(({
   onSuggestionClick,
   onEditorFocus,
   onActiveElementChange,
-  remoteCursors,
-  onCursorMove,
+  onElementsExtracted,
   computePageInfoFn,
   highlightsByElement,
   lockedScenes,
   t = (k) => k,
 }) => {
-  const isEditorOriginRef = useRef(false);
-  const isApplyingSyncRef = useRef(false); // True during sync effect dispatches — prevents onUpdate re-emission
   const isApplyingMarksRef = useRef(false);
-  const lastElementsRef = useRef(elements);
-  const syncTimeoutRef = useRef(null);
+  const extractTimeoutRef = useRef(null);
   const marksTimeoutRef = useRef(null);
   const darkModeRef = useRef(darkMode);
   darkModeRef.current = darkMode;
   const lockedScenesRef = useRef(lockedScenes);
   lockedScenesRef.current = lockedScenes;
-  const remoteCursorsRef = useRef(remoteCursors);
-  remoteCursorsRef.current = remoteCursors;
   const [autoState, setAutoState] = useState({ show: false, items: [], idx: -1, type: null, nodePos: null, userNavigated: false });
 
-  // Create page break extension that wraps ProseMirror plugin
-  // Uses darkModeRef so the plugin always reads current darkMode value
+  // Page break plugin
   const PageBreakExtension = useMemo(() => {
     const plugin = createPageBreakPlugin(computePageInfoFn, stripHtml, darkModeRef);
     return Extension.create({
@@ -60,21 +55,11 @@ const SingleEditor = React.memo(({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Scene lock extension — blocks edits on elements in locked scenes
+  // Scene lock plugin
   const SceneLockExtension = useMemo(() => {
     const plugin = createSceneLockPlugin(lockedScenesRef);
     return Extension.create({
       name: 'sceneLockHelper',
-      addProseMirrorPlugins() { return [plugin]; },
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Remote cursors extension — shows other users' cursor positions
-  const RemoteCursorExtension = useMemo(() => {
-    const plugin = createRemoteCursorPlugin(remoteCursorsRef);
-    return Extension.create({
-      name: 'remoteCursorHelper',
       addProseMirrorPlugins() { return [plugin]; },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,7 +71,7 @@ const SingleEditor = React.memo(({
       StarterKit.configure({
         paragraph: false,
         listItem: false,
-        history: true,
+        history: false, // Yjs provides per-user undo/redo
         hardBreak: false,
         heading: false,
         bulletList: false,
@@ -101,16 +86,27 @@ const SingleEditor = React.memo(({
       ExternalSpanMark,
       PageBreakExtension,
       SceneLockExtension,
-      RemoteCursorExtension,
+      // Yjs collaboration — syncs editor content via CRDT
+      ...(ydoc ? [
+        Collaboration.configure({ document: ydoc }),
+      ] : []),
+      // Yjs collaboration cursors — shows remote user cursors
+      ...(provider ? [
+        CollaborationCursor.configure({
+          provider: provider,
+          user: {
+            name: currentUser?.name || 'User',
+            color: currentUser?.color || '#3b82f6',
+          },
+        }),
+      ] : []),
     ],
-    content: buildDocFromElements(elements),
     editable: canEdit,
 
     editorProps: {
       attributes: {
         spellcheck: 'true',
       },
-      // Handle click on comment/suggestion marks
       handleClick: (view, pos, event) => {
         if (!view) return false;
         try {
@@ -132,24 +128,16 @@ const SingleEditor = React.memo(({
       },
     },
 
+    // onUpdate: extract elements for stats/outline/export (debounced, read-only)
     onUpdate: ({ editor }) => {
       if (!editor || !editor.view) return;
-      if (isApplyingMarksRef.current || isApplyingSyncRef.current) return;
-      try {
-        isEditorOriginRef.current = true;
-        // Debounce: extract elements AND propagate at the same time
-        // to avoid stale data from early extraction
-        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-        syncTimeoutRef.current = setTimeout(() => {
-          if (!editor || editor.isDestroyed) { isEditorOriginRef.current = false; return; }
-          const newElements = extractElementsFromDoc(editor.state.doc);
-          if (!elementsEqual(newElements, lastElementsRef.current)) {
-            lastElementsRef.current = newElements;
-            onElementsChange(newElements);
-          }
-          requestAnimationFrame(() => { isEditorOriginRef.current = false; });
-        }, 80);
-      } catch (_) { isEditorOriginRef.current = false; }
+      if (isApplyingMarksRef.current) return;
+      if (extractTimeoutRef.current) clearTimeout(extractTimeoutRef.current);
+      extractTimeoutRef.current = setTimeout(() => {
+        if (!editor || editor.isDestroyed) return;
+        const newElements = extractElementsFromDoc(editor.state.doc);
+        if (onElementsExtracted) onElementsExtracted(newElements);
+      }, 150);
     },
 
     onSelectionUpdate: ({ editor }) => {
@@ -159,16 +147,8 @@ const SingleEditor = React.memo(({
         const node = $from.parent;
         if (node.type.name !== 'screenplayElement') return;
 
-        // Compute element index ONCE using ProseMirror's resolved position (O(1), no doc walk)
         const elemIdx = $from.index(0);
-
         if (onActiveElementChange) onActiveElementChange(elemIdx);
-
-        // Emit cursor position for remote users
-        if (onCursorMove) {
-          const offsetInElement = from - $from.before() - 1;
-          onCursorMove(elemIdx, Math.max(0, offsetInElement));
-        }
 
         // Text selection → comment/suggestion creation
         if (from !== to && onTextSelect) {
@@ -192,18 +172,15 @@ const SingleEditor = React.memo(({
         const text = node.textContent;
 
         if (currentType === 'character') {
-          // Find the cycling character (Final Draft style: suggest the character
-          // who spoke before the last one in this scene, for ping-pong dialogue)
           let cyclingSuggestion = null;
           if (text.length === 0) {
             const doc = editor.state.doc;
-            const currentIndex = elemIdx; // Already computed above via $from.index(0)
-            // Scan backward through elements to find scene characters
+            const currentIndex = elemIdx;
             const recentChars = [];
             for (let i = currentIndex - 1; i >= 0; i--) {
               const el = doc.child(i);
               const elType = el.attrs.elementType;
-              if (elType === 'scene') break; // Stop at scene boundary
+              if (elType === 'scene') break;
               if (elType === 'character' && el.textContent.trim()) {
                 const name = el.textContent.trim().replace(/\s*\(.*?\)\s*/g, '').trim().toUpperCase();
                 if (recentChars.length === 0 || recentChars[recentChars.length - 1] !== name) {
@@ -212,7 +189,6 @@ const SingleEditor = React.memo(({
                 if (recentChars.length >= 2) break;
               }
             }
-            // recentChars[0] = last speaker, recentChars[1] = the one before
             if (recentChars.length >= 2) {
               cyclingSuggestion = recentChars[1];
             }
@@ -228,9 +204,7 @@ const SingleEditor = React.memo(({
               setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
             }
           } else if (cyclingSuggestion) {
-            // Show cycling suggestion for empty character element
             const coords = editor.view.coordsAtPos(from);
-            // Find the full name from characters list (preserve original casing)
             const fullName = (characters || []).find(c => c.toUpperCase() === cyclingSuggestion) || cyclingSuggestion;
             setAutoState({ show: true, items: [fullName], idx: -1, type: 'character', coords, userNavigated: false });
           } else {
@@ -261,84 +235,9 @@ const SingleEditor = React.memo(({
     },
 
     onBlur: () => {
-      // Clear autocomplete on blur
       setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
     },
-  });
-
-  // Sync external changes (socket, import, undo) into the editor
-  // Applies remote changes without disrupting local typing
-  useEffect(() => {
-    if (!editor || isEditorOriginRef.current) return;
-    const currentEls = extractElementsFromDoc(editor.state.doc);
-    if (elementsEqual(currentEls, elements)) return;
-
-    // Determine which element the local cursor is in
-    let cursorElementIndex = -1;
-    if (editor.isFocused) {
-      try {
-        cursorElementIndex = editor.state.selection.$from.index(0);
-      } catch (_) {}
-    }
-
-    // Detect if structure changed (different IDs or different order)
-    const structureChanged = currentEls.length !== elements.length ||
-      currentEls.some((el, i) => el.id !== elements[i].id);
-
-    if (!structureChanged) {
-      // Same structure — apply one transaction per changed element
-      // (separate transactions avoid position corruption from content size changes)
-      isApplyingSyncRef.current = true;
-      let anyChanged = false;
-
-      for (let i = 0; i < elements.length; i++) {
-        const cur = currentEls[i];
-        const next = elements[i];
-        if (cur.type === next.type && cur.content === next.content) continue;
-        if (i === cursorElementIndex) continue; // Don't disrupt active typing
-
-        // Fresh transaction per element (positions are correct after previous dispatch)
-        const { tr } = editor.state;
-        let pos = 0;
-        for (let j = 0; j < i; j++) pos += editor.state.doc.child(j).nodeSize;
-        const node = editor.state.doc.child(i);
-
-        if (cur.type !== next.type) {
-          tr.setNodeMarkup(pos, null, { ...node.attrs, elementType: next.type });
-        }
-        if (cur.content !== next.content) {
-          const nodeStart = pos + 1;
-          const nodeEnd = pos + node.nodeSize - 1;
-          if (next.content) {
-            tr.replaceWith(nodeStart, nodeEnd, editor.state.schema.text(next.content));
-          } else if (nodeEnd > nodeStart) {
-            tr.delete(nodeStart, nodeEnd);
-          }
-        }
-
-        tr.setMeta('addToHistory', false);
-        editor.view.dispatch(tr);
-        anyChanged = true;
-      }
-
-      isApplyingSyncRef.current = false;
-      // Re-extract after all dispatches to keep lastElementsRef in sync
-      if (anyChanged) {
-        lastElementsRef.current = extractElementsFromDoc(editor.state.doc);
-      }
-    } else {
-      // Structure changed (insert/delete/reorder) — full content replace
-      isApplyingSyncRef.current = true;
-      const savedPos = editor.state.selection.from;
-      editor.commands.setContent(buildDocFromElements(elements), false);
-      try {
-        const maxPos = editor.state.doc.content.size - 1;
-        editor.commands.setTextSelection(Math.min(savedPos, Math.max(0, maxPos)));
-      } catch (_) {}
-      isApplyingSyncRef.current = false;
-      lastElementsRef.current = elements;
-    }
-  }, [elements, editor]);
+  }, [ydoc, provider]); // Re-create editor when ydoc/provider change
 
   // Update editable state
   useEffect(() => {
@@ -350,86 +249,55 @@ const SingleEditor = React.memo(({
     }
   }, [editor, canEdit]);
 
-  // Force decoration update when remote cursors change (coalesced via rAF)
-  const cursorRafRef = useRef(null);
-  useEffect(() => {
-    if (!editor || !editor.view) return;
-    if (cursorRafRef.current) cancelAnimationFrame(cursorRafRef.current);
-    cursorRafRef.current = requestAnimationFrame(() => {
-      cursorRafRef.current = null;
-      if (!editor || editor.isDestroyed) return;
-      try {
-        const { tr } = editor.state;
-        tr.setMeta('remoteCursorsUpdate', true);
-        tr.setMeta('addToHistory', false);
-        editor.view.dispatch(tr);
-      } catch (_) {}
-    });
-    return () => { if (cursorRafRef.current) cancelAnimationFrame(cursorRafRef.current); };
-  }, [editor, remoteCursors]);
-
   // Cleanup
   useEffect(() => {
     return () => {
-      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      if (extractTimeoutRef.current) clearTimeout(extractTimeoutRef.current);
       if (marksTimeoutRef.current) clearTimeout(marksTimeoutRef.current);
     };
   }, []);
 
-  // Apply comment/suggestion marks to editor content (creates real <span> elements for clicks + Safari)
-  // Deps include elements so marks are reapplied after content changes (doc switch, socket sync)
+  // Apply comment/suggestion marks
   useEffect(() => {
     if (!editor || !highlightsByElement) return;
-
     if (marksTimeoutRef.current) clearTimeout(marksTimeoutRef.current);
-
-    // Delay to ensure editor content is synced first (sync effect runs on same render)
     marksTimeoutRef.current = setTimeout(() => {
       if (!editor || !editor.view || editor.isDestroyed) return;
-
       try {
         isApplyingMarksRef.current = true;
         const { tr } = editor.state;
         const schema = editor.state.schema;
         const commentMarkType = schema.marks.comment;
         const suggestionMarkType = schema.marks.suggestion;
-
         if (!commentMarkType && !suggestionMarkType) {
           isApplyingMarksRef.current = false;
           return;
         }
 
-        // First, remove all existing comment/suggestion marks
+        // Remove all existing comment/suggestion marks
         editor.state.doc.forEach((node, pos) => {
           if (node.type.name !== 'screenplayElement') return;
-          const nodeStart = pos + 1; // +1 to skip into node content
+          const nodeStart = pos + 1;
           const nodeEnd = pos + node.nodeSize - 1;
-          if (commentMarkType) {
-            tr.removeMark(nodeStart, nodeEnd, commentMarkType);
-          }
-          if (suggestionMarkType) {
-            tr.removeMark(nodeStart, nodeEnd, suggestionMarkType);
-          }
+          if (commentMarkType) tr.removeMark(nodeStart, nodeEnd, commentMarkType);
+          if (suggestionMarkType) tr.removeMark(nodeStart, nodeEnd, suggestionMarkType);
         });
 
-        // Then apply marks for each element with highlights
+        // Apply marks
         editor.state.doc.forEach((node, pos) => {
           if (node.type.name !== 'screenplayElement') return;
           const elementId = node.attrs.elementId;
           const highlights = highlightsByElement[elementId];
           if (!highlights || highlights.length === 0) return;
-
-          const nodeStart = pos + 1; // +1 to skip into node content
+          const nodeStart = pos + 1;
           const textLength = node.textContent.length;
 
           highlights.forEach(h => {
             const start = Math.max(0, Math.min(h.startOffset, textLength));
             const end = Math.max(start, Math.min(h.endOffset, textLength));
             if (start >= end) return;
-
             const from = nodeStart + start;
             const to = nodeStart + end;
-
             if (h.type === 'comment' && commentMarkType) {
               tr.addMark(from, to, commentMarkType.create({ commentId: h.id }));
             } else if (h.type === 'suggestion' && suggestionMarkType) {
@@ -441,21 +309,16 @@ const SingleEditor = React.memo(({
           });
         });
 
-        // Dispatch without adding to undo history
         tr.setMeta('addToHistory', false);
         editor.view.dispatch(tr);
       } catch (err) {
         console.warn('[Marks] Error applying highlight marks:', err.message);
       } finally {
-        // Reset flag after DOM updates settle
-        requestAnimationFrame(() => {
-          isApplyingMarksRef.current = false;
-        });
+        requestAnimationFrame(() => { isApplyingMarksRef.current = false; });
       }
     }, 200);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, highlightsByElement]); // No 'elements' dep — marks only reapply when comments/suggestions change, not on every keystroke
+  }, [editor, highlightsByElement]);
 
   // Handle autocomplete selection
   const handleAutoSelect = useCallback((item) => {
@@ -466,19 +329,14 @@ const SingleEditor = React.memo(({
     const nodeStart = $from.before();
 
     if (autoState.type === 'character') {
-      // Replace entire node content with selected character name
-      // Then create a dialogue element below — all in one transaction chain
       const tr = editor.state.tr;
       if (node.content.size > 0) {
         tr.delete(nodeStart + 1, nodeStart + 1 + node.content.size);
       }
       tr.insertText(item, nodeStart + 1);
-      // Move cursor to end of inserted text so splitScreenplayElement detects "atEnd"
       const endPos = nodeStart + 1 + item.length;
       tr.setSelection(editor.state.selection.constructor.near(tr.doc.resolve(endPos)));
       editor.view.dispatch(tr);
-
-      // Use requestAnimationFrame to ensure the transaction is fully applied before splitting
       requestAnimationFrame(() => {
         if (editor && !editor.isDestroyed) {
           editor.commands.splitScreenplayElement();
@@ -502,7 +360,6 @@ const SingleEditor = React.memo(({
   // Autocomplete keyboard navigation
   useEffect(() => {
     if (!editor || !autoState.show) return;
-
     const handleKeyDown = (event) => {
       if (!autoState.show || autoState.items.length === 0) return;
       if (event.key === 'ArrowDown') {
@@ -514,29 +371,22 @@ const SingleEditor = React.memo(({
         event.stopPropagation();
         setAutoState(prev => ({ ...prev, idx: prev.idx > 0 ? prev.idx - 1 : prev.items.length - 1, userNavigated: true }));
       } else if (event.key === 'Tab' && autoState.userNavigated && autoState.idx >= 0) {
-        // Tab selects only if user explicitly navigated with arrows
         event.preventDefault();
         event.stopPropagation();
         handleAutoSelect(autoState.items[autoState.idx]);
       } else if (event.key === 'Enter') {
         if (autoState.userNavigated && autoState.idx >= 0) {
-          // User explicitly chose from list — select it
           event.preventDefault();
           event.stopPropagation();
           handleAutoSelect(autoState.items[autoState.idx]);
         } else {
-          // User typed a name and hit Enter — let TipTap handle it normally
-          // (splitScreenplayElement will fire, creating dialogue below)
           setAutoState(prev => ({ ...prev, show: false }));
-          // Don't preventDefault — let the Enter key through to TipTap
         }
       } else if (event.key === 'Escape') {
         event.preventDefault();
         setAutoState(prev => ({ ...prev, show: false }));
       }
     };
-
-    // Use capture phase to intercept before TipTap
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [editor, autoState, handleAutoSelect]);
@@ -545,7 +395,7 @@ const SingleEditor = React.memo(({
     <div style={{ position: 'relative' }}>
       <EditorContent editor={editor} />
 
-      {/* Character autocomplete dropdown — positioned well below the typed name */}
+      {/* Character autocomplete dropdown */}
       {autoState.show && autoState.type === 'character' && autoState.coords && (
         <div style={{
           position: 'fixed',
@@ -553,29 +403,17 @@ const SingleEditor = React.memo(({
           left: (autoState.coords.left || 0) - 40,
           background: darkMode ? '#1e1e1e' : '#ffffff',
           border: `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
-          borderRadius: 6,
-          maxHeight: 150,
-          overflowY: 'auto',
-          zIndex: 1000,
-          minWidth: 200,
+          borderRadius: 6, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 200,
           boxShadow: darkMode ? '0 4px 16px rgba(0,0,0,0.6)' : '0 4px 16px rgba(0,0,0,0.15)',
         }}>
           {autoState.items.map((s, i) => (
-            <div
-              key={s}
-              onMouseDown={(e) => { e.preventDefault(); handleAutoSelect(s); }}
+            <div key={s} onMouseDown={(e) => { e.preventDefault(); handleAutoSelect(s); }}
               onMouseEnter={() => setAutoState(prev => ({ ...prev, idx: i, userNavigated: true }))}
               style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                background: (i === autoState.idx && autoState.idx >= 0)
-                  ? (darkMode ? '#3a3a3a' : '#e5e7eb')
-                  : (darkMode ? '#1e1e1e' : '#ffffff'),
-                color: darkMode ? '#e0e0e0' : '#111',
-                fontFamily: getFontFamily(scriptFont),
-                fontSize: '12pt',
-              }}
-            >
+                padding: '8px 12px', cursor: 'pointer',
+                background: (i === autoState.idx && autoState.idx >= 0) ? (darkMode ? '#3a3a3a' : '#e5e7eb') : (darkMode ? '#1e1e1e' : '#ffffff'),
+                color: darkMode ? '#e0e0e0' : '#111', fontFamily: getFontFamily(scriptFont), fontSize: '12pt',
+              }}>
               {s}
             </div>
           ))}
@@ -590,29 +428,17 @@ const SingleEditor = React.memo(({
           left: (autoState.coords.left || 0) - 40,
           background: darkMode ? '#1e1e1e' : '#ffffff',
           border: `1px solid ${darkMode ? '#555' : '#d1d5db'}`,
-          borderRadius: 6,
-          maxHeight: 150,
-          overflowY: 'auto',
-          zIndex: 1000,
-          minWidth: 250,
+          borderRadius: 6, maxHeight: 150, overflowY: 'auto', zIndex: 1000, minWidth: 250,
           boxShadow: darkMode ? '0 4px 16px rgba(0,0,0,0.6)' : '0 4px 16px rgba(0,0,0,0.15)',
         }}>
           {autoState.items.map((s, i) => (
-            <div
-              key={s}
-              onMouseDown={(e) => { e.preventDefault(); handleAutoSelect(s); }}
+            <div key={s} onMouseDown={(e) => { e.preventDefault(); handleAutoSelect(s); }}
               onMouseEnter={() => setAutoState(prev => ({ ...prev, idx: i, userNavigated: true }))}
               style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                background: (i === autoState.idx && autoState.idx >= 0)
-                  ? (darkMode ? '#3a3a3a' : '#e5e7eb')
-                  : (darkMode ? '#1e1e1e' : '#ffffff'),
-                color: darkMode ? '#e0e0e0' : '#111',
-                fontFamily: getFontFamily(scriptFont),
-                fontSize: '12pt',
-              }}
-            >
+                padding: '8px 12px', cursor: 'pointer',
+                background: (i === autoState.idx && autoState.idx >= 0) ? (darkMode ? '#3a3a3a' : '#e5e7eb') : (darkMode ? '#1e1e1e' : '#ffffff'),
+                color: darkMode ? '#e0e0e0' : '#111', fontFamily: getFontFamily(scriptFont), fontSize: '12pt',
+              }}>
               {s}
             </div>
           ))}

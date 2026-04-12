@@ -3,7 +3,7 @@ import { SERVER_URL } from '../constants/config';
 
 export default function useOfflineMode({
   docId, token, connected, socketRef, elementsRef, titleRef, lastSaved,
-  setElements, setTitle, setLastSaved, loadedDocRef, lastEmittedRef, docVersionRef
+  setElements, setTitle, setLastSaved, loadedDocRef
 }) {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [offlineDocId, setOfflineDocId] = useState(null);
@@ -101,8 +101,6 @@ export default function useOfflineMode({
       if (!res.ok) throw new Error('Push failed');
 
       if (socketRef.current && connected) {
-        socketRef.current.emit('full-sync', { elements: elementsRef.current, docVersion: docVersionRef?.current });
-        if (lastEmittedRef) lastEmittedRef.current = elementsRef.current;
       }
 
       localStorage.removeItem(`rooms-offline-${offlineDocId}`);
@@ -114,7 +112,7 @@ export default function useOfflineMode({
     } catch (err) {
       console.error('[OFFLINE] Push error:', err);
     }
-  }, [offlineDocId, offlineSnapshot, token, connected, socketRef, titleRef, elementsRef, setLastSaved, lastEmittedRef, docVersionRef]);
+  }, [offlineDocId, offlineSnapshot, token, connected, socketRef, titleRef, elementsRef, setLastSaved]);
 
   // Discard offline copy
   const discardOfflineCopy = useCallback(() => {

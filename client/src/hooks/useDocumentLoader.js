@@ -8,7 +8,7 @@ export default function useDocumentLoader({
   setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
   setWhiteboardElements, setIsOwner, setMyRole, setPublicAccessState,
   setLoading, setToken,
-  serverUrl, documentLoadedRef, lastEmittedRef,
+  serverUrl,
 }) {
   // Load document via REST API
   useEffect(() => {
@@ -100,9 +100,7 @@ export default function useDocumentLoader({
 
             loadedDocRef.current = docId;
             // Mark document as loaded so emissions are allowed
-            if (documentLoadedRef) documentLoadedRef.current = true;
             // Set baseline for diff system
-            if (lastEmittedRef) lastEmittedRef.current = data.elements;
             setIsOwner(!!data.isOwner);
             if (data.publicAccess) setPublicAccessState(data.publicAccess);
             // Use role from server (accounts for owner, collaborator, or auto-add)

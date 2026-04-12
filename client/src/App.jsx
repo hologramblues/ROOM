@@ -10,7 +10,7 @@ import { SCRIPT_TEMPLATES } from './constants/templates';
 import { getFontFamily } from './constants/fonts';
 
 // Utilities
-import { stripHtml, generateId, computeElementDiffs } from './utils/helpers';
+import { stripHtml, generateId } from './utils/helpers';
 import importFDX from './utils/importFDX';
 
 // Hooks
@@ -35,6 +35,7 @@ import useElementPositions from './hooks/useElementPositions';
 import usePageBackgrounds from './hooks/usePageBackgrounds';
 import useDragSelect from './hooks/useDragSelect';
 import useCloudSync from './hooks/useCloudSync';
+import useYjsProvider from './hooks/useYjsProvider';
 
 // Components — always visible or core to editing (static imports)
 import CommentsSidebar from './components/CommentsSidebar';
@@ -213,11 +214,7 @@ export default function ScreenplayEditor() {
   const [isDraggingTimer, setIsDraggingTimer] = useState(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const socketRef = useRef(null);
-  const elementVersionsRef = useRef(new Map()); // Map<elementId, version> for optimistic concurrency
-  const lastEmittedRef = useRef(null); // Track last state sent to server for diffing
-  const isRemoteSyncRef = useRef(false); // Guard: true when applying remote socket updates
-  const docVersionRef = useRef(0); // Server document version — prevents stale overwrites
-  const documentLoadedRef = useRef(false); // True once document-state received — gates emissions
+  // Legacy sync refs removed — Yjs handles all document sync
   const loadedDocRef = useRef(null);
   const scriptContainerRef = useRef(null);
   const pageWrapperRef = useRef(null);
@@ -230,8 +227,8 @@ export default function ScreenplayEditor() {
       const newDocId = window.location.hash.slice(1) || null;
       if (newDocId !== docId) {
         loadedDocRef.current = null;
-        documentLoadedRef.current = false; // Reset — don't emit until new doc loaded
-        lastEmittedRef.current = null;
+         // Reset — don't emit until new doc loaded
+        
         setDocId(newDocId);
       }
     };
@@ -321,7 +318,7 @@ export default function ScreenplayEditor() {
     activateOfflineMode, pushOfflineChanges, discardOfflineCopy
   } = useOfflineMode({
     docId, token, connected, socketRef, elementsRef, titleRef, lastSaved,
-    setElements, setTitle, setLastSaved, loadedDocRef, lastEmittedRef, docVersionRef
+    setElements, setTitle, setLastSaved, loadedDocRef
   });
 
   // Cloud sync hook (desktop only) — must be before hooks that use effectiveDocId
@@ -362,37 +359,26 @@ export default function ScreenplayEditor() {
     setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
     setWhiteboardElements, setIsOwner, setMyRole, setPublicAccessState,
     setLoading, setToken,
-    serverUrl: effectiveServerUrl, documentLoadedRef, lastEmittedRef,
+    serverUrl: effectiveServerUrl,
   });
 
-  // Wrapped setElements that activates anti-echo guard for remote changes
-  const setElementsFromRemote = useCallback((elementsOrUpdater) => {
-    isRemoteSyncRef.current = true;
-    if (typeof elementsOrUpdater === 'function') {
-      setElements(prev => {
-        const newEls = elementsOrUpdater(prev);
-        // Sync baseline after functional update resolves
-        queueMicrotask(() => { lastEmittedRef.current = elementsRef.current; });
-        return newEls;
-      });
-    } else {
-      // Direct value — update baseline immediately
-      lastEmittedRef.current = elementsOrUpdater;
-      setElements(elementsOrUpdater);
-    }
-    requestAnimationFrame(() => { isRemoteSyncRef.current = false; });
-  }, []);
-
-  // Socket connection hook
+  // Socket connection hook — handles chat, comments, suggestions, presence (NOT document sync)
   useSocketConnection({
     docId: effectiveDocId, token: effectiveToken,
     socketRef, offlineDocIdRef,
     setConnected, setMyId, setMyRole, setUsers,
-    setElements: setElementsFromRemote, setTitle, setComments, setSuggestions, setCollaborators,
+    setElements, setTitle, setComments, setSuggestions, setCollaborators,
     setChatMessages, setUnreadMessages,
     playChatNotification,
     serverUrl: effectiveServerUrl,
-    elementVersionsRef, documentLoadedRef, docVersionRef,
+  });
+
+  // Yjs CRDT provider — handles all document content sync
+  const { ydoc, provider } = useYjsProvider({
+    docId: effectiveDocId,
+    token: effectiveToken,
+    serverUrl: effectiveServerUrl,
+    currentUser,
   });
 
   const [showSyncConfirm, setShowSyncConfirm] = useState(null); // 'push' | 'pull' | null
@@ -451,8 +437,8 @@ export default function ScreenplayEditor() {
     setShowAuthModal(false);
     // Force document reload after login
     loadedDocRef.current = null;
-    documentLoadedRef.current = false;
-    lastEmittedRef.current = null;
+    
+    
     // Restore pending document if user opened a shared link before logging in
     if (pendingDocIdRef.current) {
       const pending = pendingDocIdRef.current;
@@ -516,10 +502,8 @@ export default function ScreenplayEditor() {
         }));
 
         setElements(templateElements);
-        lastEmittedRef.current = templateElements;
+        
 
-        // Sync to server via full-sync (structural change — many elements at once)
-        socketRef.current.emit('full-sync', { elements: templateElements, docVersion: docVersionRef.current });
         
         // Set title based on template
         const newTitle = `Nouveau script - ${template.name}`;
@@ -613,7 +597,7 @@ export default function ScreenplayEditor() {
 
   const selectDocument = (id) => { loadedDocRef.current = null; window.location.hash = id; setShowDocsList(false); };
 
-  const remoteCursors = useMemo(() => users.filter(u => u.id !== myId), [users, myId]);
+  // remoteCursors removed — Yjs CollaborationCursor handles this
   const canEdit = myRole === 'editor';
   const canEditNow = (isFullyConnected || !!offlineDocId || docId === 'local') && canEdit;
   const canComment = myRole === 'editor' || myRole === 'commenter';
@@ -700,7 +684,7 @@ export default function ScreenplayEditor() {
   const { pushToUndo, undo, redo } = useUndoRedo({
     elementsRef, beatCardsRef, structureBeatsRef, sceneSynopsisRef, sceneStatusRef,
     setElements, setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
-    socketRef, lastEmittedRef, docVersionRef
+    socketRef
   });
 
   // Duplicate scene function (moved here for proper hoisting)
@@ -727,8 +711,7 @@ export default function ScreenplayEditor() {
     setLastSaved(new Date());
 
     if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: newElements, docVersion: docVersionRef.current });
-      lastEmittedRef.current = newElements;
+      
     }
   }, [elements, connected, canEdit, pushToUndo]);
 
@@ -737,17 +720,12 @@ export default function ScreenplayEditor() {
     if (!skipUndo) pushToUndo();
     setElements(p => {
       const u = [...p]; u[i] = el;
-      lastEmittedRef.current = u; // Keep diff baseline in sync
+
       return u;
     });
-    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) {
-      const baseVersion = elementVersionsRef.current.get(el.id);
-      socketRef.current.emit('element-change', { index: i, element: el, baseVersion: baseVersion ?? null });
-      if (baseVersion != null) elementVersionsRef.current.set(el.id, baseVersion + 1);
-    }
     setLastSaved(new Date());
     setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
-  }, [connected, canEdit, canEditNow, pushToUndo, currentUser, offlineDocIdRef]);
+  }, [canEditNow, pushToUndo, currentUser]);
 
   // Search hook (search/replace, scene navigation)
   const {
@@ -775,98 +753,28 @@ export default function ScreenplayEditor() {
     const el = { id: generateId(), type, content: '' };
     setElements(p => {
       const u = [...p]; u.splice(after + 1, 0, el);
-      lastEmittedRef.current = u;
+
       return u;
     });
     setActiveIndex(after + 1);
-    const afterElementId = elementsRef.current[after]?.id;
-    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-insert', { afterIndex: after, afterElementId, element: el });
     setLastSaved(new Date());
-  }, [connected, canEdit, canEditNow, pushToUndo, offlineDocIdRef]);
+  }, [canEditNow, pushToUndo]);
   // eslint-disable-next-line no-unused-vars
   const deleteElement = useCallback(i => {
     if (!canEditNow) return;
     if (elementsRef.current.length === 1) return;
     pushToUndo();
-    const elementId = elementsRef.current[i]?.id;
-    setElements(p => {
-      const u = p.filter((_, idx) => idx !== i);
-      lastEmittedRef.current = u;
-      return u;
-    });
+    setElements(p => p.filter((_, idx) => idx !== i));
     setActiveIndex(Math.max(0, i - 1));
-    if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-delete', { index: i, elementId });
     setLastSaved(new Date());
-  }, [connected, canEdit, canEditNow, pushToUndo, offlineDocIdRef]);
-  const changeType = useCallback((i, t) => { if (!canEditNow) return; const elementId = elementsRef.current[i]?.id; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; lastEmittedRef.current = u; return u; }); if (socketRef.current && connected && canEdit && !offlineDocIdRef.current) socketRef.current.emit('element-type-change', { index: i, type: t, elementId }); }, [connected, canEdit, canEditNow, offlineDocIdRef]);
-  // V272-fix: Cursor emission for remote cursor display
-  const cursorTimeoutRef = useRef(null);
-  const handleCursorMove = useCallback((elementIndex, offsetInElement) => {
-    if (cursorTimeoutRef.current) clearTimeout(cursorTimeoutRef.current);
-    cursorTimeoutRef.current = setTimeout(() => {
-      if (socketRef.current && connected && !offlineDocIdRef.current) {
-        socketRef.current.emit('cursor-move', { index: elementIndex, position: offsetInElement });
-      }
-    }, 50); // 50ms debounce
-  }, [connected, offlineDocIdRef]);
-
-  // V272: Single editor → elements change callback
-  // Uses granular diffs instead of full-sync to avoid overwriting other users' edits
-  const diffTimeoutRef = useRef(null);
-  const handleElementsChange = useCallback((newElements) => {
+  }, [canEditNow, pushToUndo]);
+  const changeType = useCallback((i, t) => { if (!canEditNow) return; setElements(p => { const u = [...p]; u[i] = { ...u[i], type: t }; return u; }); }, [canEditNow]);
+  // Yjs handles all document sync — this callback just extracts elements for stats/outline/export
+  const handleElementsExtracted = useCallback((newElements) => {
     if (!newElements || newElements.length === 0) return;
-    // Skip emission if this change originated from a remote socket event
-    if (isRemoteSyncRef.current) {
-      setElements(newElements);
-      return;
-    }
-    // CRITICAL: Don't emit anything until we've received document-state from server
-    // This prevents stale data (e.g. from a tab left open overnight) from overwriting the server
-    if (!documentLoadedRef.current) {
-      setElements(newElements);
-      return;
-    }
     setElements(newElements);
     setLastSaved(new Date());
-    setLastModifiedBy({ userName: currentUser?.name || 'Vous', timestamp: new Date() });
-    // Debounced granular diff to server
-    if (diffTimeoutRef.current) clearTimeout(diffTimeoutRef.current);
-    diffTimeoutRef.current = setTimeout(() => {
-      if (!socketRef.current || !connected || !canEdit || offlineDocIdRef.current) return;
-      const currentElements = elementsRef.current;
-      const baseline = lastEmittedRef.current;
-      if (!baseline) {
-        // No baseline yet — set it from current state but DON'T full-sync
-        // (document-state already set the server's version as truth)
-        lastEmittedRef.current = currentElements;
-        return;
-      }
-      const { updates, inserts, deletes } = computeElementDiffs(baseline, currentElements);
-      // Emit granular events using existing server handlers
-      deletes.forEach(d => socketRef.current.emit('element-delete', d));
-      updates.forEach(u => {
-        const baseEl = baseline.find(el => el.id === u.element.id);
-        if (u.element.type !== baseEl?.type) {
-          socketRef.current.emit('element-type-change', { index: u.index, type: u.element.type, elementId: u.element.id });
-        }
-        if (u.element.content !== baseEl?.content) {
-          // Send baseVersion for optimistic concurrency
-          const baseVersion = elementVersionsRef.current.get(u.element.id);
-          socketRef.current.emit('element-change', { index: u.index, element: u.element, baseVersion: baseVersion ?? null });
-          // Optimistically increment local version
-          if (baseVersion != null) {
-            elementVersionsRef.current.set(u.element.id, baseVersion + 1);
-          }
-        }
-      });
-      inserts.forEach(ins => {
-        socketRef.current.emit('element-insert', ins);
-        // New elements start at version 0
-        elementVersionsRef.current.set(ins.element.id, 0);
-      });
-      lastEmittedRef.current = currentElements;
-    }, 50);
-  }, [connected, canEdit, currentUser, offlineDocIdRef]);
+  }, []);
 
   const handleSelectChar = useCallback((i, name) => { updateElement(i, { ...elements[i], content: name }); setTimeout(() => insertElement(i, 'dialogue'), 50); }, [elements, updateElement, insertElement]);
   
@@ -896,7 +804,6 @@ export default function ScreenplayEditor() {
     if (socketRef.current && connected && canEdit) {
       newElements.forEach((el, i) => {
         if (el !== elements[i]) {
-          socketRef.current.emit('element-change', { index: i, element: el });
         }
       });
     }
@@ -937,8 +844,7 @@ export default function ScreenplayEditor() {
     setLastSaved(new Date());
 
     if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: newElements, docVersion: docVersionRef.current });
-      lastEmittedRef.current = newElements;
+      
     }
   }, [elements, connected, canEdit, pushToUndo]);
 
@@ -1009,7 +915,7 @@ export default function ScreenplayEditor() {
   useMultiBlockClipboard({
     selectedRange, setSelectedRange, elementsRef, canEditNow,
     pushToUndo, setElements, setActiveIndex,
-    copiedBlocksRef, socketRef, connected, canEdit, offlineDocIdRef, docVersionRef
+    copiedBlocksRef, socketRef, connected, canEdit, offlineDocIdRef
   });
 
   useDragSelect({ elementsRef, dragStartIndexRef, isDragSelecting, setIsDragSelecting, selectedRange, setSelectedRange, copiedBlocksRef });
@@ -1061,8 +967,7 @@ export default function ScreenplayEditor() {
     });
 
     if (socketRef.current && connected && canEdit) {
-      socketRef.current.emit('full-sync', { elements: newElements, docVersion: docVersionRef.current });
-      lastEmittedRef.current = newElements;
+      
     }
   };
 
@@ -1491,8 +1396,9 @@ export default function ScreenplayEditor() {
             lineHeight: '1',
           }}>
             <SingleEditor
-              elements={elements}
-              onElementsChange={handleElementsChange}
+              ydoc={ydoc}
+              provider={provider}
+              currentUser={currentUser}
               canEdit={canEditNow}
               scriptFont={scriptFont}
               darkMode={darkMode}
@@ -1505,8 +1411,7 @@ export default function ScreenplayEditor() {
               onSuggestionClick={handleSuggestionClickCb}
               onEditorFocus={() => setScriptHasFocus(true)}
               onActiveElementChange={setActiveIndex}
-              onCursorMove={handleCursorMove}
-              remoteCursors={remoteCursors}
+              onElementsExtracted={handleElementsExtracted}
               computePageInfoFn={computePageInfo}
               highlightsByElement={highlightsByElement}
               lockedScenes={lockedScenes}
