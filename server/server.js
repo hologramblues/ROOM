@@ -479,22 +479,32 @@ app.get('/api/documents/:shortId', authMiddleware, async (req, res) => {
     if (!doc) return res.status(404).json({ error: 'Document non trouve' });
     // Auth required. Any authenticated user with the shortId (shared link) can access.
     // They will be auto-added as collaborator when they join via socket.
-    res.json({ 
-      id: doc.shortId, 
-      title: doc.title, 
-      elements: doc.elements, 
-      characters: doc.characters, 
-      locations: doc.locations, 
-      comments: doc.comments, 
+    // Determine user's role for this document
+    let userRole = 'viewer';
+    const isOwner = req.user && doc.ownerId.equals(req.user._id);
+    if (isOwner) {
+      userRole = 'editor';
+    } else if (req.user) {
+      const collab = doc.collaborators.find(c => c.userId.equals(req.user._id));
+      if (collab) userRole = collab.role;
+      else userRole = 'editor'; // Will be auto-added as collaborator on socket join
+    }
+    res.json({
+      id: doc.shortId,
+      title: doc.title,
+      elements: doc.elements,
+      characters: doc.characters,
+      locations: doc.locations,
+      comments: doc.comments,
       suggestions: doc.suggestions || [],
-      // Beat Board data
       beatCards: doc.beatCards || [],
       structureBeats: doc.structureBeats || [],
       sceneSynopsis: doc.sceneSynopsis || {},
       sceneStatus: doc.sceneStatus || {},
       whiteboardElements: doc.whiteboardElements || [],
-      isOwner: req.user && doc.ownerId.equals(req.user._id), 
-      publicAccess: doc.publicAccess 
+      isOwner,
+      role: userRole,
+      publicAccess: doc.publicAccess
     });
   } catch (error) { res.status(500).json({ error: 'Erreur' }); }
 });

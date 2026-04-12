@@ -362,7 +362,7 @@ export default function ScreenplayEditor() {
     setBeatCards, setStructureBeats, setSceneSynopsis, setSceneStatus,
     setWhiteboardElements, setIsOwner, setMyRole, setPublicAccessState,
     setLoading, setToken,
-    serverUrl: effectiveServerUrl,
+    serverUrl: effectiveServerUrl, documentLoadedRef, lastEmittedRef,
   });
 
   // Wrapped setElements that activates anti-echo guard for remote changes
@@ -449,8 +449,10 @@ export default function ScreenplayEditor() {
     setCurrentUser(user);
     setToken(newToken);
     setShowAuthModal(false);
-    // Always force document reload after login (new auth may grant different access)
+    // Force document reload after login
     loadedDocRef.current = null;
+    documentLoadedRef.current = false;
+    lastEmittedRef.current = null;
     // Restore pending document if user opened a shared link before logging in
     if (pendingDocIdRef.current) {
       const pending = pendingDocIdRef.current;
