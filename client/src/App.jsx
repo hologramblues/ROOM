@@ -379,6 +379,7 @@ export default function ScreenplayEditor() {
     token: effectiveToken,
     serverUrl: effectiveServerUrl,
     currentUser,
+    elementsRef,
   });
 
   const [showSyncConfirm, setShowSyncConfirm] = useState(null); // 'push' | 'pull' | null

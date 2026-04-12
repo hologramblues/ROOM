@@ -391,6 +391,9 @@ const SingleEditor = React.memo(({
     return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [editor, autoState, handleAutoSelect]);
 
+  // Don't render until Yjs doc is ready
+  if (!ydoc || !provider) return null;
+
   return (
     <div style={{ position: 'relative' }}>
       <EditorContent editor={editor} />
