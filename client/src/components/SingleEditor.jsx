@@ -10,7 +10,7 @@ import ExternalSpanMark from '../extensions/ExternalSpanMark';
 import ScreenplayElement from '../extensions/ScreenplayElement';
 import { createPageBreakPlugin } from '../extensions/pageBreakPlugin';
 import { createSceneLockPlugin } from '../extensions/sceneLockPlugin';
-import { extractElementsFromDoc, stripHtml } from '../utils/helpers';
+import { extractElementsFromDoc, buildDocFromElements, stripHtml } from '../utils/helpers';
 import { getFontFamily } from '../constants/fonts';
 
 // ============ SCREENPLAY EDITOR (Yjs Collaborative V3) ============
@@ -18,6 +18,7 @@ const SingleEditor = React.memo(({
   ydoc,
   provider,
   currentUser,
+  elements,
   canEdit,
   scriptFont,
   darkMode,
@@ -71,7 +72,7 @@ const SingleEditor = React.memo(({
       StarterKit.configure({
         paragraph: false,
         listItem: false,
-        history: false, // Yjs provides per-user undo/redo
+        history: !ydoc, // Use built-in history only when Yjs is not available
         hardBreak: false,
         heading: false,
         bulletList: false,
@@ -101,6 +102,8 @@ const SingleEditor = React.memo(({
         }),
       ] : []),
     ],
+    // When Yjs is not available, load content from elements prop
+    ...(ydoc ? {} : { content: buildDocFromElements(elements) }),
     editable: canEdit,
 
     editorProps: {
@@ -237,7 +240,8 @@ const SingleEditor = React.memo(({
     onBlur: () => {
       setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
     },
-  }, [ydoc, provider]); // Re-create editor when ydoc/provider change
+  }, [ydoc]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Re-create editor only when ydoc changes (new document)
 
   // Update editable state
   useEffect(() => {
@@ -390,9 +394,6 @@ const SingleEditor = React.memo(({
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [editor, autoState, handleAutoSelect]);
-
-  // Don't render until Yjs doc is ready
-  if (!ydoc || !provider) return null;
 
   return (
     <div style={{ position: 'relative' }}>

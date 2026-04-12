@@ -1400,6 +1400,7 @@ export default function ScreenplayEditor() {
               ydoc={ydoc}
               provider={provider}
               currentUser={currentUser}
+              elements={elements}
               canEdit={canEditNow}
               scriptFont={scriptFont}
               darkMode={darkMode}
