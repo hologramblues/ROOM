@@ -349,7 +349,7 @@ export default function ScreenplayEditor() {
 
   // Yjs CRDT provider — handles all document content sync
   // Declared early so syncedRef can be passed to useAutoSave below
-  const { ydoc, provider, syncedRef: yjsSyncedRef } = useYjsProvider({
+  const { ydoc, provider, synced: yjsSynced, syncedRef: yjsSyncedRef } = useYjsProvider({
     docId: effectiveDocId,
     token: effectiveToken,
     serverUrl: effectiveServerUrl,
@@ -1408,6 +1408,7 @@ export default function ScreenplayEditor() {
             <SingleEditor
               ydoc={ydoc}
               provider={provider}
+              yjsSynced={yjsSynced}
               currentUser={currentUser}
               elements={elements}
               canEdit={canEditNow}

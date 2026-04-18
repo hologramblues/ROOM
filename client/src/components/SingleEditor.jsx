@@ -17,6 +17,7 @@ import { getFontFamily } from '../constants/fonts';
 const SingleEditor = React.memo(({
   ydoc,
   provider,
+  yjsSynced,
   currentUser,
   elements,
   canEdit,
@@ -91,9 +92,8 @@ const SingleEditor = React.memo(({
       ...(ydoc ? [
         Collaboration.configure({ document: ydoc }),
       ] : []),
-      // Remote cursors — provider.awareness is created synchronously by WebsocketProvider,
-      // so no need to wait for synced. Just check provider exists.
-      ...(provider ? [
+      // Remote cursors — only enabled once provider is fully synced to avoid cursor-plugin crash
+      ...(provider && yjsSynced ? [
         CollaborationCursor.configure({
           provider: provider,
           user: {
@@ -133,7 +133,6 @@ const SingleEditor = React.memo(({
     },
 
     // onUpdate: extract elements for stats/outline/export (debounced, read-only)
-    // 60ms debounce — fast enough to feel reactive, coalesces rapid keystrokes
     onUpdate: ({ editor }) => {
       if (!editor || !editor.view) return;
       if (isApplyingMarksRef.current) return;
@@ -142,7 +141,7 @@ const SingleEditor = React.memo(({
         if (!editor || editor.isDestroyed) return;
         const newElements = extractElementsFromDoc(editor.state.doc);
         if (onElementsExtracted) onElementsExtracted(newElements);
-      }, 60);
+      }, 150);
     },
 
     onSelectionUpdate: ({ editor }) => {
@@ -242,9 +241,8 @@ const SingleEditor = React.memo(({
     onBlur: () => {
       setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
     },
-  }, [ydoc]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Re-create editor only when ydoc changes (new document).
-  // provider is stable reference from useYjsProvider, doesn't need to be in deps.
+  }, [ydoc, yjsSynced]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Re-create editor when ydoc changes OR when Yjs becomes synced (to attach CollaborationCursor)
   // Re-create editor only when ydoc changes (new document)
 
   // Update editable state
@@ -324,7 +322,7 @@ const SingleEditor = React.memo(({
       } finally {
         requestAnimationFrame(() => { isApplyingMarksRef.current = false; });
       }
-    }, 80);
+    }, 200);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, highlightsByElement]);
 

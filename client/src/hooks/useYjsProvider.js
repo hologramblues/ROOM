@@ -47,9 +47,7 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
       {
         params: { token },
         connect: true,
-        maxBackoffTime: 5000,      // reconnect faster (was 10s)
-        resyncInterval: 30000,     // resync every 30s as safety net for any dropped updates
-        disableBc: true,           // disable BroadcastChannel (same-tab sync) — unnecessary overhead
+        maxBackoffTime: 10000,
       }
     );
     providerRef.current = wsProvider;
