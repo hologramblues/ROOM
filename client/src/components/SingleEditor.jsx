@@ -255,6 +255,36 @@ const SingleEditor = React.memo(({
     }
   }, [editor, canEdit]);
 
+  // Migration: if Yjs doc is empty after sync AND we have REST elements, seed the Y.Doc
+  // via editor.commands.setContent() — this uses the TipTap schema (including ScreenplayElement)
+  // so the Yjs fragment has the correct structure.
+  const migratedRef = useRef(false);
+  useEffect(() => {
+    if (!editor || !ydoc || !yjsSynced) return;
+    if (migratedRef.current) return;
+    const fragment = ydoc.getXmlFragment('default');
+    if (fragment.length === 0 && elements && elements.length > 0) {
+      const hasRealContent = elements.some(el => el.content && el.content.trim().length > 0);
+      if (hasRealContent) {
+        try {
+          migratedRef.current = true;
+          const tiptapDoc = buildDocFromElements(elements.map(el => ({
+            ...el,
+            content: stripHtml(el.content || ''),
+          })));
+          editor.commands.setContent(tiptapDoc, false);
+          console.log('[YJS] Migration: seeded Y.Doc with', elements.length, 'elements via setContent');
+        } catch (err) {
+          console.error('[YJS] Migration via setContent failed:', err);
+          migratedRef.current = false;
+        }
+      }
+    } else if (fragment.length > 0) {
+      migratedRef.current = true; // Y.Doc already has content, no migration needed
+      console.log('[YJS] Y.Doc authoritative, skipping migration (fragment.length=', fragment.length, ')');
+    }
+  }, [editor, ydoc, yjsSynced, elements]);
+
   // Cleanup
   useEffect(() => {
     return () => {

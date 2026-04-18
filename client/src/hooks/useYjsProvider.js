@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
-import { prosemirrorJSONToYDoc } from 'y-prosemirror';
 import { SERVER_URL } from '../constants/config';
-import { buildDocFromElements, stripHtml } from '../utils/helpers';
 
 /**
  * Creates and manages a Yjs document + WebSocket provider per document.
- * Fallback migration: if Yjs doc is empty after sync, populates
- * from REST-loaded elements using the TipTap-compatible format.
+ * Migration from REST elements to Yjs is done in SingleEditor via
+ * editor.commands.setContent() — which guarantees schema compatibility
+ * with the TipTap extensions (ScreenplayElement, etc).
  */
 export default function useYjsProvider({ docId, token, serverUrl, currentUser, elementsRef, loaderPromiseRef }) {
   const [ydoc, setYdoc] = useState(null);
@@ -62,9 +61,8 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
     wsProvider.on('synced', async (isSynced) => {
       if (!isSynced) return;
 
-      // Wait for REST loader to complete (with 5s safety timeout)
-      // Prevents race: REST could still be fetching when Yjs syncs, AND guards
-      // against the loader never resolving (e.g. failed fetch not caught).
+      // Wait for REST loader (with 5s safety timeout) before marking synced,
+      // so SingleEditor can decide migration based on both sources.
       if (loaderPromiseRef?.current) {
         try {
           await Promise.race([
@@ -75,36 +73,12 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
       }
 
       const fragment = doc.getXmlFragment('default');
-      const fragmentHasContent = fragment.length > 0;
-      const hasRestElements = elementsRef?.current?.length > 0;
+      console.log('[YJS] Synced for', docId, '— Y.Doc fragment.length=', fragment.length, 'REST elements=', elementsRef?.current?.length || 0);
 
-      console.log('[YJS] Synced for', docId, '— fragment.length=', fragment.length, 'rest.length=', elementsRef?.current?.length || 0);
-
-      if (!fragmentHasContent && hasRestElements) {
-        // Migration path: Yjs empty, REST has content — build a proper TipTap-compatible Y.Doc
-        const elements = elementsRef.current;
-        const tiptapJSON = buildDocFromElements(elements.map(el => ({
-          ...el,
-          content: stripHtml(el.content || ''), // plain text only for migration
-        })));
-
-        try {
-          const tempDoc = prosemirrorJSONToYDoc(tiptapJSON, 'default');
-          const update = Y.encodeStateAsUpdate(tempDoc);
-          Y.applyUpdate(doc, update, 'migration');
-          tempDoc.destroy();
-          console.log('[YJS] Migration complete —', elements.length, 'elements → Y.Doc with', fragment.length, 'nodes');
-        } catch (err) {
-          console.error('[YJS] Migration failed:', err);
-        }
-      } else if (fragmentHasContent) {
-        console.log('[YJS] Y.Doc authoritative — REST content ignored');
-      }
-
-      // Mark authoritative AFTER migration decision is made
       authoritativeRef.current = true;
       syncedRef.current = true;
       setSynced(true);
+      // Migration (if needed) is now handled by SingleEditor via editor.commands.setContent
     });
 
     wsProvider.on('status', ({ status }) => {
