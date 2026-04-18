@@ -21,6 +21,11 @@ mongoose.connect(MONGODB_URI).then(() => console.log('Connected to MongoDB')).ca
 // Attach Yjs CRDT WebSocket server on /yjs/* path (coexists with Socket.io on /socket.io/)
 attachYjsServer(server, MONGODB_URI, JWT_SECRET);
 
+// Legacy Socket.io element sync handlers are kept for one release as debug hooks only.
+// Current clients send all content via Yjs. Set LEGACY_SOCKET_SYNC=true only for emergency rollback.
+const LEGACY_SOCKET_SYNC = process.env.LEGACY_SOCKET_SYNC === 'true';
+if (!LEGACY_SOCKET_SYNC) console.log('[LEGACY-SYNC] Disabled — Yjs is authoritative for document content');
+
 // ============ WAITLIST SCHEMA ============
 const waitlistSchema = new mongoose.Schema({
   email: { 
@@ -880,6 +885,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('element-change', async ({ index, element, baseVersion }) => {
+    if (!LEGACY_SOCKET_SYNC) {
+      console.warn(`[LEGACY-SYNC] element-change from stale client (user=${socket.user?.name || 'anon'}, doc=${currentDocId}) — ignoring`);
+      return;
+    }
     if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
     try {
       if (!validateElement(element)) return;
@@ -917,6 +926,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('element-type-change', async ({ index, type, elementId }) => {
+    if (!LEGACY_SOCKET_SYNC) {
+      console.warn(`[LEGACY-SYNC] element-type-change from stale client (user=${socket.user?.name || 'anon'}) — ignoring`);
+      return;
+    }
     if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
     if (type && !VALID_ELEMENT_TYPES.has(type)) return;
     try {
@@ -938,6 +951,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('element-insert', async ({ afterIndex, afterElementId, element }) => {
+    if (!LEGACY_SOCKET_SYNC) {
+      console.warn(`[LEGACY-SYNC] element-insert from stale client (user=${socket.user?.name || 'anon'}) — ignoring`);
+      return;
+    }
     if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
     if (!validateElement(element)) return;
     try {
@@ -972,6 +989,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('element-delete', async ({ index, elementId }) => {
+    if (!LEGACY_SOCKET_SYNC) {
+      console.warn(`[LEGACY-SYNC] element-delete from stale client (user=${socket.user?.name || 'anon'}) — ignoring`);
+      return;
+    }
     if (!currentDocId || !canWrite() || !checkSocketRate(socket.id)) return;
     try {
       let targetId = elementId;
@@ -1129,6 +1150,10 @@ io.on('connection', (socket) => {
   // ============ FULL SYNC (undo/redo/drag/offline push) ============
 
   socket.on('full-sync', async ({ elements, docVersion }) => {
+    if (!LEGACY_SOCKET_SYNC) {
+      console.warn(`[LEGACY-SYNC] full-sync from stale client (user=${socket.user?.name || 'anon'}, doc=${currentDocId}, ${elements?.length || 0} elements) — ignoring`);
+      return;
+    }
     if (!currentDocId || !canWrite() || !checkSocketRate(socket.id) || !elements || !Array.isArray(elements)) return;
     try {
       const doc = await Document.findOne({ shortId: currentDocId });

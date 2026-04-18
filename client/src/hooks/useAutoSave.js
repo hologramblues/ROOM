@@ -20,12 +20,16 @@ export default function useAutoSave({
   sceneSynopsisRef, sceneStatusRef, whiteboardElementsRef, notesRef,
   setLastSaved,
   serverUrl,
+  yjsSyncedRef, // Set true when Yjs has synced — autosave waits for this
 }) {
   const effectiveUrl = serverUrl || SERVER_URL;
   // Track last saved state for auto-save comparison
   const lastSavedElementsRef = useRef(null);
   const lastSavedTitleRef = useRef(null);
   const lastSavedBeatDataRef = useRef(null);
+  // Track last signature + timestamp for stable-debounce (3s quiet before save)
+  const lastSignatureRef = useRef('');
+  const lastSignatureChangeAtRef = useRef(0);
 
   // Auto-backup to localStorage every 30 seconds
   // Uses refs to avoid resetting the 30s interval on every keystroke
@@ -71,6 +75,17 @@ export default function useAutoSave({
       const hasRealContent = currentElements.length > 1 ||
         currentElements.some(el => el.content && stripHtml(el.content).trim().length > 0);
       if (!hasRealContent) return;
+
+      // SAFETY: Don't POST to MongoDB autosave until Yjs has synced AND content is stable.
+      // Prevents races where stale React state overwrites Yjs-persisted doc on reload.
+      if (yjsSyncedRef && !yjsSyncedRef.current) return;
+      const signature = currentElements.length + ':' + currentElements.reduce((a, el) => a + (el.content?.length || 0), 0);
+      if (signature !== lastSignatureRef.current) {
+        lastSignatureRef.current = signature;
+        lastSignatureChangeAtRef.current = Date.now();
+        return; // content just changed — wait for stability
+      }
+      if (Date.now() - lastSignatureChangeAtRef.current < 3000) return; // <3s quiet, wait
 
       // Build beat data object for comparison
       const currentBeatData = {

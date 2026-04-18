@@ -5,9 +5,43 @@
  * Uses lib0/y-protocols for correct Yjs sync protocol implementation.
  */
 const { WebSocketServer } = require('ws');
+const mongoose = require('mongoose');
 const Y = require('yjs');
 const jwt = require('jsonwebtoken');
 const { MongodbPersistence } = require('y-mongodb-provider');
+const { User, Document } = require('./models');
+
+// Access control helper — mirrors checkDocumentAccess in server.js
+function checkDocAccess(doc, user, requiredRole = 'viewer') {
+  if (!doc) return false;
+  // Public access
+  if (doc.publicAccess && doc.publicAccess.enabled) {
+    const h = { viewer: 0, commenter: 1, editor: 2 };
+    if (h[doc.publicAccess.role] >= h[requiredRole]) return true;
+  }
+  if (!user) return false;
+  // Owner
+  if (doc.ownerId && doc.ownerId.equals(user._id)) return true;
+  // Collaborator
+  const collab = doc.collaborators && doc.collaborators.find(c => c.userId && c.userId.equals(user._id));
+  if (collab) {
+    const h = { viewer: 0, commenter: 1, editor: 2 };
+    return h[collab.role] >= h[requiredRole];
+  }
+  return false;
+}
+
+// Snapshot schema for disaster recovery — separate from main y-mongodb-provider updates
+const yjsSnapshotSchema = new mongoose.Schema({
+  docName: { type: String, required: true, index: true },
+  state: { type: Buffer, required: true },
+  createdAt: { type: Date, default: Date.now, index: true },
+  fragmentLength: { type: Number, default: 0 },
+});
+const YjsSnapshot = mongoose.models.YjsSnapshot || mongoose.model('YjsSnapshot', yjsSnapshotSchema);
+
+const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000; // 5 min
+const MAX_SNAPSHOTS_PER_DOC = 20;
 
 const encoding = require('lib0/encoding');
 const decoding = require('lib0/decoding');
@@ -31,6 +65,44 @@ function attachYjsServer(httpServer, mongoUri, jwtSecret) {
   // Connections per room
   const roomConns = new Map();
 
+  // Track dirty flag per doc for snapshot optimization
+  const dirtyDocs = new Set();
+  // Track snapshot intervals for cleanup
+  const snapshotIntervals = new Map();
+  // Track last disconnect time per doc for safe cleanup (replaces racey setTimeout)
+  const lastDisconnectTime = new Map();
+  const ROOM_CLEANUP_GRACE_MS = 60 * 1000; // 60s idle before cleanup
+  const SWEEP_INTERVAL_MS = 30 * 1000;      // sweep every 30s
+
+  // Periodic sweep: destroy rooms that have been empty for more than grace period
+  setInterval(() => {
+    const now = Date.now();
+    for (const [docName, lastDisc] of lastDisconnectTime.entries()) {
+      const room = roomConns.get(docName);
+      // Only destroy if room is still empty and has been idle long enough
+      if ((!room || room.size === 0) && now - lastDisc > ROOM_CLEANUP_GRACE_MS) {
+        // Final flush to snapshot before destroy
+        const d = docs.get(docName);
+        if (d && dirtyDocs.has(docName)) {
+          try {
+            const state = Y.encodeStateAsUpdate(d);
+            const fragmentLength = d.getXmlFragment('default').length;
+            YjsSnapshot.create({ docName, state: Buffer.from(state), fragmentLength }).catch(() => {});
+          } catch (_) {}
+        }
+        const interval = snapshotIntervals.get(docName);
+        if (interval) clearInterval(interval);
+        snapshotIntervals.delete(docName);
+        if (d) { d.destroy(); docs.delete(docName); }
+        awarenessMap.delete(docName);
+        roomConns.delete(docName);
+        lastDisconnectTime.delete(docName);
+        dirtyDocs.delete(docName);
+        console.log(`[YJS] Cleaned up idle room "${docName}"`);
+      }
+    }
+  }, SWEEP_INTERVAL_MS);
+
   async function getYDoc(docName) {
     if (docs.has(docName)) return docs.get(docName);
 
@@ -50,10 +122,35 @@ function attachYjsServer(httpServer, mongoUri, jwtSecret) {
 
     // Persist all future updates
     ydoc.on('update', (update) => {
+      dirtyDocs.add(docName);
       mdb.storeUpdate(docName, update).catch(err => {
         console.error(`[YJS] Persist error for "${docName}":`, err.message);
       });
     });
+
+    // Start periodic snapshot (disaster recovery)
+    const snapshotInterval = setInterval(async () => {
+      if (!dirtyDocs.has(docName)) return;
+      dirtyDocs.delete(docName);
+      try {
+        const state = Y.encodeStateAsUpdate(ydoc);
+        const fragmentLength = ydoc.getXmlFragment('default').length;
+        await YjsSnapshot.create({ docName, state: Buffer.from(state), fragmentLength });
+        // Prune oldest snapshots beyond MAX
+        const count = await YjsSnapshot.countDocuments({ docName });
+        if (count > MAX_SNAPSHOTS_PER_DOC) {
+          const toDelete = count - MAX_SNAPSHOTS_PER_DOC;
+          const oldest = await YjsSnapshot.find({ docName }).sort({ createdAt: 1 }).limit(toDelete).select('_id');
+          if (oldest.length > 0) {
+            await YjsSnapshot.deleteMany({ _id: { $in: oldest.map(s => s._id) } });
+          }
+        }
+        console.log(`[YJS] Snapshot saved for "${docName}" (${fragmentLength} elements, ${state.byteLength} bytes)`);
+      } catch (err) {
+        console.error(`[YJS] Snapshot error for "${docName}":`, err.message);
+      }
+    }, SNAPSHOT_INTERVAL_MS);
+    snapshotIntervals.set(docName, snapshotInterval);
 
     return ydoc;
   }
@@ -121,7 +218,30 @@ function attachYjsServer(httpServer, mongoUri, jwtSecret) {
   wss.on('connection', async (ws, request) => {
     const docName = request.docName;
     const userName = request.userName || 'Unknown';
-    console.log(`[YJS] ${userName} connected to "${docName}"`);
+    const userId = request.userId;
+
+    // Document-level access control: fetch user + doc, verify authorization
+    try {
+      const [user, doc] = await Promise.all([
+        User.findById(userId).select('_id name color'),
+        Document.findOne({ shortId: docName }).select('ownerId collaborators publicAccess'),
+      ]);
+      if (!doc) {
+        console.warn(`[YJS] ${userName} denied: doc "${docName}" not found`);
+        ws.close(1008, 'Document not found');
+        return;
+      }
+      if (!checkDocAccess(doc, user, 'viewer')) {
+        console.warn(`[YJS] ${userName} denied: no access to "${docName}"`);
+        ws.close(1008, 'Access denied');
+        return;
+      }
+      console.log(`[YJS] ${userName} connected to "${docName}" (authorized)`);
+    } catch (err) {
+      console.error(`[YJS] Access check failed for ${userName}:`, err.message);
+      ws.close(1011, 'Server error');
+      return;
+    }
 
     const ydoc = await getYDoc(docName);
     const awareness = getAwareness(docName, ydoc);
@@ -130,6 +250,8 @@ function attachYjsServer(httpServer, mongoUri, jwtSecret) {
     const clientID = ydoc.clientID + Math.floor(Math.random() * 1000000);
     if (!roomConns.has(docName)) roomConns.set(docName, new Map());
     roomConns.get(docName).set(ws, { ws, clientID });
+    // Cancel pending cleanup — room has an active connection again
+    lastDisconnectTime.delete(docName);
 
     // --- INITIAL SYNC: Send SyncStep1 to client ---
     {
@@ -219,18 +341,9 @@ function attachYjsServer(httpServer, mongoUri, jwtSecret) {
         // Remove this client from awareness
         awarenessProtocol.removeAwarenessStates(awareness, [clientID], null);
 
-        // Clean up empty rooms after 30s
+        // Track last-disconnect time for periodic sweep
         if (room.size === 0) {
-          setTimeout(() => {
-            const r = roomConns.get(docName);
-            if (!r || r.size === 0) {
-              roomConns.delete(docName);
-              const d = docs.get(docName);
-              if (d) { d.destroy(); docs.delete(docName); }
-              awarenessMap.delete(docName);
-              console.log(`[YJS] Cleaned up room "${docName}"`);
-            }
-          }, 30000);
+          lastDisconnectTime.set(docName, Date.now());
         }
       }
     });

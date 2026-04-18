@@ -343,13 +343,30 @@ export default function ScreenplayEditor() {
   const effectiveToken = (IS_DESKTOP && editingMode === 'cloud') ? cloudToken : token;
   const effectiveDocId = (IS_DESKTOP && editingMode === 'cloud') ? cloudShortId : docId;
 
+  // Promise ref that resolves when REST document load completes
+  // Yjs provider waits for this before deciding migration vs authoritative
+  const loaderPromiseRef = useRef(null);
+
+  // Yjs CRDT provider — handles all document content sync
+  // Declared early so syncedRef can be passed to useAutoSave below
+  const { ydoc, provider, synced: yjsSynced, syncedRef: yjsSyncedRef } = useYjsProvider({
+    docId: effectiveDocId,
+    token: effectiveToken,
+    serverUrl: effectiveServerUrl,
+    currentUser,
+    elementsRef,
+    loaderPromiseRef,
+  });
+
   // Auto-save hook (backup, cloud save, snapshots)
+  // Gated by yjsSyncedRef to prevent REST autosave from racing Yjs persistence
   useAutoSave({
     docId: effectiveDocId, token: effectiveToken, offlineDocId,
     elementsRef, titleRef, beatCardsRef, structureBeatsRef,
     sceneSynopsisRef, sceneStatusRef, whiteboardElementsRef, notesRef,
     setLastSaved,
     serverUrl: effectiveServerUrl,
+    yjsSyncedRef,
   });
 
   // Document loader hook
@@ -360,6 +377,7 @@ export default function ScreenplayEditor() {
     setWhiteboardElements, setIsOwner, setMyRole, setPublicAccessState,
     setLoading, setToken,
     serverUrl: effectiveServerUrl,
+    loaderPromiseRef,
   });
 
   // Socket connection hook — handles chat, comments, suggestions, presence (NOT document sync)
@@ -371,15 +389,6 @@ export default function ScreenplayEditor() {
     setChatMessages, setUnreadMessages,
     playChatNotification,
     serverUrl: effectiveServerUrl,
-  });
-
-  // Yjs CRDT provider — handles all document content sync
-  const { ydoc, provider } = useYjsProvider({
-    docId: effectiveDocId,
-    token: effectiveToken,
-    serverUrl: effectiveServerUrl,
-    currentUser,
-    elementsRef,
   });
 
   const [showSyncConfirm, setShowSyncConfirm] = useState(null); // 'push' | 'pull' | null
@@ -1399,6 +1408,7 @@ export default function ScreenplayEditor() {
             <SingleEditor
               ydoc={ydoc}
               provider={provider}
+              yjsSynced={yjsSynced}
               currentUser={currentUser}
               elements={elements}
               canEdit={canEditNow}

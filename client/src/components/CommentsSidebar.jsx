@@ -892,9 +892,8 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                     );
                   })}
 
-                  {/* Suggestions for this element */}
-                  {(filter === 'all' || filter === 'suggestions') && suggestions && suggestions
-                    .filter(s => s.elementIndex === idx && s.status === 'pending')
+                  {/* Suggestions for this element — use elementId-based map to survive scene reorders */}
+                  {(filter === 'all' || filter === 'suggestions') && (suggestionsByElementIndex[idx] || [])
                     .map(s => {
                       const sId = String(s.id || s._id);
                       const isSelected = String(selectedSuggestionId) === sId;
@@ -908,9 +907,9 @@ const CommentsSidebar = ({ comments, suggestions, elements, activeIndex, selecte
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectSuggestion && onSelectSuggestion(isSelected ? null : sId);
-                            // Navigate to the element in the script
+                            // Navigate using current element index (idx), not stale stored s.elementIndex
                             if (!isSelected && onNavigateToElement) {
-                              onNavigateToElement(s.elementIndex);
+                              onNavigateToElement(idx);
                             }
                           }}
                           style={{

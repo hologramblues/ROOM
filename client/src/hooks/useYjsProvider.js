@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import { prosemirrorJSONToYDoc } from 'y-prosemirror';
 import { SERVER_URL } from '../constants/config';
+import { buildDocFromElements, stripHtml } from '../utils/helpers';
 
 /**
  * Creates and manages a Yjs document + WebSocket provider per document.
- * Handles fallback migration: if Yjs doc is empty after sync, populates
- * from REST-loaded elements.
+ * Fallback migration: if Yjs doc is empty after sync, populates
+ * from REST-loaded elements using the TipTap-compatible format.
  */
-export default function useYjsProvider({ docId, token, serverUrl, currentUser, elementsRef }) {
+export default function useYjsProvider({ docId, token, serverUrl, currentUser, elementsRef, loaderPromiseRef }) {
   const [ydoc, setYdoc] = useState(null);
   const [provider, setProvider] = useState(null);
   const [synced, setSynced] = useState(false);
+  const syncedRef = useRef(false); // Stable ref — avoids re-renders cascading
+  const authoritativeRef = useRef(false); // True once Yjs is the single source of truth
   const providerRef = useRef(null);
 
   useEffect(() => {
@@ -19,12 +23,21 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
       setYdoc(null);
       setProvider(null);
       setSynced(false);
+      syncedRef.current = false;
+      authoritativeRef.current = false;
       return;
     }
 
-    // Always use the API server URL for Yjs WebSocket (not the frontend host)
+    // Robust WebSocket URL construction — works with path-based SERVER_URL too
     const baseUrl = serverUrl || SERVER_URL;
-    const wsUrl = baseUrl.replace(/^http/, 'ws');
+    let wsUrl;
+    try {
+      const u = new URL(baseUrl);
+      const wsProtocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${wsProtocol}//${u.host}`;
+    } catch (_) {
+      wsUrl = baseUrl.replace(/^http/, 'ws');
+    }
 
     const doc = new Y.Doc();
     const wsProvider = new WebsocketProvider(
@@ -46,27 +59,46 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
       });
     }
 
-    wsProvider.on('synced', (isSynced) => {
-      console.log('[YJS] Synced:', isSynced, 'for doc:', docId);
-      setSynced(true);
+    wsProvider.on('synced', async (isSynced) => {
+      if (!isSynced) return;
 
-      // Fallback migration: if Yjs doc is empty, populate from REST-loaded elements
-      const fragment = doc.getXmlFragment('default');
-      if (fragment.length === 0 && elementsRef?.current?.length > 0) {
-        console.log('[YJS] Empty Y.Doc — migrating', elementsRef.current.length, 'elements from REST');
-        doc.transact(() => {
-          elementsRef.current.forEach(el => {
-            const xmlEl = new Y.XmlElement('screenplayElement');
-            xmlEl.setAttribute('elementId', el.id);
-            xmlEl.setAttribute('elementType', el.type || 'action');
-            if (el.content) {
-              xmlEl.insert(0, [new Y.XmlText(el.content)]);
-            }
-            fragment.push([xmlEl]);
-          });
-        });
-        console.log('[YJS] Migration complete — fragment now has', fragment.length, 'elements');
+      // Wait for REST loader to complete before deciding migration path.
+      // Prevents race: REST could still be fetching elements when Yjs syncs.
+      if (loaderPromiseRef?.current) {
+        try { await loaderPromiseRef.current; } catch (_) {}
       }
+
+      const fragment = doc.getXmlFragment('default');
+      const fragmentHasContent = fragment.length > 0;
+      const hasRestElements = elementsRef?.current?.length > 0;
+
+      console.log('[YJS] Synced for', docId, '— fragment.length=', fragment.length, 'rest.length=', elementsRef?.current?.length || 0);
+
+      if (!fragmentHasContent && hasRestElements) {
+        // Migration path: Yjs empty, REST has content — build a proper TipTap-compatible Y.Doc
+        const elements = elementsRef.current;
+        const tiptapJSON = buildDocFromElements(elements.map(el => ({
+          ...el,
+          content: stripHtml(el.content || ''), // plain text only for migration
+        })));
+
+        try {
+          const tempDoc = prosemirrorJSONToYDoc(tiptapJSON, 'default');
+          const update = Y.encodeStateAsUpdate(tempDoc);
+          Y.applyUpdate(doc, update, 'migration');
+          tempDoc.destroy();
+          console.log('[YJS] Migration complete —', elements.length, 'elements → Y.Doc with', fragment.length, 'nodes');
+        } catch (err) {
+          console.error('[YJS] Migration failed:', err);
+        }
+      } else if (fragmentHasContent) {
+        console.log('[YJS] Y.Doc authoritative — REST content ignored');
+      }
+
+      // Mark authoritative AFTER migration decision is made
+      authoritativeRef.current = true;
+      syncedRef.current = true;
+      setSynced(true);
     });
 
     wsProvider.on('status', ({ status }) => {
@@ -78,13 +110,17 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
 
     return () => {
       console.log('[YJS] Cleanup for:', docId);
+      // Destroy BEFORE nulling the ref, otherwise we have a brief window where
+      // the ref is null but the provider still exists
+      try { wsProvider.disconnect(); } catch (_) {}
+      try { wsProvider.destroy(); } catch (_) {}
+      try { doc.destroy(); } catch (_) {}
       providerRef.current = null;
-      wsProvider.disconnect();
-      wsProvider.destroy();
-      doc.destroy();
       setYdoc(null);
       setProvider(null);
       setSynced(false);
+      syncedRef.current = false;
+      authoritativeRef.current = false;
     };
   }, [docId, token, serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -98,5 +134,5 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
     }
   }, [currentUser?.name, currentUser?.color]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { ydoc, provider, synced };
+  return { ydoc, provider, synced, syncedRef, authoritativeRef };
 }

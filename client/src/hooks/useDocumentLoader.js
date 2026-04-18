@@ -9,20 +9,35 @@ export default function useDocumentLoader({
   setWhiteboardElements, setIsOwner, setMyRole, setPublicAccessState,
   setLoading, setToken,
   serverUrl,
+  loaderPromiseRef, // Promise ref: resolves when REST load is complete (Yjs provider awaits this)
 }) {
   // Load document via REST API
   useEffect(() => {
     const effectiveUrl = serverUrl || SERVER_URL;
 
+    // Create a new promise for this load cycle
+    let loaderResolve;
+    if (loaderPromiseRef) {
+      loaderPromiseRef.current = new Promise(resolve => { loaderResolve = resolve; });
+    }
+    const doResolve = () => { if (loaderResolve) loaderResolve(); };
+
     const loadDocument = async () => {
       if (!docId || docId === 'local') {
         setElements([{ id: generateId(), type: 'scene', content: '' }]);
         setTitle('SANS TITRE');
+        doResolve();
         return;
       }
-      if (loadedDocRef.current === docId) return;
+      if (loadedDocRef.current === docId) {
+        doResolve();
+        return;
+      }
       // Auth required — wait for login (effect re-triggers when token changes)
-      if (!token) return;
+      if (!token) {
+        doResolve();
+        return;
+      }
 
       setLoading(true);
       try {
@@ -108,6 +123,8 @@ export default function useDocumentLoader({
           }
         }
       } catch (err) { console.error('[LOAD] Error:', err); }
+      // Resolve loader promise — Yjs provider can now decide migration path
+      doResolve();
       // Small delay to let React render elements before hiding overlay
       setTimeout(() => setLoading(false), 100);
     };

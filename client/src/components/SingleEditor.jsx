@@ -3,8 +3,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
-// CollaborationCursor disabled temporarily — cursor-plugin crashes when provider not yet synced
-// import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import CommentMark from '../extensions/CommentMark';
 import SuggestionMark from '../extensions/SuggestionMark';
 import ExternalSpanMark from '../extensions/ExternalSpanMark';
@@ -18,6 +17,7 @@ import { getFontFamily } from '../constants/fonts';
 const SingleEditor = React.memo(({
   ydoc,
   provider,
+  yjsSynced,
   currentUser,
   elements,
   canEdit,
@@ -92,7 +92,16 @@ const SingleEditor = React.memo(({
       ...(ydoc ? [
         Collaboration.configure({ document: ydoc }),
       ] : []),
-      // TODO: Re-enable CollaborationCursor once Yjs sync is stable
+      // Remote cursors — only enabled once provider is fully synced to avoid cursor-plugin crash
+      ...(provider && yjsSynced ? [
+        CollaborationCursor.configure({
+          provider: provider,
+          user: {
+            name: currentUser?.name || 'User',
+            color: currentUser?.color || '#3b82f6',
+          },
+        }),
+      ] : []),
     ],
     // When Yjs is not available, load content from elements prop
     ...(ydoc ? {} : { content: buildDocFromElements(elements) }),
@@ -232,7 +241,8 @@ const SingleEditor = React.memo(({
     onBlur: () => {
       setAutoState(prev => prev.show ? { ...prev, show: false } : prev);
     },
-  }, [ydoc]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ydoc, yjsSynced]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Re-create editor when ydoc changes OR when Yjs becomes synced (to attach CollaborationCursor)
   // Re-create editor only when ydoc changes (new document)
 
   // Update editable state

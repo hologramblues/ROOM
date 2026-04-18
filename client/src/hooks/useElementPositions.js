@@ -128,17 +128,41 @@ export default function useElementPositions({ showComments, elementsRef, element
     };
     window.addEventListener('resize', onResize);
 
-    // Periodic refresh for content changes
-    const interval = setInterval(() => {
-      const positions = computePositions();
-      setElementPositions(positions);
-      requestAnimationFrame(() => updateCardTransforms());
-    }, isSafari ? 3000 : 2000);
+    // Triggered update: debounced via rAF, fires on any DOM/size change
+    let updateScheduled = false;
+    const scheduleUpdate = () => {
+      if (updateScheduled) return;
+      updateScheduled = true;
+      requestAnimationFrame(() => {
+        updateScheduled = false;
+        const positions = computePositions();
+        setElementPositions(positions);
+        updateCardTransforms();
+      });
+    };
+
+    // Watch for DOM changes (element adds/removes, attribute changes)
+    const mutationObserver = new MutationObserver(scheduleUpdate);
+    mutationObserver.observe(script, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-element-id', 'data-element-type'],
+    });
+
+    // Watch for size changes (zoom, font swap, responsive layout)
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+    resizeObserver.observe(script);
+
+    // Safety-net interval: only fires every 10s (vs 2-3s before) to catch anything missed
+    const safetyInterval = setInterval(scheduleUpdate, 10000);
 
     return () => {
       script.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
-      clearInterval(interval);
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      clearInterval(safetyInterval);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [showComments, elementsLength, isSafari, computePositions, updateCardTransforms]); // eslint-disable-line react-hooks/exhaustive-deps

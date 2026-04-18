@@ -84,10 +84,10 @@
   margin-bottom: 0;
 }
 
-/* Parenthetical — Final Draft: 3.1" from page left = ~36mm from content left, ~65mm wide */
+/* Parenthetical — Final Draft spec: 3.1" (78.7mm) from page left = 40.6mm from content left (1.5" margin), width 2" (51mm) */
 .ProseMirror div[data-element-type="parenthetical"] {
-  margin-left: 36mm;
-  width: 65mm;
+  margin-left: 40mm;
+  width: 51mm;
   font-style: italic;
   margin-top: 0;
   margin-bottom: 0;
