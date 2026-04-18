@@ -50,6 +50,7 @@ export default function useDocumentLoader({
           localStorage.removeItem('screenplay-token');
           if (setToken) setToken(null);
           setLoading(false);
+          doResolve(); // CRITICAL: must resolve promise even on auth failure, otherwise Yjs blocks forever
           return;
         }
 

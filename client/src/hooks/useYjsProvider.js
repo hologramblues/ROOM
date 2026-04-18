@@ -62,10 +62,16 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
     wsProvider.on('synced', async (isSynced) => {
       if (!isSynced) return;
 
-      // Wait for REST loader to complete before deciding migration path.
-      // Prevents race: REST could still be fetching elements when Yjs syncs.
+      // Wait for REST loader to complete (with 5s safety timeout)
+      // Prevents race: REST could still be fetching when Yjs syncs, AND guards
+      // against the loader never resolving (e.g. failed fetch not caught).
       if (loaderPromiseRef?.current) {
-        try { await loaderPromiseRef.current; } catch (_) {}
+        try {
+          await Promise.race([
+            loaderPromiseRef.current,
+            new Promise(resolve => setTimeout(resolve, 5000)),
+          ]);
+        } catch (_) {}
       }
 
       const fragment = doc.getXmlFragment('default');
