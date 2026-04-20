@@ -38,6 +38,9 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
       wsUrl = baseUrl.replace(/^http/, 'ws');
     }
 
+    const fullWsUrl = wsUrl + '/yjs/' + docId;
+    console.log('[YJS-HOOK] Connecting to:', fullWsUrl);
+
     const doc = new Y.Doc();
     const wsProvider = new WebsocketProvider(
       wsUrl + '/yjs',
@@ -49,6 +52,13 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
         maxBackoffTime: 10000,
       }
     );
+
+    wsProvider.on('connection-error', (err) => {
+      console.error('[YJS-HOOK] Connection error:', err);
+    });
+    wsProvider.on('connection-close', (evt) => {
+      console.warn('[YJS-HOOK] Connection closed:', evt?.code, evt?.reason);
+    });
     providerRef.current = wsProvider;
 
     if (currentUser) {
