@@ -7,6 +7,7 @@
     "@excalidraw/excalidraw": "^0.18.0",
     "@tiptap/core": "^3.13.0",
     "@tiptap/extension-collaboration": "^3.22.3",
+    "@tiptap/extension-collaboration-caret": "^3.22.4",
     "@tiptap/extension-collaboration-cursor": "^2.26.2",
     "@tiptap/react": "^3.13.0",
     "@tiptap/starter-kit": "^3.13.0",

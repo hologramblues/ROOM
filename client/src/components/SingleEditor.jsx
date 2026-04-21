@@ -3,7 +3,10 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
+// TipTap v3 renamed CollaborationCursor to CollaborationCaret.
+// Using v2 collaboration-cursor (2.26.x) with v3 collaboration (3.22.x) causes
+// "Cannot read properties of undefined (reading 'doc')" — incompatible ySyncPluginKey.
+import { CollaborationCaret as CollaborationCursor } from '@tiptap/extension-collaboration-caret';
 import CommentMark from '../extensions/CommentMark';
 import SuggestionMark from '../extensions/SuggestionMark';
 import ExternalSpanMark from '../extensions/ExternalSpanMark';
