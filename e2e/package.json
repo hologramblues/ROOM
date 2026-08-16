@@ -1,0 +1,15 @@
+{
+  "name": "rooms-e2e",
+  "version": "1.0.0",
+  "description": "Playwright end-to-end and multi-tab collaboration specs for ROOMS",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

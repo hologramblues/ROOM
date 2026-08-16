@@ -1210,4 +1210,13 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log('Server running on port ' + PORT));
+
+// Bind a port only when this file is run directly (`node server.js` / `npm start`).
+// When it is `require()`d — e.g. by the supertest suite in __tests__/ — the app is
+// exported unstarted so the test harness can bind its own ephemeral port.
+// This is the only change made to this file for testability. See TESTING.md.
+if (require.main === module) {
+  server.listen(PORT, () => console.log('Server running on port ' + PORT));
+}
+
+module.exports = { app, server, io };
