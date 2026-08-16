@@ -57,19 +57,6 @@ const hasTestDatabase = () => Boolean(process.env.TEST_MONGODB_URI);
 const describeWithDb = () => (hasTestDatabase() ? describe : describe.skip);
 
 /**
- * A spec that encodes CORRECT post-fix behaviour the server does not implement
- * yet. It is `test.skip` by default so the suite stays green, and becomes a
- * real `test` under `ACL_EXPECT_FAIL=1` so anyone can prove — on demand, today —
- * that the hole is still open:
- *
- *   cd server && TEST_MONGODB_URI=... ACL_EXPECT_FAIL=1 npm test
- *
- * After the ACL fix lands, delete this indirection and use plain `test`.
- */
-const expectedFailUntilAclFix = () =>
-  hasTestDatabase() && process.env.ACL_EXPECT_FAIL === '1' ? test : test.skip;
-
-/**
  * Wait for the connection server.js already opened. Raced against a timer so
  * "TEST_MONGODB_URI is set but nothing is listening" fails with a readable
  * message instead of an anonymous Jest timeout.
@@ -206,7 +193,6 @@ module.exports = {
   closeDb,
   createDocument,
   describeWithDb,
-  expectedFailUntilAclFix,
   fetchHistory,
   hasTestDatabase,
   registerUser,

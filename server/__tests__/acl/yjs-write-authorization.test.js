@@ -22,9 +22,12 @@
  * the assertion is on observable protocol behaviour rather than on a function
  * that a fix might rename or move.
  *
- * The negative spec asserts POST-FIX behaviour and FAILS today. It is
- * `test.skip` by default; run with ACL_EXPECT_FAIL=1 to watch it fail.
- * The positive spec is NOT skipped — it proves the fix does not break editors.
+ * FIXED — the connection now captures its authorized role once (checkDocAccess
+ * with `editor`) and the message handler drops SyncStep2/Update frames from a
+ * read-only connection. SyncStep1 (a read) and awareness frames (presence,
+ * cursors) still pass, so the collaborator UI keeps working for viewers.
+ * The negative spec below is a live assertion (it was `expectedFail` while the
+ * hole was open); the positive spec proves the fix does not break editors.
  */
 const WebSocket = require('ws');
 const mongoose = require('mongoose');
@@ -39,7 +42,6 @@ const {
   closeDb,
   createDocument,
   describeWithDb,
-  expectedFailUntilAclFix,
   registerUser,
   sleep,
   useTestDatabase,
@@ -54,7 +56,6 @@ const { app, server } = require('../../server');
 const { User, Document, HistoryEntry } = require('../../models');
 
 const describeDb = describeWithDb();
-const expectedFail = expectedFailUntilAclFix();
 
 // Message type constants — mirror yjs-server.js:51-52.
 const MESSAGE_SYNC = 0;
@@ -192,14 +193,10 @@ describeDb('ACL — Yjs WebSocket write authorization (AUDIT finding 5.3)', () =
   });
 
   // ---------------------------------------------------------------------
-  // C. Expected failure — the actual finding.
+  // C. The actual finding — regression gate for AUDIT 5.3.
   // ---------------------------------------------------------------------
 
-  // EXPECTED FAIL until the Yjs write-authorization fix lands —
-  // AUDIT.md finding 5.3 (§7 Phase 3).
-  // TODAY: the viewer's messageSync frame is applied verbatim, so the owner
-  // observes the injected paragraph and this spec fails on the length check.
-  expectedFail(
+  test(
     'ignores document updates sent by a viewer-role collaborator',
     async () => {
       const viewer = track(await connectYjs(port, viewerTargetId, viewerCollab.token));

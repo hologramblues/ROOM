@@ -14,9 +14,10 @@
  * where they can then read it. That is a full confidentiality breach, not just
  * a corruption bug.
  *
- * The negative specs assert POST-FIX behaviour and FAIL today. They are
- * `test.skip` by default; run with ACL_EXPECT_FAIL=1 to watch them fail.
- * The positive specs are NOT skipped — they guard against over-blocking.
+ * FIXED — the handler now rejects with 404 unless
+ * `entry.documentId.equals(doc._id)`. The negative specs below are live
+ * assertions (they were `expectedFail` while the hole was open); the positive
+ * specs guard against over-blocking.
  */
 const request = require('supertest');
 
@@ -26,7 +27,6 @@ const {
   closeDb,
   createDocument,
   describeWithDb,
-  expectedFailUntilAclFix,
   fetchHistory,
   registerUser,
   useTestDatabase,
@@ -40,7 +40,6 @@ const { app } = require('../../server');
 const { User, Document, HistoryEntry } = require('../../models');
 
 const describeDb = describeWithDb();
-const expectedFail = expectedFailUntilAclFix();
 
 describeDb('ACL — POST /:shortId/restore/:historyId (AUDIT finding 5.2)', () => {
   let owner; // owns every fixture document
@@ -119,17 +118,13 @@ describeDb('ACL — POST /:shortId/restore/:historyId (AUDIT finding 5.2)', () =
   });
 
   // ---------------------------------------------------------------------
-  // B. Expected failures — the actual finding.
+  // B. The actual finding — regression gate for AUDIT 5.2.
   // ---------------------------------------------------------------------
 
-  // EXPECTED FAIL until the ACL fix lands — AUDIT.md finding 5.2 (§7 Phase 2 step 2).
-  // TODAY: returns 200 and overwrites the target with the other document's
-  // snapshot (cross-document restore succeeds).
-  //
-  // Deliberately run as the OWNER of BOTH documents: that isolates the missing
+  // Deliberately run as the OWNER of BOTH documents: that isolates the
   // `entry.documentId.equals(doc._id)` check from the ACL check. A fix that only
   // tightened access control would still leave this spec failing.
-  expectedFail(
+  test(
     'refuses a history entry that belongs to a different document',
     async () => {
       const res = await request(app)
@@ -147,10 +142,9 @@ describeDb('ACL — POST /:shortId/restore/:historyId (AUDIT finding 5.2)', () =
     }
   );
 
-  // EXPECTED FAIL until the ACL fix lands — AUDIT.md finding 5.2.
-  // This is the confidentiality half of the finding: TODAY an editor of one
-  // document pulls another owner's snapshot into a document they can read.
-  expectedFail(
+  // The confidentiality half of the finding: an editor of one document must not
+  // be able to pull another owner's snapshot into a document they can read.
+  test(
     'does not leak another document\'s content to an editor of the target document',
     async () => {
       const res = await request(app)

@@ -3,13 +3,13 @@
 These specs are the **regression gate for the three CRITICAL findings** in
 [`AUDIT.md`](../../../AUDIT.md) §5: `5.1`, `5.2` and `5.3`.
 
-They encode the **correct post-fix behaviour**, not today's behaviour. The
-negative specs therefore *fail* against the current server — that is the point.
-They are `test.skip` by default so the suite stays green, and they flip to real
-assertions the moment the ACL fix lands.
+**All three are now fixed**, and every spec here is a live assertion. The
+negative specs (`A1`, `A2`, `B1`, `B2`, `C1`) were `expectedFail`/`test.skip`
+while the holes were open; they were flipped to plain `test` when the fix
+landed, so a regression turns the suite red instead of quietly skipping.
 
 > **Do not weaken an assertion here to make it pass.** If one of these starts
-> failing after the fix, the fix is incomplete — or has regressed.
+> failing, the fix is incomplete — or has regressed.
 
 ---
 
@@ -24,19 +24,15 @@ suites report *skipped* and the runner still exits `0`.
 # 1. DB-free (what CI runs today) — everything here is skipped, exit 0
 cd server && npm test
 
-# 2. With a database — positive paths run for real
+# 2. With a database — the real gate: 16 passed, 0 skipped
 mkdir -p /tmp/rooms-test-db && mongod --dbpath /tmp/rooms-test-db &
 cd server && TEST_MONGODB_URI=mongodb://localhost:27017/rooms-test npm test
-
-# 3. Prove the holes are still open — runs the expected-fail specs; exits 1 today
-cd server && TEST_MONGODB_URI=mongodb://localhost:27017/rooms-test \
-             ACL_EXPECT_FAIL=1 npm test
 ```
 
-`ACL_EXPECT_FAIL=1` is the honesty switch: it turns every
-`expectedFailUntilAclFix` spec from `test.skip` into `test`, so anyone can
-verify in one command that the vulnerability is real rather than trusting a
-comment. It is never set in CI.
+`ACL_EXPECT_FAIL=1` — the "honesty switch" that used to un-skip the
+expected-fail specs — is **gone**, together with the `expectedFailUntilAclFix`
+helper it drove. The specs it guarded now run unconditionally. The variable is
+inert: setting it changes nothing.
 
 The specs **never drop a database**. They create uniquely-suffixed fixtures and
 delete exactly those records in `afterAll`, so pointing `TEST_MONGODB_URI` at a
@@ -46,25 +42,25 @@ scratch dev database cannot destroy unrelated data.
 
 ## Spec inventory
 
-Legend — **status**:
-`skipped-pending-fix` = encodes correct behaviour, fails today, `test.skip`.
-`passing` = passes today and must keep passing after the fix (over-block guard);
-runs only when `TEST_MONGODB_URI` is set, otherwise skipped with its suite.
+All 16 specs **pass**. They run only when `TEST_MONGODB_URI` is set, otherwise
+they are skipped with their suite.
 
 ### `rest-document-access.test.js` — guards finding **5.1** (§8.8 spec S1)
 
-`GET /api/documents/:shortId` (`server/server.js:485`) has no ACL and answers
-`role: 'editor'` for a user who was never invited (`server.js:497`).
+`GET /api/documents/:shortId` (`server/server.js:485`) now runs
+`checkDocumentAccess(doc, req.user, 'viewer')` before answering, and reports the
+role the ACL actually grants — ownership, an explicit collaborator entry, or
+`publicAccess.role` — instead of the old `else userRole = 'editor'` branch.
 
-| # | Spec | Guards | Status | Observed today |
-|---|------|--------|--------|----------------|
-| A1 | rejects a non-collaborator with 403 and leaks no document content | 5.1 | **skipped-pending-fix** | `Expected: 403 / Received: 200` — full body incl. `elements` returned |
-| A2 | never advertises an editor role to a non-collaborator | 5.1 | **skipped-pending-fix** | `role: 'editor'` handed to a stranger |
-| D1 | owner can read their own document | over-block guard | passing | 200, `isOwner: true`, `role: 'editor'` |
-| D2 | explicit editor collaborator can read the document | over-block guard | passing | 200, `role: 'editor'` |
-| D3 | explicit viewer collaborator can read the document, with viewer role | over-block guard | passing | 200, `role: 'viewer'` |
-| D4 | unauthenticated request is rejected with 401 | regression guard | passing | 401 |
-| D5 | a malformed token is rejected with 401 | regression guard | passing | 401 |
+| # | Spec | Guards | Behaviour asserted |
+|---|------|--------|--------------------|
+| A1 | rejects a non-collaborator with 403 and leaks no document content | 5.1 | 403, no `elements`/`title`, no secret line anywhere in the body |
+| A2 | never advertises an editor role to a non-collaborator | 5.1 | `role !== 'editor'`, falsy `isOwner`, no collaborator row written |
+| D1 | owner can read their own document | over-block guard | 200, `isOwner: true`, `role: 'editor'` |
+| D2 | explicit editor collaborator can read the document | over-block guard | 200, `role: 'editor'` |
+| D3 | explicit viewer collaborator can read the document, with viewer role | over-block guard | 200, `role: 'viewer'` |
+| D4 | unauthenticated request is rejected with 401 | regression guard | 401 |
+| D5 | a malformed token is rejected with 401 | regression guard | 401 |
 
 A2 also asserts the read is side-effect free (no collaborator row appears). That
 half already holds today: the DB-level auto-add lives on the Socket.io join
@@ -72,16 +68,16 @@ path (`server.js:823`), which is AUDIT §8.6 spec C6's territory, not this file'
 
 ### `rest-history-restore.test.js` — guards finding **5.2** (§8.8 spec S2)
 
-`POST /:shortId/restore/:historyId` (`server/server.js:544-594`) does a bare
-`HistoryEntry.findById()` and never compares `entry.documentId` to `doc._id`.
+`POST /:shortId/restore/:historyId` (`server/server.js:544-594`) now rejects with
+404 unless `entry.documentId.equals(doc._id)`.
 
-| # | Spec | Guards | Status | Observed today |
-|---|------|--------|--------|----------------|
-| B1 | refuses a history entry that belongs to a different document | 5.2 | **skipped-pending-fix** | `Expected [400,404] / Received 200` — target overwritten with the other doc's snapshot |
-| B2 | does not leak another document's content to an editor of the target document | 5.2 | **skipped-pending-fix** | attacker reads the source document's confidential line through the target |
-| D6 | owner can restore a history entry that belongs to their own document | over-block guard | passing | 200 `{success:true}`, content reverts |
-| D7 | a viewer-role collaborator cannot restore (403) | regression guard | passing | 403 |
-| D8 | an unauthenticated restore is rejected with 401 | regression guard | passing | 401 |
+| # | Spec | Guards | Behaviour asserted |
+|---|------|--------|--------------------|
+| B1 | refuses a history entry that belongs to a different document | 5.2 | 400/404, no `success`, target byte-for-byte untouched |
+| B2 | does not leak another document's content to an editor of the target document | 5.2 | the source document's confidential line is never readable through the target |
+| D6 | owner can restore a history entry that belongs to their own document | over-block guard | 200 `{success:true}`, content reverts |
+| D7 | a viewer-role collaborator cannot restore (403) | regression guard | 403 |
+| D8 | an unauthenticated restore is rejected with 401 | regression guard | 401 |
 
 B1 deliberately runs as the **owner of both documents**: that isolates the
 missing `entry.documentId.equals(doc._id)` check from the ACL check, so a fix
@@ -91,16 +87,22 @@ owner's snapshot into a document they can read.
 
 ### `yjs-write-authorization.test.js` — guards finding **5.3** (§8.4 spec C3)
 
-`yjs-server.js:234` checks `viewer` once at connect; the `ws.on('message')`
-handler at `:286` then feeds every `messageSync` frame into
-`readSyncMessage(..., ydoc, null)` at `:296` with no role check.
+The connection now captures its authorized role once at connect
+(`checkDocAccess(doc, user, 'editor')` → `canWrite`), and the `ws.on('message')`
+handler drops `SyncStep2`/`Update` frames from a read-only connection before
+they reach `readSyncMessage`. `SyncStep1` (a read) and awareness frames
+(cursors, presence) still pass, so viewers keep working in the collaborator UI.
 
-| # | Spec | Guards | Status | Observed today |
-|---|------|--------|--------|----------------|
-| C1 | ignores document updates sent by a viewer-role collaborator | 5.3 | **skipped-pending-fix** | `Expected: 0 / Received: 1` — the viewer's paragraph is in the shared doc |
-| D9 | accepts document updates from an editor-role collaborator | over-block guard | passing | editor's text reaches the owner |
-| D10 | refuses the WebSocket upgrade when no token is supplied | regression guard | passing | handshake error (raw 401) |
-| D11 | refuses the WebSocket upgrade for a user with no access to the document | regression guard | passing | socket closed (1008) |
+| # | Spec | Guards | Behaviour asserted |
+|---|------|--------|--------------------|
+| C1 | ignores document updates sent by a viewer-role collaborator | 5.3 | the owner's fragment stays empty — the viewer's paragraph never lands |
+| D9 | accepts document updates from an editor-role collaborator | over-block guard | editor's text reaches the owner |
+| D10 | refuses the WebSocket upgrade when no token is supplied | regression guard | handshake error (raw 401) |
+| D11 | refuses the WebSocket upgrade for a user with no access to the document | regression guard | socket closed (1008) |
+
+Not covered here: **viewer awareness must keep flowing**. Verified manually
+against this database (viewer presence reaches the owner, viewer write blocked,
+editor write reaches the viewer). Worth a spec when awareness gets its own file.
 
 **Which harness was used — the honest answer.** This is a **real WebSocket
 test**, not a unit test and not a placeholder. It boots the exported HTTP server
@@ -115,22 +117,9 @@ against the `SyncStep2` the server hands it. That deliberately avoids reaching
 into `yjs-server.js` internals (`docs`, `roomConns`, the message handler
 closure), so a fix is free to restructure them without breaking this spec.
 
-Verified end to end: with `ACL_EXPECT_FAIL=1` the viewer's paragraph is observed
-by the owner (`fragment.length === 1`), reproducing finding 5.3 exactly.
-
----
-
-## How to flip a spec after the fix
-
-1. Land the ACL fix.
-2. Run `TEST_MONGODB_URI=... ACL_EXPECT_FAIL=1 npm test` — the previously red
-   specs must now be green.
-3. Replace `expectedFail(...)` with plain `test(...)` in that file and delete the
-   `// EXPECTED FAIL until ...` comment above it.
-4. When **all** of them are converted, delete `expectedFailUntilAclFix` from
-   `helpers.js` and this section.
-
-Do not delete a spec instead of converting it.
+Verified end to end: before the fix the viewer's paragraph was observed by the
+owner (`fragment.length === 1`), reproducing finding 5.3 exactly; after the fix
+the same spec observes `fragment.length === 0`.
 
 ---
 
@@ -160,7 +149,7 @@ answer.
 
 | File | Role |
 |------|------|
-| `helpers.js` | Fixtures + the `describeWithDb` / `expectedFailUntilAclFix` gates. Not named `*.test.js`, so Jest's `testMatch` ignores it. |
+| `helpers.js` | Fixtures + the `describeWithDb` database gate. Not named `*.test.js`, so Jest's `testMatch` ignores it. |
 | `rest-document-access.test.js` | Finding 5.1 |
 | `rest-history-restore.test.js` | Finding 5.2 |
 | `yjs-write-authorization.test.js` | Finding 5.3 |

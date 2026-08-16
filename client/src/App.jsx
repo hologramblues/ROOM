@@ -15,7 +15,6 @@ import importFDX from './utils/importFDX';
 
 // Hooks
 import useTimer from './hooks/useTimer';
-import useTypewriterSound from './hooks/useTypewriterSound';
 import useStats from './hooks/useStats';
 import useWritingGoals from './hooks/useWritingGoals';
 import useSearch from './hooks/useSearch';
@@ -191,9 +190,6 @@ export default function ScreenplayEditor() {
   const [scriptScrollHeight, setScriptScrollHeight] = useState(0);
   const [showGoToScene, setShowGoToScene] = useState(false);
   // editingSynopsis removed — unused
-  // Typewriter sound hook
-  // eslint-disable-next-line no-unused-vars
-  const { typewriterSound, setTypewriterSound } = useTypewriterSound();
   const [showChat, setShowChat] = useState(false);
   const [activeView, setActiveView] = useState('script'); // 'script' | 'beatboard'
   

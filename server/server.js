@@ -486,17 +486,25 @@ app.get('/api/documents/:shortId', authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc) return res.status(404).json({ error: 'Document non trouve' });
-    // Auth required. Any authenticated user with the shortId (shared link) can access.
-    // They will be auto-added as collaborator when they join via socket.
-    // Determine user's role for this document
+    // ACL (AUDIT 5.1): reading requires at least `viewer`. Access comes from
+    // ownership, an explicit collaborator entry, or publicAccess — the share-link
+    // switch the owner flips in ShareModal. Holding the shortId is NOT access:
+    // the Socket.io join (join-document) and the Yjs upgrade already enforce the
+    // same guard, so this route was the only surface leaking private documents.
+    if (!checkDocumentAccess(doc, req.user, 'viewer')) {
+      // Deny with no payload — a 403 must not carry the body it just refused.
+      return res.status(403).json({ error: 'Acces refuse' });
+    }
+    // Report the role the ACL actually grants. Never advertise `editor` to a
+    // user who was never invited (the old `else userRole = 'editor'` branch).
     let userRole = 'viewer';
-    const isOwner = req.user && doc.ownerId.equals(req.user._id);
+    const isOwner = Boolean(req.user && doc.ownerId.equals(req.user._id));
     if (isOwner) {
       userRole = 'editor';
-    } else if (req.user) {
-      const collab = doc.collaborators.find(c => c.userId.equals(req.user._id));
+    } else {
+      const collab = req.user && doc.collaborators.find(c => c.userId.equals(req.user._id));
       if (collab) userRole = collab.role;
-      else userRole = 'editor'; // Will be auto-added as collaborator on socket join
+      else if (doc.publicAccess && doc.publicAccess.enabled) userRole = doc.publicAccess.role;
     }
     res.json({
       id: doc.shortId,
@@ -545,9 +553,18 @@ app.post('/api/documents/:shortId/restore/:historyId', authMiddleware, async (re
   try {
     const doc = await Document.findOne({ shortId: req.params.shortId });
     if (!doc || !checkDocumentAccess(doc, req.user, 'editor')) return res.status(403).json({ error: 'Acces refuse' });
+    // Reject a malformed id before Mongoose throws a CastError (would surface as a 500).
+    if (!mongoose.Types.ObjectId.isValid(req.params.historyId)) return res.status(404).json({ error: 'Snapshot non trouve' });
     const entry = await HistoryEntry.findById(req.params.historyId);
     if (!entry || entry.action !== 'snapshot') return res.status(404).json({ error: 'Snapshot non trouve' });
-    
+    // ACL (AUDIT 5.2): the entry MUST belong to the document being restored.
+    // Without this, an editor of doc A could enumerate a HistoryEntry id from
+    // doc B (ObjectIds are time-ordered) and pull B's snapshot into A, where it
+    // becomes readable — a confidentiality breach, not just corruption.
+    // NOTE: both sides are ObjectIds — `===` would ALWAYS be false and would
+    // break every legitimate restore. Use .equals().
+    if (!entry.documentId || !entry.documentId.equals(doc._id)) return res.status(404).json({ error: 'Snapshot non trouve' });
+
     // Save current state before restoring
     await HistoryEntry.create({ 
       documentId: doc._id, 

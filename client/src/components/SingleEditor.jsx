@@ -70,8 +70,6 @@ const SingleEditor = React.memo(({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  console.log('[EDITOR] Render — ydoc:', !!ydoc, 'provider:', !!provider, 'yjsSynced:', yjsSynced, 'elements.length:', elements?.length || 0);
-
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -263,43 +261,31 @@ const SingleEditor = React.memo(({
   // Migration: decide whether to seed Y.Doc from REST elements or use existing Y.Doc content
   const migratedRef = useRef(false);
   useEffect(() => {
-    console.log('[EDITOR] Migration effect run — editor:', !!editor, 'ydoc:', !!ydoc, 'yjsSynced:', yjsSynced, 'elements.length:', elements?.length || 0);
     if (!editor || !ydoc || !yjsSynced) return;
-    if (migratedRef.current) {
-      console.log('[EDITOR] Already migrated, skipping');
-      return;
-    }
+    if (migratedRef.current) return;
     const fragment = ydoc.getXmlFragment('default');
-    console.log('[EDITOR] Fragment length:', fragment.length);
 
     if (fragment.length > 0) {
       migratedRef.current = true;
-      console.log('[EDITOR] Y.Doc has content, using it (no migration)');
       return;
     }
 
     // Fragment empty — seed from REST elements if we have any
     if (elements && elements.length > 0) {
       const hasRealContent = elements.some(el => el.content && el.content.trim().length > 0);
-      if (!hasRealContent) {
-        console.log('[EDITOR] No real content in REST elements, skipping seed');
-        return;
-      }
+      if (!hasRealContent) return;
       try {
         migratedRef.current = true;
         const tiptapDoc = buildDocFromElements(elements.map(el => ({
           ...el,
           content: stripHtml(el.content || ''),
         })));
-        console.log('[EDITOR] Seeding Y.Doc via setContent with', elements.length, 'elements');
+        console.log('[EDITOR] Seeding empty Y.Doc from', elements.length, 'REST elements');
         editor.commands.setContent(tiptapDoc, false);
-        console.log('[EDITOR] setContent done — fragment.length now:', fragment.length);
       } catch (err) {
         console.error('[EDITOR] Migration via setContent failed:', err);
         migratedRef.current = false;
       }
-    } else {
-      console.log('[EDITOR] No REST elements to seed from — leaving empty');
     }
   }, [editor, ydoc, yjsSynced, elements]);
 

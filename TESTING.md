@@ -3,21 +3,28 @@
 How to run the automated tests, what each layer is responsible for, and what
 still needs a one-time setup step.
 
-This document describes the **toolchain**, which is now bootstrapped and green.
-The actual non-regression specs are enumerated in [`AUDIT.md`](AUDIT.md) §8 and
-land next; each layer below currently holds one smoke spec whose only job is to
-prove the runner works.
+This document describes the **toolchain**, which is bootstrapped and green.
+The full non-regression spec list is enumerated in [`AUDIT.md`](AUDIT.md) §8.
+
+Beyond the original smoke specs, two real layers have landed: the **client
+editor specs** (typing, tab-cycle, parens, backspace) and the **server ACL
+gate** (`server/__tests__/acl/`) that guards AUDIT findings 5.1 / 5.2 / 5.3.
+⚠️ **The ACL gate needs a running MongoDB and skips itself silently without
+one** — see §2 before trusting a green `cd server && npm test`.
 
 ---
 
 ## TL;DR
 
 ```bash
-# Client — unit + integration (jsdom)
+# Client — unit + integration (jsdom).  5 suites, 55 passed / 6 skipped
 cd client && npm run test:ci
 
-# Server — API (supertest)
+# Server — smoke only, DB-free.  ⚠️ silently SKIPS all 16 ACL specs
 cd server && npm test
+
+# Server — the real ACL gate.  Needs a MongoDB; 4 suites, 20 passed
+cd server && TEST_MONGODB_URI="mongodb://127.0.0.1:27017/rooms-test" npm test
 
 # E2E — browser (Playwright); needs a one-time browser install
 cd e2e && npm install && npm test
@@ -25,8 +32,9 @@ cd e2e && npm install && npm test
 
 | Layer | Location | Runner | Needs a DB? | Needs browsers? | Runtime | In CI? |
 |-------|----------|--------|-------------|-----------------|---------|--------|
-| Client unit/integration | `client/src/__tests__/` | Jest (via `craco test`) + React Testing Library | No | No | ~0.6 s | Yes |
-| Server API | `server/__tests__/` | Jest + supertest | No (opt-in) | No | ~3.5 s | Yes |
+| Client unit/integration | `client/src/__tests__/` | Jest (via `craco test`) + React Testing Library | No | No | ~0.5 s | Yes |
+| Server smoke | `server/__tests__/smoke.test.js` | Jest + supertest | No | No | ~3.5 s | Yes |
+| Server **ACL gate** (findings 5.1/5.2/5.3) | `server/__tests__/acl/` | Jest + supertest + real `ws` client | **Yes — skips silently without one** | No | ~3.8 s | **No** (no `services: mongo:` in the workflow) |
 | E2E / multi-tab collab | `e2e/` | Playwright | Yes, once specs are real | Yes, one-time install | n/a (skipped) | Not yet |
 
 Every command in this document was executed and its exit code checked before the
@@ -195,6 +203,36 @@ catch regressions quickly.
    cd server && TEST_MONGODB_URI=mongodb://localhost:27017/rooms-test npm test
    ```
 
+   > ### ⚠️ The ACL gate lives behind this variable
+   >
+   > `server/__tests__/acl/` holds the **16 specs that guard AUDIT findings
+   > 5.1 / 5.2 / 5.3**. They are wrapped in `describeWithDb()`, which degrades to
+   > `describe.skip` when `TEST_MONGODB_URI` is unset. The practical consequence:
+   >
+   > ```text
+   > $ cd server && npm test                 # NO database
+   > Test Suites: 3 skipped, 1 passed, 1 of 4 total
+   > Tests:       16 skipped, 4 passed, 20 total     ← exit 0, ACL never ran
+   >
+   > $ cd server && TEST_MONGODB_URI=... npm test    # WITH a database
+   > Test Suites: 4 passed, 4 total
+   > Tests:       20 passed, 20 total                ← the real gate
+   > ```
+   >
+   > **A green `npm test` is not evidence the ACL fixes hold.** Always pass
+   > `TEST_MONGODB_URI` when validating security work. To run only that suite:
+   >
+   > ```bash
+   > cd server && TEST_MONGODB_URI="mongodb://127.0.0.1:27017/rooms-test" \
+   >   npx jest __tests__/acl --runInBand --forceExit
+   > ```
+   >
+   > The specs **never drop a database**: they create uniquely-suffixed fixtures
+   > and delete exactly those records in `afterAll`, so pointing the variable at a
+   > scratch dev database cannot destroy unrelated data. `ACL_EXPECT_FAIL` — the
+   > old "honesty switch" that un-skipped the expected-fail specs before the fixes
+   > landed — has been **removed**; setting it now does nothing.
+
    When set, `/api/health` is asserted to return `200` with live counts.
    **Verified by running the two commands above verbatim against a throwaway
    `mongod`:** exit 0, 4 passed, whole suite in 0.57 s, `/api/health` answering
@@ -244,8 +282,15 @@ settles.
 
 ### What this layer covers
 
-§8.7 auth endpoints (A2–A7) • §8.8 REST access control (S1–S8) • §8.9 F1 FDX
-import. Most of these need `TEST_MONGODB_URI` set.
+**Landed and passing** (all need `TEST_MONGODB_URI`): §8.8 S1 REST document
+access (finding 5.1) • §8.8 S2 history-restore cross-document isolation
+(finding 5.2) • §8.4 C3 Yjs write authorization (finding 5.3) — 16 specs in
+`server/__tests__/acl/`, including the D1–D11 over-block guards that prove the
+fixes did not lock out legitimate owners, editors and viewers.
+
+**Not yet written**: §8.7 auth endpoints (A2–A7) • the rest of §8.8 (S3–S8) •
+§8.9 F1 FDX import • §8.6 C6 — the Socket.io `join-document` auto-add, which is
+the untested half of finding 5.1 (see AUDIT.md finding 5.1b).
 
 ---
 
@@ -333,7 +378,8 @@ the `server` job and set `TEST_MONGODB_URI` there — no spec changes needed.
 | Item | Needed for | Command |
 |------|-----------|---------|
 | Playwright browsers | Any un-skipped E2E spec | `cd e2e && npm run install:browsers` |
-| A MongoDB instance | DB-backed server specs (§8.7, §8.8) | run `mongod`, then `TEST_MONGODB_URI=... npm test` |
+| A MongoDB instance | **The 16-spec ACL gate** (5.1/5.2/5.3) + DB-backed specs (§8.7, §8.8) | run `mongod`, then `TEST_MONGODB_URI=... npm test` |
+| `services: mongo:` in CI | Making the ACL gate actually run on push/PR — **today CI exercises none of it** | add the block to the `server` job in `.github/workflows/test.yml` and set `TEST_MONGODB_URI` |
 | `webServer` in Playwright config | Automated E2E boot | uncomment once a DB fixture exists |
 | First green Actions run | Confidence CI works | push to `main` / open a PR |
 

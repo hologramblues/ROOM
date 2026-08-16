@@ -11,12 +11,13 @@
  * collaborator (server.js:497 — `else userRole = 'editor';`). shortId is 8 hex
  * chars (server.js:254), so the id is guessable as well as leakable.
  *
- * The negative specs below assert the POST-FIX behaviour and therefore FAIL
- * today. They are `test.skip` by default (see helpers.expectedFailUntilAclFix)
- * so the suite stays green; run with ACL_EXPECT_FAIL=1 to watch them fail.
+ * FIXED — the route now runs `checkDocumentAccess(doc, req.user, 'viewer')` and
+ * answers 403 with no payload, and reports the role the ACL actually grants
+ * instead of silently advertising `editor`. The negative specs below are live
+ * assertions (they were `expectedFail` while the hole was open).
  *
- * The positive specs are NOT skipped — they must pass both before and after the
- * fix, which is what stops the fix from over-blocking legitimate readers.
+ * The positive specs must pass both before and after the fix, which is what
+ * stops the fix from over-blocking legitimate readers.
  */
 const request = require('supertest');
 
@@ -26,7 +27,6 @@ const {
   closeDb,
   createDocument,
   describeWithDb,
-  expectedFailUntilAclFix,
   registerUser,
   useTestDatabase,
   waitForDb,
@@ -39,7 +39,6 @@ const { app } = require('../../server');
 const { User, Document, HistoryEntry } = require('../../models');
 
 const describeDb = describeWithDb();
-const expectedFail = expectedFailUntilAclFix();
 
 describeDb('ACL — GET /api/documents/:shortId (AUDIT finding 5.1)', () => {
   let owner; // creates the document
@@ -87,12 +86,10 @@ describeDb('ACL — GET /api/documents/:shortId (AUDIT finding 5.1)', () => {
   });
 
   // ---------------------------------------------------------------------
-  // A. Expected failures — the actual finding.
+  // A. The actual finding — regression gate for AUDIT 5.1.
   // ---------------------------------------------------------------------
 
-  // EXPECTED FAIL until the ACL fix lands — AUDIT.md finding 5.1 (§7 Phase 2 step 1).
-  // TODAY: returns 200 with the full document body.
-  expectedFail(
+  test(
     'rejects a non-collaborator with 403 and leaks no document content',
     async () => {
       const res = await request(app)
@@ -107,11 +104,9 @@ describeDb('ACL — GET /api/documents/:shortId (AUDIT finding 5.1)', () => {
     }
   );
 
-  // EXPECTED FAIL until the ACL fix lands — AUDIT.md finding 5.1.
-  // TODAY: server.js:497 answers `role: 'editor'` for a user who was never
-  // invited ("Will be auto-added as collaborator on socket join"), which is the
-  // silent promotion the finding names.
-  expectedFail('never advertises an editor role to a non-collaborator', async () => {
+  // The old `else userRole = 'editor'` branch ("Will be auto-added as
+  // collaborator on socket join") handed a stranger an editor role. It is gone.
+  test('never advertises an editor role to a non-collaborator', async () => {
     const res = await request(app)
       .get(`/api/documents/${shortId}`)
       .set('Authorization', `Bearer ${stranger.token}`);

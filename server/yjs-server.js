@@ -220,6 +220,11 @@ function attachYjsServer(httpServer, mongoUri, jwtSecret) {
     const userName = request.userName || 'Unknown';
     const userId = request.userId;
 
+    // Write authorization captured once, at connection time (AUDIT 5.3).
+    // `false` until the access check below proves the user is an editor, so any
+    // early/unexpected frame is treated as read-only.
+    let canWrite = false;
+
     // Document-level access control: fetch user + doc, verify authorization
     try {
       const [user, doc] = await Promise.all([
@@ -236,7 +241,9 @@ function attachYjsServer(httpServer, mongoUri, jwtSecret) {
         ws.close(1008, 'Access denied');
         return;
       }
-      console.log(`[YJS] ${userName} connected to "${docName}" (authorized)`);
+      // viewer/commenter connect read-only; only `editor` may mutate the CRDT.
+      canWrite = checkDocAccess(doc, user, 'editor');
+      console.log(`[YJS] ${userName} connected to "${docName}" (authorized, ${canWrite ? 'read-write' : 'read-only'})`);
     } catch (err) {
       console.error(`[YJS] Access check failed for ${userName}:`, err.message);
       ws.close(1011, 'Server error');
@@ -290,6 +297,21 @@ function attachYjsServer(httpServer, mongoUri, jwtSecret) {
         const msgType = decoding.readVarUint(decoder);
 
         if (msgType === messageSync) {
+          // AUDIT 5.3: the connect-time check is not enough — every frame must be
+          // authorized. Peek at the sync sub-type on a throwaway decoder so the
+          // real decoder stays untouched for the allowed path below.
+          if (!canWrite) {
+            const peek = decoding.createDecoder(message);
+            decoding.readVarUint(peek); // msgType
+            const syncType = decoding.readVarUint(peek);
+            // SyncStep1 is a read: the client asks for state, the server answers
+            // with SyncStep2. SyncStep2 and Update WRITE into the shared Y.Doc,
+            // so a read-only connection must not have them applied.
+            if (syncType !== syncProtocol.messageYjsSyncStep1) {
+              console.warn(`[YJS] Rejected write from read-only connection (${userName} on "${docName}")`);
+              return;
+            }
+          }
           const encoder = encoding.createEncoder();
           encoding.writeVarUint(encoder, messageSync);
           // readSyncMessage processes the client's message and writes response to encoder

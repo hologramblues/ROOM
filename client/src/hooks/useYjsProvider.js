@@ -38,9 +38,6 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
       wsUrl = baseUrl.replace(/^http/, 'ws');
     }
 
-    const fullWsUrl = wsUrl + '/yjs/' + docId;
-    console.log('[YJS-HOOK] Connecting to:', fullWsUrl);
-
     const doc = new Y.Doc();
     const wsProvider = new WebsocketProvider(
       wsUrl + '/yjs',
@@ -82,24 +79,16 @@ export default function useYjsProvider({ docId, token, serverUrl, currentUser, e
         } catch (_) {}
       }
 
-      const fragment = doc.getXmlFragment('default');
-      console.log('[YJS] Synced for', docId, '— Y.Doc fragment.length=', fragment.length, 'REST elements=', elementsRef?.current?.length || 0);
-
       authoritativeRef.current = true;
       syncedRef.current = true;
       setSynced(true);
       // Migration (if needed) is now handled by SingleEditor via editor.commands.setContent
     });
 
-    wsProvider.on('status', ({ status }) => {
-      console.log('[YJS] Status:', status);
-    });
-
     setYdoc(doc);
     setProvider(wsProvider);
 
     return () => {
-      console.log('[YJS] Cleanup for:', docId);
       // Destroy BEFORE nulling the ref, otherwise we have a brief window where
       // the ref is null but the provider still exists
       try { wsProvider.disconnect(); } catch (_) {}
