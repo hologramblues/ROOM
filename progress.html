@@ -159,22 +159,45 @@
         <tr>
           <td>ACL fixes</td>
           <td class="done">&#10003; PASSED in 1 round(s)</td>
-          <td>Findings 5.1 (REST half), 5.2, 5.3</td>
+          <td>Findings 5.1 (REST half), 5.2, 5.3 &mdash; socket half of 5.1 landed as 5.1b below</td>
         </tr>
         <tr>
           <td>Cleanup</td>
           <td class="done">&#10003; PASSED in 1 round(s)</td>
           <td>2 backend orphans, 2 empty dirs, 2 dead modules, debug logs &mdash; 1,721 deletions</td>
         </tr>
+        <tr>
+          <td>Finding 5.1b</td>
+          <td class="done">&#10003; FIXED</td>
+          <td>Socket <code>join-document</code> auto-add &mdash; the residual half of 5.1</td>
+        </tr>
       </tbody>
     </table>
     <div class="note">
-      <strong>Smoothing pass found one residual hole.</strong> The Socket.io
-      <code>join-document</code> auto-add (<code>server.js:838</code>) still writes
-      <code>role: 'editor'</code> unconditionally. Confirmed empirically against a live DB:
-      a visitor arriving through a <em>viewer</em> public link is silently promoted to a
-      persisted editor, which defeats the 5.1 fix and then the 5.3 fix as well. Logged as
-      finding <strong>5.1b</strong>; recommended Phase 2 target.
+      <strong>Finding 5.1b &mdash; found by the smoothing pass, now closed.</strong> The
+      Socket.io <code>join-document</code> auto-add (<code>server.js:838</code>) wrote
+      <code>role: 'editor'</code> unconditionally, so a visitor arriving through a
+      <em>viewer</em> public link was silently promoted to a persisted editor &mdash;
+      defeating the 5.1 fix and then the 5.3 fix as well.
+      <strong>Fix (design b): derive, do not persist.</strong> The <code>updateOne</code>
+      is gone; the branch now reads <code>doc.publicAccess.role</code> on every join and
+      writes nothing, with an explicit <code>Acces refuse</code> on the fallthrough. This
+      matches the 5.1 REST fix, keeps the share link genuinely revocable, and drops the
+      now-redundant collaborator re-read. Guarded by specs E1/E2/E3 plus over-block guards
+      D12&ndash;D16 in <code>server/__tests__/acl/socket-join-authorization.test.js</code>
+      (a real <code>socket.io-client</code> harness, not a stub).
+      <strong>Verified as a real gate:</strong> reverting <code>server.js</code> to the
+      pre-fix commit makes E1, E2, E3 and D12 fail; restoring it makes all 8 pass.
+    </div>
+    <div class="note">
+      <strong>Known cost of design (b), accepted deliberately.</strong> Link visitors are
+      no longer persisted, so a link-shared document stops appearing in a visitor's
+      <code>GET /api/documents</code> list, and an <em>offline</em> past visitor drops out
+      of the @mention / scene-assignee dropdowns (live presence is unaffected &mdash; both
+      sidebars merge <code>activeRooms</code>). <code>App.jsx:1285</code> still gates the
+      destructive "overwrite server copy" button on <code>collaborators.length &lt;= 1</code>,
+      a counter that used to be incremented by the bug itself. Tracked in AUDIT.md
+      &sect;5.1b-rationale as a Phase 3 item, not a security blocker.
     </div>
   </section>
 
@@ -185,19 +208,21 @@
         <tr><th>Suite</th><th>Result</th></tr>
       </thead>
       <tbody>
-        <tr><td>client &mdash; <code>npm run test:ci</code></td><td class="done">5 suites &middot; 55 passed / 6 skipped</td></tr>
-        <tr><td>server ACL &mdash; <code>npx jest __tests__/acl</code></td><td class="done">3 suites &middot; 16 passed</td></tr>
-        <tr><td>server &mdash; <code>npm test</code> (no DB)</td><td class="pending">4 passed &middot; 16 ACL specs skipped</td></tr>
-        <tr><td>server &mdash; <code>npm test</code> (with DB)</td><td class="done">4 suites &middot; 20 passed</td></tr>
+        <tr><td>client &mdash; <code>npm run test:ci</code></td><td class="done">5 suites &middot; 55 passed / 6 skipped (61 total)</td></tr>
+        <tr><td>server ACL &mdash; <code>npx jest __tests__/acl</code></td><td class="done">4 suites &middot; 24 passed</td></tr>
+        <tr><td>server &mdash; <code>npm test</code> (no DB)</td><td class="pending">1 suite &middot; 4 passed &middot; 4 suites / 24 ACL specs skipped</td></tr>
+        <tr><td>server &mdash; <code>npm test</code> (with DB)</td><td class="done">5 suites &middot; 28 passed</td></tr>
         <tr><td>client &mdash; <code>CI=true npx craco build</code></td><td class="done">&#10003; Build succeeded</td></tr>
         <tr><td><code>node -c</code> server.js, yjs-server.js</td><td class="done">&#10003; Syntax OK</td></tr>
       </tbody>
     </table>
     <div class="note">
-      <strong>The ACL gate needs a MongoDB.</strong> Without
-      <code>TEST_MONGODB_URI</code>, <code>npm test</code> exits 0 while skipping all 16
-      security specs &mdash; and CI has no <code>services: mongo:</code> block, so the gate
-      does not run on push or PR today.
+      <strong>The ACL gate needs a MongoDB, and nothing runs it automatically.</strong>
+      Without <code>TEST_MONGODB_URI</code>, <code>npm test</code> exits 0 while skipping
+      all 24 security specs. There is no <code>.github/workflows/</code> directory in the
+      repo at all, so the gate runs only when someone starts a Mongo by hand and passes the
+      URI. Every green result above was produced that way against
+      <code>mongodb://127.0.0.1:27789/rooms-acl-test</code>.
     </div>
   </section>
 
@@ -208,26 +233,30 @@
         <tr><th>Severity</th><th>Count</th></tr>
       </thead>
       <tbody>
-        <tr><td class="pending">Critical</td><td>5 &mdash; <span class="done">3 fixed in Phase 1</span>, 2 open</td></tr>
+        <tr><td class="pending">Critical</td><td>6 &mdash; <span class="done">4 fixed</span>, 2 open</td></tr>
         <tr><td class="pending">High</td><td>11</td></tr>
         <tr><td>Medium</td><td>19</td></tr>
         <tr><td class="muted">Low</td><td>16</td></tr>
-        <tr><td><strong>Total</strong></td><td><strong>51</strong></td></tr>
+        <tr><td><strong>Total</strong></td><td><strong>52</strong></td></tr>
       </tbody>
     </table>
-    <div class="placeholder" style="margin-top:10px">Counts aggregated from AUDIT.md &sect;4 (collab/editor) and &sect;5 (security) findings tables.</div>
+    <div class="placeholder" style="margin-top:10px">Counts aggregated from AUDIT.md &sect;4 (collab/editor) and &sect;5 (security) findings tables. Critical rose 5 &rarr; 6 and Total 51 &rarr; 52 because 5.1b was logged as its own finding after the original tally.</div>
     <div class="note">
-      <strong>Read 5.1 carefully.</strong> Of the 3 CRITICAL findings closed, 5.2 and 5.3
-      are fully fixed and regression-guarded. 5.1 is fixed at the REST surface only &mdash;
-      its socket-side twin survives as finding <strong>5.1b</strong> and currently re-opens
-      both 5.1 and 5.3 for any document shared by public link.
+      <strong>Which CRITICALs are closed.</strong> All four security CRITICALs &mdash;
+      <strong>5.1</strong> (both halves), <strong>5.1b</strong>, <strong>5.2</strong>,
+      <strong>5.3</strong> &mdash; are fixed and each is guarded by a spec that has been
+      confirmed to fail against the pre-fix code. The 2 still open are
+      <strong>4.1</strong> (offline edits silently discarded on reconnect) and
+      <strong>4.2</strong> (first-time Yjs migration double-seed). Both are collaboration /
+      data-loss findings, never in Phase 1 scope.
     </div>
   </section>
 
   <section>
     <h2>Status</h2>
-    <div class="done">Phase 0 complete. Phase 1 complete &mdash; full regression green, no dangling references to deleted modules.</div>
-    <div class="warn" style="margin-top:6px">Next: finding 5.1b (socket <code>join-document</code> auto-add) is the recommended Phase 2 target. Awaiting user go-ahead.</div>
+    <div class="done">Phase 0 complete. Phase 1 complete &mdash; all 4 security CRITICALs (5.1, 5.1b, 5.2, 5.3) closed and regression-guarded; full sweep green; no dangling references to deleted modules.</div>
+    <div class="warn" style="margin-top:6px">Two caveats carried forward, neither a Phase 1 blocker: (1) the ACL gate is manual &mdash; no CI runs it, and <code>npm test</code> without a DB skips all 24 specs silently; (2) finding <strong>5.10</strong> remains open &mdash; <code>canWrite</code> is captured once per Yjs connection, so demoting an editor mid-session takes effect only on reconnect (spec C6, still uncovered).</div>
+    <div class="warn" style="margin-top:6px">Next: findings 4.1 and 4.2 are the remaining CRITICALs. Awaiting user go-ahead.</div>
   </section>
 
   <footer>See AUDIT.md and REFERENCES.md for details.</footer>

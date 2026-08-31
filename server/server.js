@@ -837,14 +837,26 @@ io.on('connection', (socket) => {
         const c = doc.collaborators.find(c => c.userId.equals(socket.user._id));
         if (c) {
           role = c.role;
+        } else if (doc.publicAccess && doc.publicAccess.enabled) {
+          // Share-link visitor (AUDIT 5.1b). This branch is only reachable because
+          // checkDocumentAccess above passed for a non-owner, non-collaborator —
+          // i.e. the owner enabled a public link. Grant EXACTLY the role the owner
+          // picked in ShareModal, and persist NOTHING.
+          //
+          // The old code auto-pushed `{ role: 'editor' }` into doc.collaborators,
+          // which broke two CRITICAL fixes at once:
+          //   5.1 — the next GET /api/documents/:shortId read that row back and
+          //         legitimately reported 'editor' for a viewer-only link;
+          //   5.3 — yjs-server.js derives canWrite from checkDocAccess against the
+          //         same row, so the "viewer" could write the CRDT.
+          // Deriving on every join (like the 5.1 REST fix already does) also makes
+          // the link revocable: flip publicAccess off or downgrade its role and the
+          // next join reflects it. A persisted row would not — and ShareModal has
+          // no UI to remove it, so the grant would be permanent and invisible.
+          role = doc.publicAccess.role || 'viewer';
         } else {
-          // New user accessing via shared link — auto-add as editor collaborator
-          await Document.updateOne(
-            { shortId: docId, 'collaborators.userId': { $ne: socket.user._id } },
-            { $push: { collaborators: { userId: socket.user._id, role: 'editor' } } }
-          );
-          role = 'editor';
-          console.log(`[COLLAB] Auto-added ${socket.user.name} as editor to ${docId}`);
+          // Unreachable via checkDocumentAccess above; refuse rather than default.
+          return socket.emit('error', { message: 'Acces refuse' });
         }
       }
       currentDocId = docId; socket.join(docId);
@@ -852,9 +864,11 @@ io.on('connection', (socket) => {
       const userInfo = { id: socket.id, name: socket.user.name, color: socket.user.color || getRandomColor(), role, cursor: null };
       activeRooms.get(docId).set(socket.id, userInfo);
       
-      // Re-read doc to get fresh collaborators list (includes auto-added user)
-      const freshDoc = await Document.findOne({ shortId: docId }).select('collaborators ownerId');
-      const docCollaborators = freshDoc?.collaborators || doc.collaborators || [];
+      // Collaborators are the INVITED users only. The join no longer writes a row
+      // (AUDIT 5.1b), so `doc` is already fresh — the extra re-read it needed is gone.
+      // Link visitors are not in this list; they appear in `users` (activeRooms
+      // presence), which OutlineSidebar and CommentsSidebar already merge in.
+      const docCollaborators = doc.collaborators || [];
       let collaboratorsList = [];
       if (docCollaborators.length > 0) {
         const collabUserIds = docCollaborators.map(c => c.userId);

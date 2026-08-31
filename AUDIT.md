@@ -296,10 +296,66 @@ These are the numbered defects referenced from §3, §7, and §8 by their `4.17`
 
 | # | Title | File:line | Impact | Fix |
 |---|---|---|---|---|
-| 5.1 | ⚠️ **PARTIALLY FIXED in Phase 1** — **`GET /api/documents/:shortId` has no ACL and auto-promotes any authenticated visitor to `editor`** | `server/server.js:485`, socket auto-add `server.js:823` | Any leaked shortId (referrer, screenshot, browser history) grants read+edit to any authenticated account. shortId is only 8 hex chars (`server.js:254`) — brute-forceable | **REST half fixed**: the route now runs `checkDocumentAccess(doc, req.user, 'viewer')` and reports the role the ACL actually grants (the `else userRole = 'editor'` branch is gone). Guarded by specs A1/A2. **Socket half NOT fixed**: the `join-document` auto-add named in this finding's own File:line column still writes `role: 'editor'` unconditionally — see 5.1b |
-| 5.1b | **Socket `join-document` auto-add silently escalates a public *viewer* link to a persisted `editor`** — the residue of 5.1, and it defeats both 5.1 and 5.3 | `server/server.js:838-848` | **Empirically confirmed** against a live DB: owner shares a link with `publicAccess: {enabled: true, role: 'viewer'}` → visitor's `GET` correctly returns `role: 'viewer'` (5.1 fix working) → their client emits `join-document` → server writes `{role: 'editor'}` into `collaborators` → the next `GET` returns `role: 'editor'`, `canEdit` flips true client-side, and the Yjs `canWrite` check (`checkDocAccess(doc, user, 'editor')`) now also passes, **bypassing the 5.3 fix too**. Reachable through the real UI: `ShareModal.jsx:210` exposes a viewer/editor selector for the public link. Scope: documents with a public link enabled (the auto-add branch is unreachable without `publicAccess.enabled`, since owner and explicit-collaborator are handled by earlier branches) | Auto-add with `doc.publicAccess.role`, not a hardcoded `'editor'` — or drop the auto-add and require an explicit invite. **Not attempted in Phase 1**: it changes collaboration UX and is not test-covered (the ACL suite deliberately scopes it to §8.6 spec C6). Recommended Phase 2 target |
+| 5.1 | ✅ **FIXED** (REST half Phase 1, socket half Phase 2) — **`GET /api/documents/:shortId` has no ACL and auto-promotes any authenticated visitor to `editor`** | `server/server.js:485`, socket auto-add `server.js:823` | Any leaked shortId (referrer, screenshot, browser history) grants read+edit to any authenticated account. shortId is only 8 hex chars (`server.js:254`) — brute-forceable | **REST half fixed**: the route now runs `checkDocumentAccess(doc, req.user, 'viewer')` and reports the role the ACL actually grants (the `else userRole = 'editor'` branch is gone). Guarded by specs A1/A2. **Socket half fixed** in Phase 2 — see 5.1b. Both halves now derive the role the same way (owner → collaborator row → `publicAccess.role`), so the two surfaces can no longer disagree. Guarded end to end by spec E2, which drives a real socket join and then re-reads the REST route |
+| 5.1b | ✅ **FIXED in Phase 2** — **Socket `join-document` auto-add silently escalates a public *viewer* link to a persisted `editor`** — the residue of 5.1, and it defeated both 5.1 and 5.3 | `server/server.js:838-848` (now ~837-855) | **Empirically confirmed** against a live DB: owner shares a link with `publicAccess: {enabled: true, role: 'viewer'}` → visitor's `GET` correctly returns `role: 'viewer'` (5.1 fix working) → their client emits `join-document` → server writes `{role: 'editor'}` into `collaborators` → the next `GET` returns `role: 'editor'`, `canEdit` flips true client-side, and the Yjs `canWrite` check (`checkDocAccess(doc, user, 'editor')`) now also passes, **bypassing the 5.3 fix too**. Reachable through the real UI: `ShareModal.jsx:210` exposes a viewer/editor selector for the public link. Scope: documents with a public link enabled (the auto-add branch is unreachable without `publicAccess.enabled`, since owner and explicit-collaborator are handled by earlier branches) | **Fixed with design (b) — derive, do not persist.** The auto-add `updateOne` is deleted; the branch now sets `role = doc.publicAccess.role \|\| 'viewer'` and writes nothing, with an explicit `Acces refuse` on the (unreachable) no-public-access fallthrough. The now-redundant "re-read doc for the fresh collaborator list" query went with it. **Why (b) and not (a) ("persist with the correct role")** — see §5.1b-rationale below. No revocation gap remains: the role is recomputed from `publicAccess` on every join, so disabling or downgrading the link takes effect immediately. Guarded by specs E1/E2/E3 + over-block guards D12–D16 in `server/__tests__/acl/socket-join-authorization.test.js` (§8.6 spec C6) |
 | 5.2 | ✅ **FIXED in Phase 1** — **`POST /restore/:historyId` never verifies the entry belongs to the target doc** | `server/server.js:544-594` | Editor of doc A guesses/enumerates a `HistoryEntry._id` from doc B (MongoDB ObjectIds are time-ordered) and overwrites doc A with doc B's snapshot content — full confidentiality breach | Fixed: `if (!entry.documentId \|\| !entry.documentId.equals(doc._id)) return 404` before applying, plus an `ObjectId.isValid` guard so a malformed id returns 404 instead of a CastError-driven 500. Guarded by specs B1/B2 |
-| 5.3 | ✅ **FIXED in Phase 1** — **Yjs WebSocket only checks `viewer` at connect; every subsequent message is accepted** | `server/yjs-server.js:234,286-312` | A viewer/commenter (or anonymous public-viewer) can send `messageSync` frames that mutate the shared Y.Doc | Fixed: the connection captures `canWrite = checkDocAccess(doc, user, 'editor')` at connect (defaulting to `false`), and the message handler peeks the sync sub-type on a throwaway decoder, dropping `SyncStep2`/`Update` frames from read-only connections while letting `SyncStep1` and awareness through. Guarded by spec C1. **Caveat**: `canWrite` is captured once — demoting an editor mid-session does not take effect until they reconnect. Note this fix is bypassable via 5.1b |
+| 5.3 | ✅ **FIXED in Phase 1** — **Yjs WebSocket only checks `viewer` at connect; every subsequent message is accepted** | `server/yjs-server.js:234,286-312` | A viewer/commenter (or anonymous public-viewer) can send `messageSync` frames that mutate the shared Y.Doc | Fixed: the connection captures `canWrite = checkDocAccess(doc, user, 'editor')` at connect (defaulting to `false`), and the message handler peeks the sync sub-type on a throwaway decoder, dropping `SyncStep2`/`Update` frames from read-only connections while letting `SyncStep1` and awareness through. Guarded by spec C1. **Caveat**: `canWrite` is captured once — demoting an editor mid-session does not take effect until they reconnect (finding 5.10). ~~Note this fix is bypassable via 5.1b~~ — the 5.1b bypass is closed as of Phase 2 |
+
+#### 5.1b-rationale — why "derive, do not persist"
+
+The 5.1b fix was a choice between two designs. Both remove the *escalation*
+(a `viewer` link can no longer yield `editor`), so the tie-breaker is what each
+one leaves behind.
+
+**(a) Persist with the correct role** — keep the auto-add, write
+`doc.publicAccess.role` instead of `'editor'`. Minimal diff, and link visitors
+keep appearing in the persisted collaborator list. **Rejected.** The row it
+writes is a real ACL grant: `checkDocumentAccess` (server.js:238) and
+`checkDocAccess` (yjs-server.js:26) both honour it ahead of `publicAccess`. So
+the row survives link revocation — an owner who later downgrades the link to
+`viewer`, or disables it entirely, does not take the grant away from anyone who
+already joined. That is the same bug in smaller form, and here it is worse than
+it sounds: **ShareModal renders no collaborator list at all** (verified — it
+consumes `shareLink`/`isOwner`/`publicAccessState` and never `collaborators`),
+and there is no REST route to remove a collaborator. The grant would be
+permanent *and* invisible to the owner, with no revocation UI anywhere in the
+product.
+
+**(b) Derive on each join, persist nothing** — chosen. It matches the 5.1 REST
+fix, which already derives ephemerally, so the two surfaces share one rule
+instead of drifting apart. The owner's ShareModal toggle becomes a genuine kill
+switch (spec E3 asserts exactly this: editor link → downgrade to viewer →
+`viewer`, then disable → `Acces refuse`). It also removes a DB write and a
+follow-up read from the join hot path.
+
+**What (b) costs — stated plainly, since these are real regressions, not
+non-issues:**
+
+1. **A link-shared document no longer appears in a visitor's document list.**
+   `GET /api/documents` (server.js:471) filters on `ownerId` *or* a
+   `collaborators.userId` row. The auto-add was the only thing putting that row
+   there — there is no invite route today — so a visitor who closes the tab now
+   needs the link again to get back in. This is the significant one.
+2. **A past visitor who is offline no longer appears as an `@mention` or
+   scene-assignee candidate.** Live presence is unaffected: `OutlineSidebar`
+   (lines 172, 548) and `CommentsSidebar` (lines 40-46) both merge the
+   `collaborators` list with `users`, which is fed from `activeRooms`, so anyone
+   currently connected still shows up in both dropdowns. Scene assignments
+   already made are stored by value (`{userName, userColor}`) and are unaffected.
+3. **`App.jsx:1285`** gates the destructive "overwrite server copy" button in the
+   offline-conflict modal on `collaborators.length <= 1`. That counter used to be
+   incremented as a side effect of the security bug; a link-only document now
+   keeps it at 1, so the button stays offered. Left unchanged deliberately —
+   folding a UX change into a security fix would widen the blast radius — but it
+   should be re-gated on something honest (live `users`, or `publicAccessState`)
+   rather than on a collaborator count.
+
+**Follow-up that restores 1 and 2 without re-opening the hole**: record link
+visits in a separate, non-ACL structure (a `recentAccess` list, or a
+`collaborators` entry carrying `viaLink: true` that both `checkDocumentAccess`
+and `checkDocAccess` skip when resolving a role). Either keeps "shared with me"
+working while leaving `publicAccess` the single source of truth for what a link
+grants. Tracked as a Phase 3 item, not a security blocker.
 
 ### HIGH
 
@@ -461,11 +517,11 @@ Deployable milestones: each of 1–7 can ship independently behind a flag.
 | Layer | Location | Runner | Status |
 |-------|----------|--------|--------|
 | Client unit + integration | `client/src/__tests__/` | Jest via `craco test` + React Testing Library | **5 suites, 55 passed / 6 skipped (61 total)**, ~0.5 s — `cd client && npm run test:ci` |
-| Server ACL gate | `server/__tests__/acl/` | Jest + supertest + a real `ws` client | **3 suites, 16 passed**, ~3.8 s — **requires a MongoDB**; skips itself silently without one |
+| Server ACL gate | `server/__tests__/acl/` | Jest + supertest + a real `ws` client + a real `socket.io-client` | **4 suites, 24 passed**, ~4 s — **requires a MongoDB**; skips itself silently without one |
 | Server smoke | `server/__tests__/smoke.test.js` | Jest + supertest | 4 passed, DB-free |
 | E2E / multi-tab collab | `e2e/` | Playwright | **scaffold only** — `smoke.spec.js` is `test.skip`; blocked on a one-time browser install, not yet in CI |
 
-The ACL suite is the **regression gate for findings 5.1 / 5.2 / 5.3** and encodes post-fix behaviour as live assertions (specs A1, A2, B1, B2, C1 plus over-block guards D1–D11). Its DB requirement is the one sharp edge: `cd server && npm test` **passes while silently skipping all 16 ACL specs** if `TEST_MONGODB_URI` is unset. See [`TESTING.md`](TESTING.md) §2 and `server/__tests__/acl/README.md`.
+The ACL suite is the **regression gate for findings 5.1 / 5.1b / 5.2 / 5.3** and encodes post-fix behaviour as live assertions (specs A1, A2, B1, B2, C1, E1–E3 plus over-block guards D1–D16). Its DB requirement is the one sharp edge: `cd server && npm test` **passes while silently skipping all 24 ACL specs** if `TEST_MONGODB_URI` is unset. See [`TESTING.md`](TESTING.md) §2 and `server/__tests__/acl/README.md`.
 
 Remaining scaffolding work:
 
@@ -536,7 +592,10 @@ Every "**currently fails**" note below assumes the relevant §7 fix has NOT been
 | # | Given | When | Then | Spec file |
 |---|---|---|---|---|
 | C5 | User opens doc A (100 elements), then navigates to doc B where REST returns 403 | User waits | No content from A appears in B; error shown (**currently fails**, finding 4.11) | `e2e/cross-doc-leak.spec.js` |
-| C6 | User was editor on doc, owner demotes to viewer via /public-access | User keeps typing on already-open socket | Server rejects new writes (**currently silent-accept**, finding 5.10) | `e2e/role-revocation.spec.js` |
+| C6 | User was editor on doc, owner demotes to viewer via /public-access | User keeps typing on already-open socket | Server rejects new writes (**still open**, finding 5.10 — the role is cached per socket at join time) | `e2e/role-revocation.spec.js` |
+| C6a | Owner shares a link as `publicAccess {enabled:true, role:'viewer'}`; a non-collaborator holds it | Visitor emits `join-document` | Role reported is `viewer`, and **no** collaborator row is persisted (✅ **covered**, finding 5.1b — specs E1/E2) | `server/__tests__/acl/socket-join-authorization.test.js` |
+| C6b | Same document, owner then downgrades the link or disables it | Visitor emits `join-document` again | The new setting applies immediately — `viewer`, then `Acces refuse` (✅ **covered**, spec E3; this is the assertion design (a) could not pass) | `server/__tests__/acl/socket-join-authorization.test.js` |
+| C6c | `publicAccess` disabled / invited viewer on an editor-link doc / owner / no token | Each emits `join-document` | Refused; invited `viewer` not upgraded; owner `editor`; tokenless refused (✅ **covered**, over-block guards D12–D16) | `server/__tests__/acl/socket-join-authorization.test.js` |
 
 ### 8.7 Auth
 
